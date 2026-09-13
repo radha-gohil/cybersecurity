@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+venv/
+.venv/
+
+# Environment files
+.env
+.env.*
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+data/logs/
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+data/database/
+
+# Quarantine
+data/quarantine/
+
+# Large/raw datasets
+data/malware/raw/
+*.parquet
+*.csv.gz
+
+# Models
+*.pkl
+*.joblib
+
+# Temp files
+*.tmp
+*.temp
+
+# Windows
+Thumbs.db
+Desktop.ini
