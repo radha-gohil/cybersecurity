@@ -33,7 +33,6 @@ data/malware/raw/
 *.csv.gz
 
 # Models
-*.pkl
 *.joblib
 
 # Temp files
