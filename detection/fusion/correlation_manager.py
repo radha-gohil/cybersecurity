@@ -148,6 +148,15 @@ class CorrelationManager:
         ):
             return "STARTUP"
 
+        # ============================================================
+        # SECURITY
+        # ============================================================
+
+        if event_type.startswith(
+            "security"
+        ):
+            return "SECURITY"
+
         return "OTHER"
 
 

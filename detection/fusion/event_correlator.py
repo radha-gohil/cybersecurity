@@ -314,24 +314,20 @@ class EventCorrelator:
             )
         ).lower()
 
-
         if event_type.startswith(
             "process"
         ):
             return "process"
-
 
         if event_type.startswith(
             "file"
         ):
             return "file"
 
-
         if event_type.startswith(
             "network"
         ):
             return "network"
-
 
         if (
             event_type.startswith(
@@ -343,6 +339,14 @@ class EventCorrelator:
         ):
             return "registry"
 
+        # ============================================================
+        # SECURITY EVENTS
+        # ============================================================
+
+        if event_type.startswith(
+            "security"
+        ):
+            return "security"
 
         return "other"
 
@@ -1115,7 +1119,145 @@ class EventCorrelator:
 
                 score += 5
 
+        # ========================================================
+        # SAME REMOTE IP FOR AUTHENTICATION EVENTS
+        #
+        # Authentication events usually do not have a process PID.
+        # Repeated events from the same remote source are therefore
+        # useful correlation evidence.
+        #
+        # This rule is intentionally limited to security_auth events
+        # so existing network correlation scores are not changed.
+        # ========================================================
 
+        if current_type.startswith(
+            "security_auth"
+        ):
+
+            current_remote_ip = (
+                self.extract_remote_ip(
+                    event
+                )
+            )
+
+            if current_remote_ip:
+
+                current_remote_ip = str(
+                    current_remote_ip
+                )
+
+                same_auth_ip_count = 0
+
+                for related_event in related_events:
+
+                    related_type = str(
+                        related_event.get(
+                            "event_type",
+                            ""
+                        )
+                    ).lower()
+
+                    if not related_type.startswith(
+                        "security_auth"
+                    ):
+
+                        continue
+
+                    related_remote_ip = (
+                        self.extract_remote_ip(
+                            related_event
+                        )
+                    )
+
+                    if (
+                        related_remote_ip
+                        and str(
+                            related_remote_ip
+                        )
+                        == current_remote_ip
+                    ):
+
+                        same_auth_ip_count += 1
+
+                # --------------------------------------------------------
+                # One related authentication event from the same source.
+                # --------------------------------------------------------
+
+                if same_auth_ip_count >= 1:
+
+                    score += 15
+
+                # --------------------------------------------------------
+                # Multiple related authentication events provide
+                # additional evidence.
+                # --------------------------------------------------------
+
+                if same_auth_ip_count >= 2:
+
+                    score += 5
+                    
+        # ========================================================
+        # SAME REMOTE IP FOR EMAIL SECURITY EVENTS
+        #
+        # Repeated high-risk email events originating from the
+        # same source can provide useful correlation evidence.
+        #
+        # This rule is intentionally limited to security_email
+        # events so normal network correlation remains unchanged.
+        # ========================================================
+
+        if current_type.startswith(
+            "security_email"
+        ):
+
+            current_remote_ip = (
+                self.extract_remote_ip(
+                    event
+                )
+            )
+
+            if current_remote_ip:
+
+                current_remote_ip = str(
+                    current_remote_ip
+                )
+
+                same_email_ip_count = 0
+
+                for related_event in related_events:
+
+                    related_type = str(
+                        related_event.get(
+                            "event_type",
+                            ""
+                        )
+                    ).lower()
+
+                    if not related_type.startswith(
+                        "security_email"
+                    ):
+
+                        continue
+
+                    related_remote_ip = (
+                        self.extract_remote_ip(
+                            related_event
+                        )
+                    )
+
+                    if (
+                        related_remote_ip
+                        and str(
+                            related_remote_ip
+                        )
+                        == current_remote_ip
+                    ):
+
+                        same_email_ip_count += 1
+
+                if same_email_ip_count >= 1:
+
+                    score += 10
         # ========================================================
         # SAME HASH
         # ========================================================

@@ -3,11 +3,26 @@ from typing import Dict, Tuple
 
 import psutil
 
-from endpoint.agent.telemetry_manager import TelemetryManager
-from endpoint.utils.logger import get_logger
+from detection.network.network_behavior_tracker import (
+    NetworkBehaviorTracker,
+)
+
+from endpoint.agent.telemetry_manager import (
+    TelemetryManager,
+)
+
+from endpoint.storage.database import (
+    save_detection,
+)
+
+from endpoint.utils.logger import (
+    get_logger,
+)
 
 
-logger = get_logger(__name__)
+logger = get_logger(
+    __name__
+)
 
 
 class NetworkMonitor:
@@ -17,22 +32,55 @@ class NetworkMonitor:
         polling_interval: float = 3.0,
     ):
 
-        self.polling_interval = polling_interval
+        self.polling_interval = (
+            polling_interval
+        )
 
         self.running = False
+
+        # ---------------------------------------------------------
+        # KNOWN CONNECTION SNAPSHOT
+        # ---------------------------------------------------------
 
         self.known_connections: Dict[
             Tuple,
             dict
         ] = {}
 
-        # Unified telemetry manager
-        self.telemetry = TelemetryManager()
+        # ---------------------------------------------------------
+        # UNIFIED SENTINEL-X TELEMETRY
+        # ---------------------------------------------------------
 
+        self.telemetry = (
+            TelemetryManager()
+        )
 
-    # ============================================================
-    # GET PROCESS NAME FROM PID
-    # ============================================================
+        # ---------------------------------------------------------
+        # NETWORK BEHAVIOR DETECTION
+        # ---------------------------------------------------------
+
+        self.behavior_tracker = (
+            NetworkBehaviorTracker(
+
+                connection_window_seconds=10,
+
+                connection_burst_threshold=20,
+
+                port_scan_window_seconds=30,
+
+                port_scan_threshold=10,
+
+                dos_window_seconds=10,
+
+                dos_connection_threshold=30,
+
+                alert_cooldown_seconds=30,
+            )
+        )
+
+    # =============================================================
+    # PROCESS NAME
+    # =============================================================
 
     def get_process_name(
         self,
@@ -58,10 +106,9 @@ class NetworkMonitor:
 
             return None
 
-
-    # ============================================================
-    # NORMALIZE NETWORK ADDRESS
-    # ============================================================
+    # =============================================================
+    # NORMALIZE ADDRESS
+    # =============================================================
 
     def normalize_address(
         self,
@@ -98,49 +145,69 @@ class NetworkMonitor:
                     "port": None,
                 }
 
-
-    # ============================================================
-    # CREATE CONNECTION KEY
-    # ============================================================
+    # =============================================================
+    # CONNECTION KEY
+    # =============================================================
 
     def make_connection_key(
         self,
         connection,
     ):
 
-        local = self.normalize_address(
-            connection.laddr
+        local = (
+            self.normalize_address(
+                connection.laddr
+            )
         )
 
-        remote = self.normalize_address(
-            connection.raddr
+        remote = (
+            self.normalize_address(
+                connection.raddr
+            )
         )
 
         return (
+
             connection.pid,
-            local["ip"],
-            local["port"],
-            remote["ip"],
-            remote["port"],
+
+            local[
+                "ip"
+            ],
+
+            local[
+                "port"
+            ],
+
+            remote[
+                "ip"
+            ],
+
+            remote[
+                "port"
+            ],
+
             connection.type,
         )
 
-
-    # ============================================================
-    # GET CONNECTION INFORMATION
-    # ============================================================
+    # =============================================================
+    # CONNECTION INFORMATION
+    # =============================================================
 
     def get_connection_info(
         self,
         connection,
     ):
 
-        local = self.normalize_address(
-            connection.laddr
+        local = (
+            self.normalize_address(
+                connection.laddr
+            )
         )
 
-        remote = self.normalize_address(
-            connection.raddr
+        remote = (
+            self.normalize_address(
+                connection.raddr
+            )
         )
 
         process_name = (
@@ -149,10 +216,9 @@ class NetworkMonitor:
             )
         )
 
-
-        # --------------------------------------------------------
+        # ---------------------------------------------------------
         # PROTOCOL
-        # --------------------------------------------------------
+        # ---------------------------------------------------------
 
         if connection.type == 1:
 
@@ -168,7 +234,6 @@ class NetworkMonitor:
                 connection.type
             )
 
-
         return {
 
             "pid":
@@ -181,32 +246,38 @@ class NetworkMonitor:
                 protocol,
 
             "local_ip":
-                local["ip"],
+                local[
+                    "ip"
+                ],
 
             "local_port":
-                local["port"],
+                local[
+                    "port"
+                ],
 
             "remote_ip":
-                remote["ip"],
+                remote[
+                    "ip"
+                ],
 
             "remote_port":
-                remote["port"],
+                remote[
+                    "port"
+                ],
 
             "status":
                 connection.status,
         }
 
-
-    # ============================================================
-    # GET CURRENT CONNECTIONS
-    # ============================================================
+    # =============================================================
+    # CURRENT CONNECTIONS
+    # =============================================================
 
     def get_current_connections(
         self,
     ):
 
         current_connections = {}
-
 
         try:
 
@@ -224,14 +295,23 @@ class NetworkMonitor:
 
             return current_connections
 
+        except Exception as error:
+
+            logger.error(
+                "Failed to read network connections | %s",
+                error,
+            )
+
+            return current_connections
 
         for connection in connections:
 
-            # Ignore listening sockets with no remote endpoint
-            # for this first prototype.
+            # -----------------------------------------------------
+            # Ignore listening sockets without a remote endpoint.
+            # -----------------------------------------------------
+
             if not connection.raddr:
                 continue
-
 
             key = (
                 self.make_connection_key(
@@ -239,25 +319,21 @@ class NetworkMonitor:
                 )
             )
 
-
             connection_info = (
                 self.get_connection_info(
                     connection
                 )
             )
 
-
             current_connections[
                 key
             ] = connection_info
 
-
         return current_connections
 
-
-    # ============================================================
+    # =============================================================
     # INITIAL SNAPSHOT
-    # ============================================================
+    # =============================================================
 
     def build_initial_snapshot(
         self,
@@ -267,72 +343,320 @@ class NetworkMonitor:
             "Building initial network snapshot..."
         )
 
-
         self.known_connections = (
             self.get_current_connections()
         )
 
-
         logger.info(
-            "Initial network snapshot complete. %s active connections found.",
+            "Initial network snapshot complete. "
+            "%s active connections found.",
             len(
                 self.known_connections
             ),
         )
 
+    # =============================================================
+    # SEVERITY SELECTION
+    # =============================================================
 
-    # ============================================================
-    # CREATE NETWORK CONNECT EVENT
-    # ============================================================
+    def get_detection_severity(
+        self,
+        detections,
+    ):
+
+        severity_order = {
+
+            "INFO":
+                0,
+
+            "LOW":
+                1,
+
+            "MEDIUM":
+                2,
+
+            "HIGH":
+                3,
+
+            "CRITICAL":
+                4,
+        }
+
+        final_severity = (
+            "INFO"
+        )
+
+        for detection in detections:
+
+            detection_severity = (
+                detection.get(
+                    "severity",
+                    "INFO",
+                )
+            )
+
+            if (
+                severity_order.get(
+                    detection_severity,
+                    0,
+                )
+                >
+                severity_order.get(
+                    final_severity,
+                    0,
+                )
+            ):
+
+                final_severity = (
+                    detection_severity
+                )
+
+        return final_severity
+
+    # =============================================================
+    # SAVE NETWORK DETECTIONS
+    # =============================================================
+
+    def save_network_detections(
+        self,
+        event,
+        detections,
+    ):
+
+        for detection in detections:
+
+            try:
+
+                save_detection(
+                    event.event_id,
+                    detection,
+                )
+
+                logger.warning(
+                    "NETWORK DETECTION | "
+                    "EventID=%s | "
+                    "Type=%s | "
+                    "Severity=%s | "
+                    "Risk=%s | "
+                    "Confidence=%s | "
+                    "Reason=%s",
+
+                    event.event_id,
+
+                    detection.get(
+                        "detection_type"
+                    ),
+
+                    detection.get(
+                        "severity"
+                    ),
+
+                    detection.get(
+                        "risk_score"
+                    ),
+
+                    detection.get(
+                        "confidence"
+                    ),
+
+                    detection.get(
+                        "reason"
+                    ),
+                )
+
+            except Exception as error:
+
+                logger.error(
+                    "Failed to save network detection | "
+                    "EventID=%s | "
+                    "Type=%s | "
+                    "%s",
+
+                    event.event_id,
+
+                    detection.get(
+                        "detection_type"
+                    ),
+
+                    error,
+                )
+
+    # =============================================================
+    # CREATE NETWORK EVENT
+    # =============================================================
 
     def create_connection_event(
         self,
         connection_info: dict,
     ):
 
-        self.telemetry.emit(
+        # ---------------------------------------------------------
+        # RUN NETWORK BEHAVIOR DETECTOR
+        # ---------------------------------------------------------
 
-            event_type="network_connect",
+        try:
 
-            source="network_monitor",
+            detections = (
+                self.behavior_tracker.analyze(
+                    connection_info
+                )
+            )
 
-            severity="INFO",
+        except Exception as error:
 
-            network=connection_info,
+            logger.error(
+                "Network behavior analysis failed | %s",
+                error,
+            )
 
-            metadata={
-                "collector":
-                    "NetworkMonitor"
-            },
+            detections = []
+
+        # ---------------------------------------------------------
+        # EVENT SEVERITY
+        # ---------------------------------------------------------
+
+        severity = (
+            self.get_detection_severity(
+                detections
+            )
         )
 
+        # ---------------------------------------------------------
+        # EVENT TYPE
+        # ---------------------------------------------------------
+
+        if detections:
+
+            event_type = (
+                "network_security_detection"
+            )
+
+        else:
+
+            event_type = (
+                "network_connect"
+            )
+
+        detection_types = [
+
+            detection.get(
+                "detection_type"
+            )
+
+            for detection
+            in detections
+        ]
+
+        # ---------------------------------------------------------
+        # CREATE SECURITY EVENT
+        #
+        # TelemetryManager:
+        #
+        # 1. Creates SecurityEvent
+        # 2. Saves raw event
+        # 3. Sends event into CorrelationManager
+        # ---------------------------------------------------------
+
+        event = (
+            self.telemetry.emit(
+
+                event_type=
+                    event_type,
+
+                source=
+                    "network_monitor",
+
+                severity=
+                    severity,
+
+                network=
+                    connection_info,
+
+                metadata={
+
+                    "collector":
+                        "NetworkMonitor",
+
+                    "behavior_analysis":
+                        True,
+
+                    "detection_count":
+                        len(
+                            detections
+                        ),
+
+                    "detection_types":
+                        detection_types,
+                },
+            )
+        )
+
+        # ---------------------------------------------------------
+        # SAVE DEDICATED DETECTION RECORDS
+        # ---------------------------------------------------------
+
+        if detections:
+
+            self.save_network_detections(
+                event,
+                detections,
+            )
+
+        # ---------------------------------------------------------
+        # LOG CONNECTION
+        # ---------------------------------------------------------
 
         logger.info(
-            "NETWORK CONNECT | %s | %s:%s -> %s:%s | %s",
+            "NETWORK CONNECT | "
+            "%s | "
+            "%s:%s -> %s:%s | "
+            "%s | "
+            "Severity=%s | "
+            "Detections=%s",
+
             connection_info.get(
                 "process_name"
             ),
+
             connection_info.get(
                 "local_ip"
             ),
+
             connection_info.get(
                 "local_port"
             ),
+
             connection_info.get(
                 "remote_ip"
             ),
+
             connection_info.get(
                 "remote_port"
             ),
+
             connection_info.get(
                 "status"
             ),
+
+            severity,
+
+            len(
+                detections
+            ),
         )
 
+        return {
 
-    # ============================================================
-    # CHECK CONNECTION CHANGES
-    # ============================================================
+            "event":
+                event,
+
+            "detections":
+                detections,
+        }
+
+    # =============================================================
+    # CONNECTION CHANGES
+    # =============================================================
 
     def check_connection_changes(
         self,
@@ -342,26 +666,22 @@ class NetworkMonitor:
             self.get_current_connections()
         )
 
-
         current_keys = set(
             current_connections.keys()
         )
-
 
         previous_keys = set(
             self.known_connections.keys()
         )
 
-
-        # --------------------------------------------------------
+        # ---------------------------------------------------------
         # NEW CONNECTIONS
-        # --------------------------------------------------------
+        # ---------------------------------------------------------
 
         new_connections = (
             current_keys
             - previous_keys
         )
-
 
         for key in new_connections:
 
@@ -371,26 +691,32 @@ class NetworkMonitor:
                 )
             )
 
-
             if connection_info:
 
-                self.create_connection_event(
-                    connection_info
-                )
+                try:
 
+                    self.create_connection_event(
+                        connection_info
+                    )
 
-        # --------------------------------------------------------
+                except Exception as error:
+
+                    logger.error(
+                        "Failed to process network connection | %s",
+                        error,
+                    )
+
+        # ---------------------------------------------------------
         # UPDATE SNAPSHOT
-        # --------------------------------------------------------
+        # ---------------------------------------------------------
 
         self.known_connections = (
             current_connections
         )
 
-
-    # ============================================================
-    # START NETWORK MONITOR
-    # ============================================================
+    # =============================================================
+    # START
+    # =============================================================
 
     def start(
         self,
@@ -400,12 +726,31 @@ class NetworkMonitor:
             "Starting SENTINEL-X Network Monitor..."
         )
 
+        logger.info(
+            "Network behavioral detection enabled."
+        )
+
+        logger.info(
+            "Connection burst threshold: %s connections / %ss",
+            self.behavior_tracker.connection_burst_threshold,
+            self.behavior_tracker.connection_window_seconds,
+        )
+
+        logger.info(
+            "Port scan threshold: %s ports / %ss",
+            self.behavior_tracker.port_scan_threshold,
+            self.behavior_tracker.port_scan_window_seconds,
+        )
+
+        logger.info(
+            "Possible DoS threshold: %s connections / %ss",
+            self.behavior_tracker.dos_connection_threshold,
+            self.behavior_tracker.dos_window_seconds,
+        )
 
         self.running = True
 
-
         self.build_initial_snapshot()
-
 
         try:
 
@@ -417,22 +762,19 @@ class NetworkMonitor:
                     self.polling_interval
                 )
 
-
         except KeyboardInterrupt:
 
             logger.info(
                 "Network monitor interrupted."
             )
 
-
         finally:
 
             self.stop()
 
-
-    # ============================================================
-    # STOP NETWORK MONITOR
-    # ============================================================
+    # =============================================================
+    # STOP
+    # =============================================================
 
     def stop(
         self,
@@ -445,9 +787,9 @@ class NetworkMonitor:
         )
 
 
-# ============================================================
-# MANUAL TEST
-# ============================================================
+# ================================================================
+# MANUAL RUN
+# ================================================================
 
 if __name__ == "__main__":
 

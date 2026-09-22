@@ -6,41 +6,100 @@ from watchdog.observers import Observer
 
 from config import FILE_MONITOR_PATH
 
-from detection.malware.static_file_analyzer import StaticFileAnalyzer
-from detection.malware.malware_predictor import MalwarePredictor
+from detection.malware.static_file_analyzer import (
+    StaticFileAnalyzer,
+)
 
-from endpoint.agent.telemetry_manager import TelemetryManager
-from endpoint.storage.database import save_detection
-from endpoint.utils.logger import get_logger
+from detection.malware.malware_predictor import (
+    MalwarePredictor,
+)
+
+from detection.behavior.ransomware_behavior_detector import (
+    RansomwareBehaviorDetector,
+)
+
+from endpoint.agent.telemetry_manager import (
+    TelemetryManager,
+)
+
+from endpoint.storage.database import (
+    save_detection,
+)
+
+from endpoint.utils.logger import (
+    get_logger,
+)
 
 
 logger = get_logger(__name__)
 
 
-class SentinelFileEventHandler(FileSystemEventHandler):
+class SentinelFileEventHandler(
+    FileSystemEventHandler
+):
 
-    def __init__(self):
+    def __init__(
+        self,
+    ):
 
         super().__init__()
 
-        self.telemetry = TelemetryManager()
+        # ========================================================
+        # TELEMETRY
+        # ========================================================
 
-        self.static_analyzer = StaticFileAnalyzer()
+        self.telemetry = (
+            TelemetryManager()
+        )
 
-        self.malware_predictor = MalwarePredictor()
+        # ========================================================
+        # STATIC FILE ANALYZER
+        # ========================================================
 
-        # Stores recently scanned SHA-256 values.
-        #
-        # Structure:
-        # {
-        #     "sha256_hash": last_scan_time
-        # }
+        self.static_analyzer = (
+            StaticFileAnalyzer()
+        )
+
+        # ========================================================
+        # MALWARE ML PREDICTOR
+        # ========================================================
+
+        self.malware_predictor = (
+            MalwarePredictor()
+        )
+
+        # ========================================================
+        # RANSOMWARE BEHAVIOR DETECTOR
+        # ========================================================
+
+        self.ransomware_detector = (
+            RansomwareBehaviorDetector(
+
+                modification_window_seconds=20,
+
+                modification_threshold=15,
+
+                rename_window_seconds=30,
+
+                rename_threshold=8,
+
+                extension_window_seconds=30,
+
+                extension_change_threshold=6,
+
+                ransomware_score_threshold=70,
+
+                alert_cooldown_seconds=30,
+            )
+        )
+
+        # ========================================================
+        # MALWARE DEDUPLICATION
+        # ========================================================
+
         self.recent_detections = {}
 
-        # Duplicate detections for the same unchanged file
-        # will be ignored during this window.
         self.deduplication_window = 5
-
 
     # ============================================================
     # GET BASIC FILE INFORMATION
@@ -56,11 +115,23 @@ class SentinelFileEventHandler(FileSystemEventHandler):
         )
 
         file_info = {
-            "name": path.name,
-            "path": str(path),
-            "extension": path.suffix.lower(),
-            "size": None,
-            "exists": path.exists(),
+
+            "name":
+                path.name,
+
+            "path":
+                str(
+                    path
+                ),
+
+            "extension":
+                path.suffix.lower(),
+
+            "size":
+                None,
+
+            "exists":
+                path.exists(),
         }
 
         try:
@@ -70,7 +141,9 @@ class SentinelFileEventHandler(FileSystemEventHandler):
                 and path.is_file()
             ):
 
-                file_info["size"] = (
+                file_info[
+                    "size"
+                ] = (
                     path.stat().st_size
                 )
 
@@ -82,7 +155,6 @@ class SentinelFileEventHandler(FileSystemEventHandler):
             pass
 
         return file_info
-
 
     # ============================================================
     # STATIC FILE ANALYSIS
@@ -111,9 +183,8 @@ class SentinelFileEventHandler(FileSystemEventHandler):
 
             return {}
 
-
     # ============================================================
-    # ML MALWARE PREDICTION
+    # MALWARE ML PREDICTION
     # ============================================================
 
     def predict_malware(
@@ -139,53 +210,193 @@ class SentinelFileEventHandler(FileSystemEventHandler):
 
             return {}
 
+    # ============================================================
+    # RUN RANSOMWARE BEHAVIOR ANALYSIS
+    # ============================================================
+
+    def analyze_ransomware_behavior(
+        self,
+        event_type: str,
+        file_path: str,
+        extra_metadata: dict = None,
+    ):
+
+        metadata = (
+            extra_metadata
+            or {}
+        )
+
+        behavior_event = {
+
+            "event_type":
+                event_type,
+
+            "file_path":
+                file_path,
+
+            # ----------------------------------------------------
+            # Real FileMonitor currently does not reliably know
+            # which PID generated every filesystem event.
+            #
+            # Leave attribution unknown unless it is explicitly
+            # supplied by another telemetry source.
+            # ----------------------------------------------------
+
+            "process_id":
+                metadata.get(
+                    "process_id"
+                ),
+
+            "process_name":
+                metadata.get(
+                    "process_name"
+                )
+                or "unknown_process",
+        }
+
+        # --------------------------------------------------------
+        # RENAME INFORMATION
+        # --------------------------------------------------------
+
+        if (
+            event_type
+            ==
+            "file_rename"
+        ):
+
+            behavior_event[
+                "old_path"
+            ] = (
+                metadata.get(
+                    "source_path"
+                )
+                or metadata.get(
+                    "old_path"
+                )
+            )
+
+            behavior_event[
+                "new_path"
+            ] = (
+                metadata.get(
+                    "destination_path"
+                )
+                or metadata.get(
+                    "new_path"
+                )
+                or file_path
+            )
+
+        try:
+
+            return (
+                self.ransomware_detector.analyze(
+                    behavior_event
+                )
+            )
+
+        except Exception as error:
+
+            logger.error(
+                "Ransomware behavior analysis failed | "
+                "Type=%s | File=%s | %s",
+
+                event_type,
+
+                file_path,
+
+                error,
+            )
+
+            return []
 
     # ============================================================
-    # FINAL SEVERITY
+    # SEVERITY HELPER
     # ============================================================
 
     def get_final_severity(
         self,
         static_analysis: dict,
         ml_prediction: dict,
+        ransomware_detections=None,
     ) -> str:
 
         severity_order = {
-            "INFO": 0,
-            "LOW": 1,
-            "MEDIUM": 2,
-            "HIGH": 3,
-            "CRITICAL": 4,
+
+            "INFO":
+                0,
+
+            "LOW":
+                1,
+
+            "MEDIUM":
+                2,
+
+            "HIGH":
+                3,
+
+            "CRITICAL":
+                4,
         }
 
-        static_severity = (
-            static_analysis.get(
-                "severity",
-                "INFO",
-            )
-            if static_analysis
-            else "INFO"
-        )
+        candidates = [
+            "INFO"
+        ]
 
-        ml_severity = (
-            ml_prediction.get(
-                "severity",
-                "INFO",
-            )
-            if (
-                ml_prediction
-                and ml_prediction.get(
-                    "valid"
+        # --------------------------------------------------------
+        # STATIC ANALYSIS
+        # --------------------------------------------------------
+
+        if static_analysis:
+
+            candidates.append(
+
+                static_analysis.get(
+                    "severity",
+                    "INFO",
                 )
             )
-            else "INFO"
-        )
+
+        # --------------------------------------------------------
+        # MALWARE ML
+        # --------------------------------------------------------
+
+        if (
+            ml_prediction
+            and ml_prediction.get(
+                "valid"
+            )
+        ):
+
+            candidates.append(
+
+                ml_prediction.get(
+                    "severity",
+                    "INFO",
+                )
+            )
+
+        # --------------------------------------------------------
+        # RANSOMWARE BEHAVIOR
+        # --------------------------------------------------------
+
+        for detection in (
+            ransomware_detections
+            or []
+        ):
+
+            candidates.append(
+
+                detection.get(
+                    "severity",
+                    "INFO",
+                )
+            )
 
         return max(
-            [
-                static_severity,
-                ml_severity,
-            ],
+
+            candidates,
+
             key=lambda value:
                 severity_order.get(
                     value,
@@ -193,9 +404,8 @@ class SentinelFileEventHandler(FileSystemEventHandler):
                 ),
         )
 
-
     # ============================================================
-    # CALCULATE DETECTION RISK
+    # MALWARE DETECTION RISK
     # ============================================================
 
     def get_detection_risk(
@@ -204,28 +414,33 @@ class SentinelFileEventHandler(FileSystemEventHandler):
     ) -> int:
 
         if malware_probability is None:
+
             return 0
 
         if malware_probability >= 0.90:
+
             return 100
 
         if malware_probability >= 0.75:
+
             return 80
 
         if malware_probability >= 0.50:
+
             return 60
 
         if malware_probability >= 0.25:
+
             return 40
 
         if malware_probability >= 0.10:
+
             return 20
 
         return 5
 
-
     # ============================================================
-    # CHECK DUPLICATE DETECTION
+    # MALWARE DUPLICATE CHECK
     # ============================================================
 
     def is_duplicate_detection(
@@ -234,9 +449,12 @@ class SentinelFileEventHandler(FileSystemEventHandler):
     ) -> bool:
 
         if not sha256:
+
             return False
 
-        current_time = time.time()
+        current_time = (
+            time.time()
+        )
 
         last_detection_time = (
             self.recent_detections.get(
@@ -244,15 +462,18 @@ class SentinelFileEventHandler(FileSystemEventHandler):
             )
         )
 
-        if last_detection_time is not None:
+        if (
+            last_detection_time
+            is not None
+        ):
 
-            time_difference = (
+            difference = (
                 current_time
                 - last_detection_time
             )
 
             if (
-                time_difference
+                difference
                 < self.deduplication_window
             ):
 
@@ -264,23 +485,26 @@ class SentinelFileEventHandler(FileSystemEventHandler):
 
         return False
 
-
     # ============================================================
-    # CLEAN OLD CACHE RECORDS
+    # CLEAN MALWARE CACHE
     # ============================================================
 
     def cleanup_detection_cache(
         self,
     ):
 
-        current_time = time.time()
+        current_time = (
+            time.time()
+        )
 
-        expired_hashes = []
+        expired = []
 
         for (
             sha256,
             timestamp,
-        ) in self.recent_detections.items():
+        ) in (
+            self.recent_detections.items()
+        ):
 
             if (
                 current_time
@@ -288,17 +512,114 @@ class SentinelFileEventHandler(FileSystemEventHandler):
                 > 60
             ):
 
-                expired_hashes.append(
+                expired.append(
                     sha256
                 )
 
-        for sha256 in expired_hashes:
+        for sha256 in expired:
 
             self.recent_detections.pop(
                 sha256,
                 None,
             )
 
+    # ============================================================
+    # SAVE RANSOMWARE DETECTIONS
+    # ============================================================
+
+    def save_ransomware_detections(
+        self,
+        event,
+        detections,
+        file_path,
+    ):
+
+        for detection in detections:
+
+            detection = dict(
+                detection
+            )
+
+            detection[
+                "file_path"
+            ] = file_path
+
+            # ----------------------------------------------------
+            # Database expects generic detection fields.
+            # ----------------------------------------------------
+
+            if (
+                "risk"
+                not in detection
+            ):
+
+                detection[
+                    "risk"
+                ] = (
+                    detection.get(
+                        "risk_score",
+                        0,
+                    )
+                )
+
+            try:
+
+                save_detection(
+                    event.event_id,
+                    detection,
+                )
+
+                logger.warning(
+                    "RANSOMWARE BEHAVIOR DETECTION | "
+                    "EventID=%s | "
+                    "Type=%s | "
+                    "Severity=%s | "
+                    "Risk=%s | "
+                    "Confidence=%s | "
+                    "File=%s | "
+                    "Reason=%s",
+
+                    event.event_id,
+
+                    detection.get(
+                        "detection_type"
+                    ),
+
+                    detection.get(
+                        "severity"
+                    ),
+
+                    detection.get(
+                        "risk_score"
+                    ),
+
+                    detection.get(
+                        "confidence"
+                    ),
+
+                    file_path,
+
+                    detection.get(
+                        "reason"
+                    ),
+                )
+
+            except Exception as error:
+
+                logger.error(
+                    "Failed to save ransomware detection | "
+                    "EventID=%s | "
+                    "Type=%s | "
+                    "%s",
+
+                    event.event_id,
+
+                    detection.get(
+                        "detection_type"
+                    ),
+
+                    error,
+                )
 
     # ============================================================
     # SAVE FILE EVENT
@@ -312,7 +633,7 @@ class SentinelFileEventHandler(FileSystemEventHandler):
     ):
 
         # --------------------------------------------------------
-        # BASIC FILE INFO
+        # BASIC FILE INFORMATION
         # --------------------------------------------------------
 
         file_info = (
@@ -321,18 +642,12 @@ class SentinelFileEventHandler(FileSystemEventHandler):
             )
         )
 
-
-        # --------------------------------------------------------
-        # ANALYSIS RESULTS
-        # --------------------------------------------------------
-
         static_analysis = {}
 
         ml_prediction = {}
 
-
         # --------------------------------------------------------
-        # RUN ANALYSIS
+        # STATIC / MALWARE ANALYSIS
         # --------------------------------------------------------
 
         if (
@@ -353,9 +668,8 @@ class SentinelFileEventHandler(FileSystemEventHandler):
                 )
             )
 
-
             # ----------------------------------------------------
-            # RUN ML ONLY FOR PE FILE
+            # MALWARE MODEL ONLY FOR PE FILE
             # ----------------------------------------------------
 
             if (
@@ -371,15 +685,36 @@ class SentinelFileEventHandler(FileSystemEventHandler):
                     )
                 )
 
+        # --------------------------------------------------------
+        # RANSOMWARE BEHAVIOR ANALYSIS
+        #
+        # This can run even when a synthetic/nonexistent file path
+        # is supplied because it analyzes event metadata only.
+        # --------------------------------------------------------
+
+        ransomware_detections = (
+            self.analyze_ransomware_behavior(
+
+                event_type=
+                    event_type,
+
+                file_path=
+                    file_path,
+
+                extra_metadata=
+                    extra_metadata,
+            )
+        )
 
         # --------------------------------------------------------
-        # STATIC RESULTS
+        # STATIC ANALYSIS DATA
         # --------------------------------------------------------
 
         if static_analysis:
 
             file_info.update(
                 {
+
                     "md5":
                         static_analysis.get(
                             "md5"
@@ -422,9 +757,8 @@ class SentinelFileEventHandler(FileSystemEventHandler):
                 }
             )
 
-
         # --------------------------------------------------------
-        # ML RESULTS
+        # MALWARE ML DATA
         # --------------------------------------------------------
 
         if (
@@ -436,6 +770,7 @@ class SentinelFileEventHandler(FileSystemEventHandler):
 
             file_info.update(
                 {
+
                     "ml_prediction":
                         ml_prediction.get(
                             "prediction"
@@ -463,21 +798,40 @@ class SentinelFileEventHandler(FileSystemEventHandler):
                 }
             )
 
-
         # --------------------------------------------------------
-        # METADATA
+        # EVENT METADATA
         # --------------------------------------------------------
 
         metadata = {
+
             "collector":
                 "FileMonitor",
-        }
 
+            "ransomware_behavior_analysis":
+                True,
+
+            "ransomware_detection_count":
+                len(
+                    ransomware_detections
+                ),
+
+            "ransomware_detection_types":
+                [
+
+                    detection.get(
+                        "detection_type"
+                    )
+
+                    for detection
+                    in ransomware_detections
+                ],
+        }
 
         if static_analysis:
 
             metadata.update(
                 {
+
                     "static_analysis":
                         True,
 
@@ -495,7 +849,6 @@ class SentinelFileEventHandler(FileSystemEventHandler):
                 }
             )
 
-
         if (
             ml_prediction
             and ml_prediction.get(
@@ -505,6 +858,7 @@ class SentinelFileEventHandler(FileSystemEventHandler):
 
             metadata.update(
                 {
+
                     "ml_analysis":
                         True,
 
@@ -535,49 +889,58 @@ class SentinelFileEventHandler(FileSystemEventHandler):
                 }
             )
 
-
         if extra_metadata:
 
             metadata.update(
                 extra_metadata
             )
 
-
         # --------------------------------------------------------
-        # FINAL SEVERITY
+        # FINAL EVENT SEVERITY
         # --------------------------------------------------------
 
         severity = (
             self.get_final_severity(
+
                 static_analysis,
+
                 ml_prediction,
+
+                ransomware_detections,
             )
         )
 
-
         # --------------------------------------------------------
-        # SAVE TELEMETRY EVENT
+        # CREATE + STORE SECURITY EVENT
+        #
+        # TelemetryManager also forwards this event to correlation.
         # --------------------------------------------------------
 
         event = (
             self.telemetry.emit(
 
-                event_type=event_type,
+                event_type=
+                    event_type,
 
-                source="file_monitor",
+                source=
+                    "file_monitor",
 
-                severity=severity,
+                severity=
+                    severity,
 
-                file=file_info,
+                file=
+                    file_info,
 
-                metadata=metadata,
+                metadata=
+                    metadata,
             )
         )
 
+        # ========================================================
+        # SAVE MALWARE DETECTION
+        # ========================================================
 
-        # --------------------------------------------------------
-        # SAVE DEDICATED MALWARE DETECTION
-        # --------------------------------------------------------
+        malware_detection = None
 
         if (
             ml_prediction
@@ -587,10 +950,13 @@ class SentinelFileEventHandler(FileSystemEventHandler):
         ):
 
             sha256 = (
+
                 static_analysis.get(
                     "sha256"
                 )
+
                 if static_analysis
+
                 else None
             )
 
@@ -600,17 +966,11 @@ class SentinelFileEventHandler(FileSystemEventHandler):
                 )
             )
 
-
-            # ----------------------------------------------------
-            # DEDUPLICATION
-            # ----------------------------------------------------
-
             duplicate = (
                 self.is_duplicate_detection(
                     sha256
                 )
             )
-
 
             if duplicate:
 
@@ -631,7 +991,7 @@ class SentinelFileEventHandler(FileSystemEventHandler):
                     )
                 )
 
-                detection = {
+                malware_detection = {
 
                     "engine":
                         "malware_ml",
@@ -675,12 +1035,11 @@ class SentinelFileEventHandler(FileSystemEventHandler):
                         sha256,
                 }
 
-
                 try:
 
                     save_detection(
                         event.event_id,
-                        detection,
+                        malware_detection,
                     )
 
                     logger.info(
@@ -693,7 +1052,7 @@ class SentinelFileEventHandler(FileSystemEventHandler):
 
                         event.event_id,
 
-                        detection.get(
+                        malware_detection.get(
                             "engine"
                         ),
 
@@ -701,10 +1060,14 @@ class SentinelFileEventHandler(FileSystemEventHandler):
                             "prediction"
                         ),
 
-                        malware_probability
-                        if malware_probability
-                        is not None
-                        else 0,
+                        (
+                            malware_probability
+
+                            if malware_probability
+                            is not None
+
+                            else 0
+                        ),
 
                         risk,
                     )
@@ -720,46 +1083,64 @@ class SentinelFileEventHandler(FileSystemEventHandler):
                         error,
                     )
 
+        # ========================================================
+        # SAVE RANSOMWARE DETECTIONS
+        # ========================================================
+
+        if ransomware_detections:
+
+            self.save_ransomware_detections(
+
+                event,
+
+                ransomware_detections,
+
+                file_path,
+            )
 
         # --------------------------------------------------------
-        # CLEAN OLD DEDUPLICATION RECORDS
+        # CLEAN MALWARE CACHE
         # --------------------------------------------------------
 
         self.cleanup_detection_cache()
 
-
         # --------------------------------------------------------
-        # EVENT LOG
+        # LOG EVENT
         # --------------------------------------------------------
 
         static_risk = (
+
             static_analysis.get(
                 "risk_score",
                 0,
             )
+
             if static_analysis
+
             else 0
         )
 
-
         malware_probability = (
+
             ml_prediction.get(
                 "malware_probability"
             )
+
             if (
                 ml_prediction
                 and ml_prediction.get(
                     "valid"
                 )
             )
+
             else None
         )
-
 
         logger.info(
             "%s | %s | "
             "StaticRisk=%s | "
             "MalwareProbability=%s | "
+            "RansomwareDetections=%s | "
             "Severity=%s | "
             "EventID=%s",
 
@@ -771,9 +1152,15 @@ class SentinelFileEventHandler(FileSystemEventHandler):
 
             (
                 f"{malware_probability:.4f}"
+
                 if malware_probability
                 is not None
+
                 else "N/A"
+            ),
+
+            len(
+                ransomware_detections
             ),
 
             severity,
@@ -781,6 +1168,22 @@ class SentinelFileEventHandler(FileSystemEventHandler):
             event.event_id,
         )
 
+        # --------------------------------------------------------
+        # Returning this does not affect Watchdog.
+        # It makes safe pipeline tests easier.
+        # --------------------------------------------------------
+
+        return {
+
+            "event":
+                event,
+
+            "malware_detection":
+                malware_detection,
+
+            "ransomware_detections":
+                ransomware_detections,
+        }
 
     # ============================================================
     # FILE CREATED
@@ -792,13 +1195,17 @@ class SentinelFileEventHandler(FileSystemEventHandler):
     ):
 
         if event.is_directory:
+
             return
 
         self.save_file_event(
-            event_type="file_create",
-            file_path=event.src_path,
-        )
 
+            event_type=
+                "file_create",
+
+            file_path=
+                event.src_path,
+        )
 
     # ============================================================
     # FILE MODIFIED
@@ -810,13 +1217,17 @@ class SentinelFileEventHandler(FileSystemEventHandler):
     ):
 
         if event.is_directory:
+
             return
 
         self.save_file_event(
-            event_type="file_modify",
-            file_path=event.src_path,
-        )
 
+            event_type=
+                "file_modify",
+
+            file_path=
+                event.src_path,
+        )
 
     # ============================================================
     # FILE DELETED
@@ -828,13 +1239,17 @@ class SentinelFileEventHandler(FileSystemEventHandler):
     ):
 
         if event.is_directory:
+
             return
 
         self.save_file_event(
-            event_type="file_delete",
-            file_path=event.src_path,
-        )
 
+            event_type=
+                "file_delete",
+
+            file_path=
+                event.src_path,
+        )
 
     # ============================================================
     # FILE RENAMED / MOVED
@@ -846,15 +1261,19 @@ class SentinelFileEventHandler(FileSystemEventHandler):
     ):
 
         if event.is_directory:
+
             return
 
         self.save_file_event(
 
-            event_type="file_rename",
+            event_type=
+                "file_rename",
 
-            file_path=event.dest_path,
+            file_path=
+                event.dest_path,
 
             extra_metadata={
+
                 "source_path":
                     event.src_path,
 
@@ -864,9 +1283,9 @@ class SentinelFileEventHandler(FileSystemEventHandler):
         )
 
 
-# ============================================================
+# ================================================================
 # FILE MONITOR
-# ============================================================
+# ================================================================
 
 class FileMonitor:
 
@@ -885,10 +1304,11 @@ class FileMonitor:
             watch_path
         )
 
-        self.observer = Observer()
+        self.observer = (
+            Observer()
+        )
 
         self.running = False
-
 
     # ============================================================
     # START
@@ -912,15 +1332,26 @@ class FileMonitor:
             self.watch_path,
         )
 
+        logger.info(
+            "Malware ML detection enabled."
+        )
+
+        logger.info(
+            "Ransomware behavioral detection enabled."
+        )
+
         event_handler = (
             SentinelFileEventHandler()
         )
 
         self.observer.schedule(
+
             event_handler,
+
             str(
                 self.watch_path
             ),
+
             recursive=True,
         )
 
@@ -946,7 +1377,6 @@ class FileMonitor:
 
             self.stop()
 
-
     # ============================================================
     # STOP
     # ============================================================
@@ -968,12 +1398,14 @@ class FileMonitor:
         )
 
 
-# ============================================================
+# ================================================================
 # MANUAL RUN
-# ============================================================
+# ================================================================
 
 if __name__ == "__main__":
 
-    monitor = FileMonitor()
+    monitor = (
+        FileMonitor()
+    )
 
     monitor.start()
