@@ -18,6 +18,10 @@ from response.soc_ticket import (
     SOCTicket,
 )
 
+from response.mitigation_verifier import (
+    MitigationVerifier,
+)
+
 
 class PersistentSOCWorkflow:
 
@@ -27,22 +31,26 @@ class PersistentSOCWorkflow:
         case_store=None,
         action_store=None,
         evidence_store=None,
+        mitigation_verifier=None,
     ):
 
-        self.name = (
-            "PersistentSOCWorkflow"
-        )
+        self.name = "PersistentSOCWorkflow"
 
         self.simulation_mode = bool(
             simulation_mode
         )
 
-        self.workflow = (
-            UnifiedSOCWorkflow(
-                simulation_mode=
-                    self.simulation_mode
-            )
+        # ========================================================
+        # CORE SOC WORKFLOW
+        # ========================================================
+
+        self.workflow = UnifiedSOCWorkflow(
+            simulation_mode=self.simulation_mode
         )
+
+        # ========================================================
+        # PERSISTENCE STORES
+        # ========================================================
 
         self.case_store = (
             case_store
@@ -62,6 +70,17 @@ class PersistentSOCWorkflow:
             else IncidentEvidenceStore()
         )
 
+        # ========================================================
+        # MITIGATION VERIFIER
+        #
+        # Simulation-only verification layer.
+        # ========================================================
+
+        self.mitigation_verifier = (
+            mitigation_verifier
+            if mitigation_verifier is not None
+            else MitigationVerifier()
+        )
 
     # ============================================================
     # SAFE HELPERS
@@ -76,11 +95,9 @@ class PersistentSOCWorkflow:
             value,
             dict,
         ):
-
             return value
 
         return {}
-
 
     def safe_list(
         self,
@@ -91,11 +108,9 @@ class PersistentSOCWorkflow:
             value,
             list,
         ):
-
             return value
 
         return []
-
 
     # ============================================================
     # TICKET RECONSTRUCTION
@@ -125,106 +140,89 @@ class PersistentSOCWorkflow:
 
         return SOCTicket(
 
-            ticket_id=
-                data[
-                    "ticket_id"
-                ],
+            ticket_id=data[
+                "ticket_id"
+            ],
 
-            incident_id=
-                data[
-                    "incident_id"
-                ],
+            incident_id=data[
+                "incident_id"
+            ],
 
-            title=
+            title=data.get(
+                "title",
+                (
+                    "SENTINEL-X Incident "
+                    + data[
+                        "incident_id"
+                    ]
+                ),
+            ),
+
+            priority=data.get(
+                "priority",
+                "P4",
+            ),
+
+            risk_score=data.get(
+                "risk_score",
+                0,
+            ),
+
+            risk_level=data.get(
+                "risk_level",
+                "INFO",
+            ),
+
+            selected_plan=data.get(
+                "selected_plan",
+                "",
+            ),
+
+            predicted_residual_risk=data.get(
+                "predicted_residual_risk",
+                0,
+            ),
+
+            operational_impact=data.get(
+                "operational_impact",
+                "UNKNOWN",
+            ),
+
+            explanation=data.get(
+                "explanation",
+                "",
+            ),
+
+            approval_required=bool(
                 data.get(
-                    "title",
-                    (
-                        "SENTINEL-X Incident "
-                        + data[
-                            "incident_id"
-                        ]
-                    ),
-                ),
+                    "approval_required",
+                    False,
+                )
+            ),
 
-            priority=
-                data.get(
-                    "priority",
-                    "P4",
-                ),
+            approval_status=data.get(
+                "approval_status",
+                "NOT_REQUIRED",
+            ),
 
-            risk_score=
-                data.get(
-                    "risk_score",
-                    0,
-                ),
+            assigned_analyst=data.get(
+                "assigned_analyst",
+                "",
+            ),
 
-            risk_level=
-                data.get(
-                    "risk_level",
-                    "INFO",
-                ),
+            status=data.get(
+                "status",
+                "OPEN",
+            ),
 
-            selected_plan=
-                data.get(
-                    "selected_plan",
-                    "",
-                ),
+            created_at=data.get(
+                "created_at"
+            ),
 
-            predicted_residual_risk=
-                data.get(
-                    "predicted_residual_risk",
-                    0,
-                ),
-
-            operational_impact=
-                data.get(
-                    "operational_impact",
-                    "UNKNOWN",
-                ),
-
-            explanation=
-                data.get(
-                    "explanation",
-                    "",
-                ),
-
-            approval_required=
-                bool(
-                    data.get(
-                        "approval_required",
-                        False,
-                    )
-                ),
-
-            approval_status=
-                data.get(
-                    "approval_status",
-                    "NOT_REQUIRED",
-                ),
-
-            assigned_analyst=
-                data.get(
-                    "assigned_analyst",
-                    "",
-                ),
-
-            status=
-                data.get(
-                    "status",
-                    "OPEN",
-                ),
-
-            created_at=
-                data.get(
-                    "created_at"
-                ),
-
-            updated_at=
-                data.get(
-                    "updated_at"
-                ),
+            updated_at=data.get(
+                "updated_at"
+            ),
         )
-
 
     # ============================================================
     # EXTRACT EVIDENCE FROM INTELLIGENCE
@@ -235,64 +233,62 @@ class PersistentSOCWorkflow:
         intelligence,
     ):
 
-        intelligence = (
-            self.safe_dict(
-                intelligence
+        intelligence = self.safe_dict(
+            intelligence
+        )
+
+        coordinated = self.safe_dict(
+            intelligence.get(
+                "coordinated_analysis"
             )
         )
 
-        coordinated = (
-            self.safe_dict(
-                intelligence.get(
-                    "coordinated_analysis"
-                )
-            )
-        )
+        # --------------------------------------------------------
+        # LOCATION 1
+        # coordinated_analysis -> evidence
+        # --------------------------------------------------------
 
-        evidence = (
-            self.safe_dict(
-                coordinated.get(
-                    "evidence"
-                )
-            )
-        )
-
-        if evidence:
-
-            return evidence
-
-
-        context = (
-            self.safe_dict(
-                coordinated.get(
-                    "context"
-                )
-            )
-        )
-
-        evidence = (
-            self.safe_dict(
-                context.get(
-                    "evidence"
-                )
+        evidence = self.safe_dict(
+            coordinated.get(
+                "evidence"
             )
         )
 
         if evidence:
-
             return evidence
 
+        # --------------------------------------------------------
+        # LOCATION 2
+        # coordinated_analysis -> context -> evidence
+        # --------------------------------------------------------
 
-        evidence = (
-            self.safe_dict(
-                intelligence.get(
-                    "evidence"
-                )
+        context = self.safe_dict(
+            coordinated.get(
+                "context"
+            )
+        )
+
+        evidence = self.safe_dict(
+            context.get(
+                "evidence"
+            )
+        )
+
+        if evidence:
+            return evidence
+
+        # --------------------------------------------------------
+        # LOCATION 3
+        # intelligence -> evidence
+        # --------------------------------------------------------
+
+        evidence = self.safe_dict(
+            intelligence.get(
+                "evidence"
             )
         )
 
         return evidence
-
 
     # ============================================================
     # BUILD SIMPLE ATTACK TIMELINE FROM EVIDENCE
@@ -303,18 +299,15 @@ class PersistentSOCWorkflow:
         evidence,
     ):
 
-        evidence = (
-            self.safe_dict(
-                evidence
-            )
+        evidence = self.safe_dict(
+            evidence
         )
 
         timeline = []
 
-
-        # --------------------------------------------------------
+        # ========================================================
         # PROCESS
-        # --------------------------------------------------------
+        # ========================================================
 
         for process in self.safe_list(
             evidence.get(
@@ -324,7 +317,6 @@ class PersistentSOCWorkflow:
 
             timeline.append(
                 {
-
                     "event_type":
                         "PROCESS_ACTIVITY",
 
@@ -347,10 +339,9 @@ class PersistentSOCWorkflow:
                 }
             )
 
-
-        # --------------------------------------------------------
+        # ========================================================
         # FILE
-        # --------------------------------------------------------
+        # ========================================================
 
         for file_item in self.safe_list(
             evidence.get(
@@ -360,7 +351,6 @@ class PersistentSOCWorkflow:
 
             timeline.append(
                 {
-
                     "event_type":
                         "FILE_ACTIVITY",
 
@@ -383,10 +373,9 @@ class PersistentSOCWorkflow:
                 }
             )
 
-
-        # --------------------------------------------------------
+        # ========================================================
         # NETWORK
-        # --------------------------------------------------------
+        # ========================================================
 
         for connection in self.safe_list(
             evidence.get(
@@ -396,7 +385,6 @@ class PersistentSOCWorkflow:
 
             timeline.append(
                 {
-
                     "event_type":
                         "NETWORK_ACTIVITY",
 
@@ -419,10 +407,9 @@ class PersistentSOCWorkflow:
                 }
             )
 
-
-        # --------------------------------------------------------
+        # ========================================================
         # REGISTRY / PERSISTENCE
-        # --------------------------------------------------------
+        # ========================================================
 
         for registry_item in self.safe_list(
             evidence.get(
@@ -432,7 +419,6 @@ class PersistentSOCWorkflow:
 
             timeline.append(
                 {
-
                     "event_type":
                         "PERSISTENCE_ACTIVITY",
 
@@ -455,19 +441,16 @@ class PersistentSOCWorkflow:
                 }
             )
 
-
-        # --------------------------------------------------------
-        # PRESERVE SOURCE ORDER IF NO TIMESTAMPS EXIST
-        # --------------------------------------------------------
+        # ========================================================
+        # ORDER TIMELINE
+        # ========================================================
 
         def timeline_sort_key(
             item,
         ):
 
-            timestamp = (
-                item.get(
-                    "timestamp"
-                )
+            timestamp = item.get(
+                "timestamp"
             )
 
             return (
@@ -478,14 +461,11 @@ class PersistentSOCWorkflow:
                 ),
             )
 
-
         timeline.sort(
             key=timeline_sort_key
         )
 
-
         return timeline
-
 
     # ============================================================
     # EXTRACT TIMELINE FROM INTELLIGENCE
@@ -497,12 +477,9 @@ class PersistentSOCWorkflow:
         evidence,
     ):
 
-        intelligence = (
-            self.safe_dict(
-                intelligence
-            )
+        intelligence = self.safe_dict(
+            intelligence
         )
-
 
         possible_locations = [
 
@@ -515,19 +492,14 @@ class PersistentSOCWorkflow:
             ),
         ]
 
-
-        coordinated = (
-            self.safe_dict(
-                intelligence.get(
-                    "coordinated_analysis"
-                )
+        coordinated = self.safe_dict(
+            intelligence.get(
+                "coordinated_analysis"
             )
         )
 
-
         possible_locations.extend(
             [
-
                 coordinated.get(
                     "attack_timeline"
                 ),
@@ -538,19 +510,14 @@ class PersistentSOCWorkflow:
             ]
         )
 
-
-        investigation = (
-            self.safe_dict(
-                intelligence.get(
-                    "investigation"
-                )
+        investigation = self.safe_dict(
+            intelligence.get(
+                "investigation"
             )
         )
 
-
         possible_locations.extend(
             [
-
                 investigation.get(
                     "attack_timeline"
                 ),
@@ -560,7 +527,6 @@ class PersistentSOCWorkflow:
                 ),
             ]
         )
-
 
         for candidate in possible_locations:
 
@@ -574,19 +540,16 @@ class PersistentSOCWorkflow:
 
                 return candidate
 
+        # --------------------------------------------------------
+        # FALLBACK
+        # --------------------------------------------------------
 
-        # Fallback:
-        # create a deterministic timeline from available evidence.
-
-        return (
-            self.build_timeline_from_evidence(
-                evidence
-            )
+        return self.build_timeline_from_evidence(
+            evidence
         )
 
-
     # ============================================================
-    # PERSIST CASE + ACTIONS
+    # PERSIST CASE + RESPONSE ACTIONS
     # ============================================================
 
     def persist_case(
@@ -603,13 +566,9 @@ class PersistentSOCWorkflow:
                 "case_result must be a dictionary."
             )
 
-
-        incident_id = (
-            case_result.get(
-                "incident_id"
-            )
+        incident_id = case_result.get(
+            "incident_id"
         )
-
 
         if not incident_id:
 
@@ -617,22 +576,24 @@ class PersistentSOCWorkflow:
                 "incident_id missing from case."
             )
 
+        # --------------------------------------------------------
+        # SAVE CASE
+        # --------------------------------------------------------
 
         self.case_store.save_case(
             case_result
         )
 
+        # --------------------------------------------------------
+        # SAVE RESPONSE ACTIONS
+        # --------------------------------------------------------
 
-        actions = (
-            case_result.get(
-                "response_actions",
-                []
-            )
+        actions = case_result.get(
+            "response_actions",
+            [],
         )
 
-
         saved_action_ids = []
-
 
         for action in actions:
 
@@ -646,9 +607,7 @@ class PersistentSOCWorkflow:
                 action_id
             )
 
-
         return {
-
             "success":
                 True,
 
@@ -664,9 +623,8 @@ class PersistentSOCWorkflow:
                 saved_action_ids,
         }
 
-
     # ============================================================
-    # CREATE NEW CASE
+    # CREATE NEW SOC CASE
     # ============================================================
 
     def create_case(
@@ -675,12 +633,9 @@ class PersistentSOCWorkflow:
         intelligence,
     ):
 
-        existing = (
-            self.case_store.get_case(
-                incident_id
-            )
+        existing = self.case_store.get_case(
+            incident_id
         )
-
 
         if existing is not None:
 
@@ -691,6 +646,9 @@ class PersistentSOCWorkflow:
                 )
             )
 
+        # ========================================================
+        # RUN UNIFIED SOC WORKFLOW
+        # ========================================================
 
         case_result = (
             self.workflow.create_case(
@@ -703,28 +661,21 @@ class PersistentSOCWorkflow:
             )
         )
 
-
-        # --------------------------------------------------------
+        # ========================================================
         # PERSIST CORE CASE
-        # --------------------------------------------------------
+        # ========================================================
 
-        persistence = (
-            self.persist_case(
-                case_result
-            )
+        persistence = self.persist_case(
+            case_result
         )
 
-
-        # --------------------------------------------------------
+        # ========================================================
         # EXTRACT + PERSIST EVIDENCE
-        # --------------------------------------------------------
+        # ========================================================
 
-        evidence = (
-            self.extract_evidence(
-                intelligence
-            )
+        evidence = self.extract_evidence(
+            intelligence
         )
-
 
         evidence_result = (
             self.evidence_store.save_evidence_bundle(
@@ -740,22 +691,18 @@ class PersistentSOCWorkflow:
             )
         )
 
-
-        # --------------------------------------------------------
+        # ========================================================
         # EXTRACT + PERSIST TIMELINE
-        # --------------------------------------------------------
+        # ========================================================
 
-        timeline = (
-            self.extract_timeline(
+        timeline = self.extract_timeline(
 
-                intelligence=
-                    intelligence,
+            intelligence=
+                intelligence,
 
-                evidence=
-                    evidence,
-            )
+            evidence=
+                evidence,
         )
-
 
         timeline_result = (
             self.evidence_store.save_timeline(
@@ -771,6 +718,9 @@ class PersistentSOCWorkflow:
             )
         )
 
+        # ========================================================
+        # PERSISTENCE INFORMATION
+        # ========================================================
 
         case_result[
             "persistence"
@@ -785,9 +735,7 @@ class PersistentSOCWorkflow:
                 timeline_result,
         }
 
-
         return case_result
-
 
     # ============================================================
     # RECOVER CASE AFTER RESTART
@@ -798,17 +746,17 @@ class PersistentSOCWorkflow:
         incident_id,
     ):
 
-        stored_case = (
-            self.case_store.get_case(
-                incident_id
-            )
+        stored_case = self.case_store.get_case(
+            incident_id
         )
-
 
         if stored_case is None:
 
             return None
 
+        # ========================================================
+        # RESPONSE ACTIONS
+        # ========================================================
 
         actions = (
             self.action_store.get_by_incident(
@@ -816,6 +764,9 @@ class PersistentSOCWorkflow:
             )
         )
 
+        # ========================================================
+        # EVIDENCE
+        # ========================================================
 
         evidence = (
             self.evidence_store.get_evidence_bundle(
@@ -823,6 +774,9 @@ class PersistentSOCWorkflow:
             )
         )
 
+        # ========================================================
+        # TIMELINE
+        # ========================================================
 
         timeline = (
             self.evidence_store.get_timeline(
@@ -830,6 +784,9 @@ class PersistentSOCWorkflow:
             )
         )
 
+        # ========================================================
+        # RECOVERED CASE
+        # ========================================================
 
         recovered = {
 
@@ -876,6 +833,17 @@ class PersistentSOCWorkflow:
             "timeline":
                 timeline,
 
+            # ====================================================
+            # NEW:
+            # Restore simulated mitigation verification.
+            # ====================================================
+
+            "mitigation_verification":
+                stored_case.get(
+                    "mitigation_verification",
+                    {},
+                ),
+
             "created_at":
                 stored_case.get(
                     "created_at"
@@ -892,16 +860,19 @@ class PersistentSOCWorkflow:
             "simulation_mode":
                 self.simulation_mode,
 
+            # ----------------------------------------------------
+            # SENTINEL-X currently performs no real endpoint
+            # response through this workflow.
+            # ----------------------------------------------------
+
             "real_response_executed":
                 False,
         }
 
-
         return recovered
 
-
     # ============================================================
-    # RECOVER TICKET
+    # RECOVER SOC TICKET
     # ============================================================
 
     def recover_ticket(
@@ -909,34 +880,25 @@ class PersistentSOCWorkflow:
         incident_id,
     ):
 
-        case_result = (
-            self.recover_case(
-                incident_id
-            )
+        case_result = self.recover_case(
+            incident_id
         )
-
 
         if case_result is None:
 
             return None
 
-
-        ticket_data = (
-            case_result.get(
-                "ticket_data"
-            )
+        ticket_data = case_result.get(
+            "ticket_data"
         )
-
 
         if not ticket_data:
 
             return None
 
-
         return self.ticket_from_data(
             ticket_data
         )
-
 
     # ============================================================
     # APPROVE PERSISTED CASE
@@ -949,12 +911,9 @@ class PersistentSOCWorkflow:
         comment="",
     ):
 
-        case_result = (
-            self.recover_case(
-                incident_id
-            )
+        case_result = self.recover_case(
+            incident_id
         )
-
 
         if case_result is None:
 
@@ -965,13 +924,9 @@ class PersistentSOCWorkflow:
                 )
             )
 
-
-        ticket = (
-            self.recover_ticket(
-                incident_id
-            )
+        ticket = self.recover_ticket(
+            incident_id
         )
-
 
         if ticket is None:
 
@@ -979,6 +934,9 @@ class PersistentSOCWorkflow:
                 "SOC ticket could not be restored."
             )
 
+        # ========================================================
+        # STATUS VALIDATION
+        # ========================================================
 
         if (
             ticket.approval_status
@@ -989,7 +947,6 @@ class PersistentSOCWorkflow:
                 "SOC ticket is already approved."
             )
 
-
         if (
             ticket.approval_status
             == "REJECTED"
@@ -999,6 +956,9 @@ class PersistentSOCWorkflow:
                 "Rejected SOC ticket cannot be approved."
             )
 
+        # ========================================================
+        # APPROVAL WORKFLOW
+        # ========================================================
 
         result = (
             self.workflow.approve_case(
@@ -1017,7 +977,6 @@ class PersistentSOCWorkflow:
             )
         )
 
-
         case_result[
             "status"
         ] = result.get(
@@ -1027,36 +986,36 @@ class PersistentSOCWorkflow:
             ),
         )
 
-
         case_result[
             "ticket_data"
         ] = ticket.to_dict()
 
+        # ========================================================
+        # SAVE RESPONSE ACTIONS
+        # ========================================================
 
-        for action in (
-            case_result.get(
-                "response_actions",
-                []
-            )
+        for action in case_result.get(
+            "response_actions",
+            [],
         ):
 
             self.action_store.save_action(
                 action
             )
 
+        # ========================================================
+        # SAVE UPDATED CASE
+        # ========================================================
 
         self.case_store.save_case(
             case_result
         )
 
-
         result[
             "persisted"
         ] = True
 
-
         return result
-
 
     # ============================================================
     # REJECT PERSISTED CASE
@@ -1069,12 +1028,9 @@ class PersistentSOCWorkflow:
         reason,
     ):
 
-        case_result = (
-            self.recover_case(
-                incident_id
-            )
+        case_result = self.recover_case(
+            incident_id
         )
-
 
         if case_result is None:
 
@@ -1085,13 +1041,9 @@ class PersistentSOCWorkflow:
                 )
             )
 
-
-        ticket = (
-            self.recover_ticket(
-                incident_id
-            )
+        ticket = self.recover_ticket(
+            incident_id
         )
-
 
         if ticket is None:
 
@@ -1099,6 +1051,9 @@ class PersistentSOCWorkflow:
                 "SOC ticket could not be restored."
             )
 
+        # ========================================================
+        # STATUS VALIDATION
+        # ========================================================
 
         if (
             ticket.approval_status
@@ -1109,7 +1064,6 @@ class PersistentSOCWorkflow:
                 "Approved SOC ticket cannot be rejected."
             )
 
-
         if (
             ticket.approval_status
             == "REJECTED"
@@ -1119,6 +1073,9 @@ class PersistentSOCWorkflow:
                 "SOC ticket is already rejected."
             )
 
+        # ========================================================
+        # REJECTION WORKFLOW
+        # ========================================================
 
         result = (
             self.workflow.reject_case(
@@ -1137,43 +1094,256 @@ class PersistentSOCWorkflow:
             )
         )
 
-
         case_result[
             "status"
         ] = "REJECTED"
 
-
         case_result[
             "ticket_data"
-        ] = (
-            ticket.to_dict()
-        )
+        ] = ticket.to_dict()
 
+        # ========================================================
+        # SAVE RESPONSE ACTIONS
+        # ========================================================
 
-        for action in (
-            case_result.get(
-                "response_actions",
-                []
-            )
+        for action in case_result.get(
+            "response_actions",
+            [],
         ):
 
             self.action_store.save_action(
                 action
             )
 
+        # ========================================================
+        # SAVE UPDATED CASE
+        # ========================================================
 
         self.case_store.save_case(
             case_result
         )
 
-
         result[
             "persisted"
         ] = True
 
-
         return result
 
+    # ============================================================
+    # VERIFY SIMULATED MITIGATION
+    # ============================================================
+
+    def verify_simulated_mitigation(
+        self,
+        incident_id,
+        before_state,
+        simulated_after_state,
+        response_result,
+    ):
+
+        """
+        Verify a simulated mitigation outcome and persist
+        the verification result with the SOC case.
+
+        IMPORTANT:
+
+        This method does NOT execute real mitigation.
+
+        It only compares supplied before/after simulation
+        state using MitigationVerifier.
+        """
+
+        # ========================================================
+        # SAFETY GUARD 1
+        #
+        # Entire persistent workflow must be simulation mode.
+        # ========================================================
+
+        if not self.simulation_mode:
+
+            raise ValueError(
+                "Mitigation verification is available only "
+                "when PersistentSOCWorkflow is running in "
+                "simulation_mode=True."
+            )
+
+        # ========================================================
+        # RECOVER CASE
+        # ========================================================
+
+        case_result = self.recover_case(
+            incident_id
+        )
+
+        if case_result is None:
+
+            raise ValueError(
+                (
+                    "SOC case not found for incident "
+                    f"{incident_id}."
+                )
+            )
+
+        # ========================================================
+        # INPUT VALIDATION
+        # ========================================================
+
+        if not isinstance(
+            before_state,
+            dict,
+        ):
+
+            raise TypeError(
+                "before_state must be a dictionary."
+            )
+
+        if not isinstance(
+            simulated_after_state,
+            dict,
+        ):
+
+            raise TypeError(
+                "simulated_after_state must be a dictionary."
+            )
+
+        if not isinstance(
+            response_result,
+            dict,
+        ):
+
+            raise TypeError(
+                "response_result must be a dictionary."
+            )
+
+        # ========================================================
+        # SAFETY GUARD 2
+        #
+        # Reject anything explicitly claiming to be a real
+        # response result.
+        # ========================================================
+
+        if (
+            response_result.get(
+                "simulation_mode",
+                True,
+            )
+            is not True
+        ):
+
+            raise ValueError(
+                "Real response results cannot be verified "
+                "through the simulation-only mitigation "
+                "verification workflow."
+            )
+
+        # ========================================================
+        # FORCE SAFE COPY
+        # ========================================================
+
+        safe_response_result = dict(
+            response_result
+        )
+
+        safe_response_result[
+            "simulation_mode"
+        ] = True
+
+        # ========================================================
+        # RUN MITIGATION VERIFIER
+        # ========================================================
+
+        verification = (
+            self.mitigation_verifier.verify(
+
+                before_state=
+                    before_state,
+
+                simulated_after_state=
+                    simulated_after_state,
+
+                response_result=
+                    safe_response_result,
+            )
+        )
+
+        # ========================================================
+        # PERSIST VERIFICATION RESULT
+        #
+        # This means:
+        #
+        # "The simulated response appears effective according
+        #  to the model."
+        #
+        # It does NOT mean a real endpoint was remediated.
+        # ========================================================
+
+        case_result[
+            "mitigation_verification"
+        ] = verification
+
+        case_result[
+            "simulation_mode"
+        ] = True
+
+        case_result[
+            "real_response_executed"
+        ] = False
+
+        self.case_store.save_case(
+            case_result
+        )
+
+        # ========================================================
+        # RESULT
+        # ========================================================
+
+        return {
+
+            "success":
+                True,
+
+            "incident_id":
+                incident_id,
+
+            "status":
+                verification.get(
+                    "status"
+                ),
+
+            "verification":
+                verification,
+
+            "persisted":
+                True,
+
+            "simulation_mode":
+                True,
+
+            "real_response_executed":
+                False,
+        }
+
+    # ============================================================
+    # GET MITIGATION VERIFICATION
+    # ============================================================
+
+    def get_mitigation_verification(
+        self,
+        incident_id,
+    ):
+
+        case_result = self.recover_case(
+            incident_id
+        )
+
+        if case_result is None:
+
+            return None
+
+        return case_result.get(
+            "mitigation_verification",
+            {},
+        )
 
     # ============================================================
     # LIST CASES
@@ -1184,12 +1354,9 @@ class PersistentSOCWorkflow:
         limit=100,
     ):
 
-        return (
-            self.case_store.list_cases(
-                limit=limit
-            )
+        return self.case_store.list_cases(
+            limit=limit
         )
-
 
     # ============================================================
     # GET RESPONSE ACTIONS
@@ -1206,7 +1373,6 @@ class PersistentSOCWorkflow:
             )
         )
 
-
     # ============================================================
     # GET PERSISTED EVIDENCE
     # ============================================================
@@ -1221,7 +1387,6 @@ class PersistentSOCWorkflow:
                 incident_id
             )
         )
-
 
     # ============================================================
     # GET PERSISTED TIMELINE

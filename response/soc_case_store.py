@@ -1,7 +1,9 @@
 import json
 import sqlite3
+
 from pathlib import Path
 from datetime import datetime, timezone
+from contextlib import closing
 
 
 class SOCCaseStore:
@@ -22,7 +24,6 @@ class SOCCaseStore:
                 / "sentinel_endpoint.db"
             )
 
-
         self.database_path = Path(
             database_path
         )
@@ -34,23 +35,25 @@ class SOCCaseStore:
 
         self.initialize()
 
-
     # ============================================================
     # TIME
     # ============================================================
 
-    def now_iso(self):
+    def now_iso(
+        self,
+    ):
 
         return datetime.now(
             timezone.utc
         ).isoformat()
 
-
     # ============================================================
     # CONNECTION
     # ============================================================
 
-    def get_connection(self):
+    def get_connection(
+        self,
+    ):
 
         connection = sqlite3.connect(
             self.database_path
@@ -62,14 +65,22 @@ class SOCCaseStore:
 
         return connection
 
-
     # ============================================================
-    # INITIALIZE TABLE
+    # INITIALIZE
     # ============================================================
 
-    def initialize(self):
+    def initialize(
+        self,
+    ):
 
-        with self.get_connection() as conn:
+        # --------------------------------------------------------
+        # closing() guarantees the SQLite connection is physically
+        # closed when the block exits.
+        # --------------------------------------------------------
+
+        with closing(
+            self.get_connection()
+        ) as conn:
 
             conn.execute(
                 """
@@ -95,6 +106,8 @@ class SOCCaseStore:
 
                     ticket_json TEXT,
 
+                    mitigation_verification_json TEXT,
+
                     created_at TEXT NOT NULL,
 
                     updated_at TEXT NOT NULL
@@ -102,6 +115,42 @@ class SOCCaseStore:
                 """
             )
 
+            # ====================================================
+            # SCHEMA MIGRATION
+            #
+            # Existing databases may not yet contain the
+            # mitigation verification column.
+            # ====================================================
+
+            columns = {
+
+                row[
+                    "name"
+                ]
+
+                for row in conn.execute(
+                    """
+                    PRAGMA table_info(soc_cases)
+                    """
+                ).fetchall()
+            }
+
+            if (
+                "mitigation_verification_json"
+                not in columns
+            ):
+
+                conn.execute(
+                    """
+                    ALTER TABLE soc_cases
+                    ADD COLUMN mitigation_verification_json TEXT
+                    DEFAULT '{}'
+                    """
+                )
+
+            # ====================================================
+            # INDEXES
+            # ====================================================
 
             conn.execute(
                 """
@@ -111,7 +160,6 @@ class SOCCaseStore:
                 """
             )
 
-
             conn.execute(
                 """
                 CREATE INDEX IF NOT EXISTS
@@ -120,12 +168,10 @@ class SOCCaseStore:
                 """
             )
 
-
             conn.commit()
 
-
     # ============================================================
-    # JSON HELPER
+    # JSON HELPERS
     # ============================================================
 
     def to_json(
@@ -138,7 +184,6 @@ class SOCCaseStore:
             default=str,
             ensure_ascii=False,
         )
-
 
     def from_json(
         self,
@@ -153,7 +198,6 @@ class SOCCaseStore:
                 if default is not None
                 else {}
             )
-
 
         try:
 
@@ -171,7 +215,6 @@ class SOCCaseStore:
                 if default is not None
                 else {}
             )
-
 
     # ============================================================
     # SAVE CASE
@@ -191,6 +234,9 @@ class SOCCaseStore:
                 "case must be a dictionary."
             )
 
+        # ========================================================
+        # INCIDENT ID
+        # ========================================================
 
         incident_id = (
             case.get(
@@ -198,58 +244,69 @@ class SOCCaseStore:
             )
         )
 
-
         if not incident_id:
 
             raise ValueError(
                 "incident_id is required."
             )
 
+        # ========================================================
+        # CASE COMPONENTS
+        # ========================================================
 
         decision = (
             case.get(
                 "decision",
-                {}
-            )
-        )
-
-
-        explanation = (
-            case.get(
-                "explanation",
-                {}
-            )
-        )
-
-
-        ticket_data = (
-            case.get(
-                "ticket_data",
-                {}
-            )
-        )
-
-
-        best_plan = (
-            decision.get(
-                "best_plan",
-                {}
+                {},
             )
             or {}
         )
 
+        explanation = (
+            case.get(
+                "explanation",
+                {},
+            )
+            or {}
+        )
+
+        ticket_data = (
+            case.get(
+                "ticket_data",
+                {},
+            )
+            or {}
+        )
+
+        mitigation_verification = (
+            case.get(
+                "mitigation_verification",
+                {},
+            )
+            or {}
+        )
+
+        best_plan = (
+            decision.get(
+                "best_plan",
+                {},
+            )
+            or {}
+        )
+
+        # ========================================================
+        # TIMESTAMPS
+        # ========================================================
 
         now = (
             self.now_iso()
         )
-
 
         existing = (
             self.get_case(
                 incident_id
             )
         )
-
 
         created_at = (
 
@@ -262,27 +319,47 @@ class SOCCaseStore:
             else now
         )
 
+        # ========================================================
+        # DATABASE WRITE
+        # ========================================================
 
-        with self.get_connection() as conn:
+        with closing(
+            self.get_connection()
+        ) as conn:
 
             conn.execute(
                 """
                 INSERT OR REPLACE INTO soc_cases (
 
                     incident_id,
+
                     ticket_id,
+
                     case_status,
+
                     risk_score,
+
                     risk_level,
+
                     selected_plan,
+
                     predicted_residual_risk,
+
                     decision_json,
+
                     explanation_json,
+
                     ticket_json,
+
+                    mitigation_verification_json,
+
                     created_at,
+
                     updated_at
 
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                )
                 """,
 
                 (
@@ -333,18 +410,19 @@ class SOCCaseStore:
                         ticket_data
                     ),
 
+                    self.to_json(
+                        mitigation_verification
+                    ),
+
                     created_at,
 
                     now,
                 ),
             )
 
-
             conn.commit()
 
-
         return incident_id
-
 
     # ============================================================
     # GET CASE
@@ -355,7 +433,9 @@ class SOCCaseStore:
         incident_id: str,
     ):
 
-        with self.get_connection() as conn:
+        with closing(
+            self.get_connection()
+        ) as conn:
 
             row = conn.execute(
                 """
@@ -368,16 +448,13 @@ class SOCCaseStore:
                 ),
             ).fetchone()
 
-
         if row is None:
 
             return None
 
-
         data = dict(
             row
         )
-
 
         return {
 
@@ -440,6 +517,14 @@ class SOCCaseStore:
                     {},
                 ),
 
+            "mitigation_verification":
+                self.from_json(
+                    data.get(
+                        "mitigation_verification_json"
+                    ),
+                    {},
+                ),
+
             "created_at":
                 data[
                     "created_at"
@@ -450,7 +535,6 @@ class SOCCaseStore:
                     "updated_at"
                 ],
         }
-
 
     # ============================================================
     # LIST CASES
@@ -468,20 +552,30 @@ class SOCCaseStore:
             ),
         )
 
-
-        with self.get_connection() as conn:
+        with closing(
+            self.get_connection()
+        ) as conn:
 
             rows = conn.execute(
                 """
                 SELECT
+
                     incident_id,
+
                     ticket_id,
+
                     case_status,
+
                     risk_score,
+
                     risk_level,
+
                     selected_plan,
+
                     predicted_residual_risk,
+
                     created_at,
+
                     updated_at
 
                 FROM soc_cases
@@ -495,7 +589,6 @@ class SOCCaseStore:
                 ),
             ).fetchall()
 
-
         return [
 
             dict(
@@ -504,7 +597,6 @@ class SOCCaseStore:
 
             for row in rows
         ]
-
 
     # ============================================================
     # UPDATE STATUS
@@ -516,14 +608,18 @@ class SOCCaseStore:
         status: str,
     ):
 
-        with self.get_connection() as conn:
+        with closing(
+            self.get_connection()
+        ) as conn:
 
             conn.execute(
                 """
                 UPDATE soc_cases
 
                 SET
+
                     case_status = ?,
+
                     updated_at = ?
 
                 WHERE incident_id = ?
@@ -531,22 +627,26 @@ class SOCCaseStore:
 
                 (
                     status,
+
                     self.now_iso(),
+
                     incident_id,
                 ),
             )
 
-
             conn.commit()
-
 
     # ============================================================
     # COUNT
     # ============================================================
 
-    def count(self):
+    def count(
+        self,
+    ):
 
-        with self.get_connection() as conn:
+        with closing(
+            self.get_connection()
+        ) as conn:
 
             row = conn.execute(
                 """
@@ -554,7 +654,6 @@ class SOCCaseStore:
                 FROM soc_cases
                 """
             ).fetchone()
-
 
         return int(
             row[
