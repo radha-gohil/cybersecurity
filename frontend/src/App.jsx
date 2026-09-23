@@ -7,6 +7,8 @@ import {
 import Layout from "./components/Layout";
 
 import Dashboard from "./pages/Dashboard";
+import SOCDashboard from "./pages/SOCDashboard";
+
 import Incidents from "./pages/Incidents";
 import IncidentDetail from "./pages/IncidentDetail";
 import Tickets from "./pages/Tickets";
@@ -28,11 +30,29 @@ function App() {
                     element={<Layout />}
                 >
 
+                    {/* =========================================
+                        EXISTING DASHBOARD
+                    ========================================== */}
+
                     <Route
                         path="/"
                         element={<Dashboard />}
                     />
 
+
+                    {/* =========================================
+                        NEW SENTINEL-X SOC DASHBOARD
+                    ========================================== */}
+
+                    <Route
+                        path="/soc"
+                        element={<SOCDashboard />}
+                    />
+
+
+                    {/* =========================================
+                        INCIDENTS
+                    ========================================== */}
 
                     <Route
                         path="/incidents"
@@ -46,11 +66,19 @@ function App() {
                     />
 
 
+                    {/* =========================================
+                        SOC TICKETS
+                    ========================================== */}
+
                     <Route
                         path="/tickets"
                         element={<Tickets />}
                     />
 
+
+                    {/* =========================================
+                        ANALYST APPROVALS
+                    ========================================== */}
 
                     <Route
                         path="/approvals"
@@ -58,17 +86,29 @@ function App() {
                     />
 
 
+                    {/* =========================================
+                        RESPONSE ACTIONS
+                    ========================================== */}
+
                     <Route
                         path="/responses"
                         element={<ResponseActions />}
                     />
 
 
+                    {/* =========================================
+                        ENDPOINT MONITORING
+                    ========================================== */}
+
                     <Route
                         path="/endpoint"
                         element={<Endpoint />}
                     />
 
+
+                    {/* =========================================
+                        SYSTEM HEALTH
+                    ========================================== */}
 
                     <Route
                         path="/health"

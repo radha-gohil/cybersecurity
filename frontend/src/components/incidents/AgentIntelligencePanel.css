@@ -1,0 +1,107 @@
+.agent-grid {
+    display: grid;
+    grid-template-columns:
+        repeat(
+            2,
+            minmax(0, 1fr)
+        );
+    gap: 16px;
+}
+
+
+.agent-card {
+    background: #0f1b2c;
+    border: 1px solid #24344c;
+    border-radius: 10px;
+    padding: 16px;
+}
+
+
+.agent-card-heading {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: flex-start;
+    margin-bottom: 16px;
+}
+
+
+.agent-card-heading h4 {
+    margin: 0;
+    color: #edf4ff;
+}
+
+
+.agent-card-heading p {
+    margin: 5px 0 0;
+    color: #74859c;
+    font-size: 12px;
+}
+
+
+.agent-card-metrics {
+    display: grid;
+    grid-template-columns:
+        1fr 1fr;
+    gap: 10px;
+}
+
+
+.agent-card-metrics > div {
+    padding: 11px;
+    background: #101f32;
+    border-radius: 8px;
+}
+
+
+.agent-card-metrics span,
+.agent-reasoning span {
+    display: block;
+    color: #74859c;
+    font-size: 10px;
+    margin-bottom: 4px;
+}
+
+
+.agent-card-metrics strong {
+    color: #e7effc;
+    font-size: 12px;
+}
+
+
+.agent-reasoning {
+    margin-top: 13px;
+    padding-top: 12px;
+    border-top: 1px solid #203149;
+}
+
+
+.agent-reasoning p,
+.agent-reasoning li {
+    color: #a7b6c9;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+
+.agent-decision-section {
+    margin-top: 20px;
+}
+
+
+.agent-decision-section h4 {
+    color: #edf4ff;
+    margin-bottom: 12px;
+}
+
+
+@media (
+    max-width: 900px
+) {
+
+    .agent-grid {
+        grid-template-columns:
+            1fr;
+    }
+
+}

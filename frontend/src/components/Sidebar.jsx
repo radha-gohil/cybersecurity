@@ -6,6 +6,11 @@ import {
 const menuItems = [
 
     {
+        name: "SOC Dashboard",
+        path: "/soc",
+    },
+
+    {
         name: "SOC Overview",
         path: "/",
     },
@@ -49,6 +54,10 @@ function Sidebar() {
 
         <aside className="sidebar">
 
+            {/* =========================================
+                BRAND
+            ========================================== */}
+
             <div className="sidebar-brand">
 
                 <h2>
@@ -62,43 +71,55 @@ function Sidebar() {
             </div>
 
 
+            {/* =========================================
+                NAVIGATION
+            ========================================== */}
+
             <nav className="sidebar-nav">
 
                 {
                     menuItems.map(
                         (item) => (
 
-                        <NavLink
-                            key={
-                                item.path
-                            }
-                            to={
-                                item.path
-                            }
-                            end={
-                                item.path
-                                === "/"
-                            }
-                            className={
-                                ({
-                                    isActive,
-                                }) =>
-                                    isActive
-                                        ? "nav-link active"
-                                        : "nav-link"
-                            }
-                        >
+                            <NavLink
+                                key={
+                                    item.path
+                                }
 
-                            {
-                                item.name
-                            }
+                                to={
+                                    item.path
+                                }
 
-                        </NavLink>
-                    ))
+                                end={
+                                    item.path === "/"
+                                }
+
+                                className={
+                                    ({
+                                        isActive,
+                                    }) =>
+                                        isActive
+                                            ? "nav-link active"
+                                            : "nav-link"
+                                }
+                            >
+
+                                {
+                                    item.name
+                                }
+
+                            </NavLink>
+
+                        )
+                    )
                 }
 
             </nav>
 
+
+            {/* =========================================
+                SAFETY / AUTONOMY STATUS
+            ========================================== */}
 
             <div className="sidebar-footer">
 
