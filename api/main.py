@@ -152,7 +152,13 @@ class AnalystRejectionRequest(BaseModel):
         min_length=1,
     )
 
+class MitigationVerificationRequest(BaseModel):
+    
+    before_state: dict
 
+    simulated_after_state: dict
+
+    response_result: dict
 # ================================================================
 # HELPERS
 # ================================================================
@@ -897,7 +903,233 @@ def get_case(
             False,
     }
 
+# ================================================================
+# GET MITIGATION VERIFICATION
+# ================================================================
 
+@app.get(
+    "/api/v1/cases/{incident_id}/mitigation-verification"
+)
+def get_mitigation_verification(
+    incident_id: str,
+):
+
+    # ------------------------------------------------------------
+    # VERIFY CASE EXISTS
+    # ------------------------------------------------------------
+
+    require_case(
+        incident_id
+    )
+
+    # ------------------------------------------------------------
+    # GET PERSISTED VERIFICATION
+    # ------------------------------------------------------------
+
+    verification = (
+        workflow.get_mitigation_verification(
+            incident_id
+        )
+    )
+
+    # ------------------------------------------------------------
+    # NOT YET VERIFIED
+    # ------------------------------------------------------------
+
+    if not verification:
+
+        return {
+
+            "incident_id":
+                incident_id,
+
+            "status":
+                "NOT_VERIFIED",
+
+            "verified":
+                False,
+
+            "verification":
+                {},
+
+            "persistent":
+                True,
+
+            "simulation_mode":
+                True,
+
+            "real_response_executed":
+                False,
+        }
+
+    # ------------------------------------------------------------
+    # VERIFIED RESULT
+    # ------------------------------------------------------------
+
+    return {
+
+        "incident_id":
+            incident_id,
+
+        "status":
+            verification.get(
+                "status"
+            ),
+
+        "verified":
+            True,
+
+        "verification":
+            serialize_value(
+                verification
+            ),
+
+        "persistent":
+            True,
+
+        "simulation_mode":
+            True,
+
+        "real_response_executed":
+            False,
+    }
+    
+# ================================================================
+# RUN SIMULATED MITIGATION VERIFICATION
+# ================================================================
+
+@app.post(
+    "/api/v1/cases/{incident_id}/mitigation-verification"
+)
+def run_mitigation_verification(
+    incident_id: str,
+    request: MitigationVerificationRequest,
+):
+
+    # ------------------------------------------------------------
+    # VERIFY CASE EXISTS
+    # ------------------------------------------------------------
+
+    require_case(
+        incident_id
+    )
+
+    try:
+
+        # --------------------------------------------------------
+        # SAFETY CHECK
+        #
+        # API remains simulation-only.
+        # --------------------------------------------------------
+
+        if (
+            request.response_result.get(
+                "simulation_mode",
+                True,
+            )
+            is not True
+        ):
+
+            raise ValueError(
+                "Only simulation-mode response results "
+                "can be verified through this API."
+            )
+
+        # --------------------------------------------------------
+        # RUN PERSISTENT VERIFICATION
+        # --------------------------------------------------------
+
+        result = (
+            workflow.verify_simulated_mitigation(
+
+                incident_id=
+                    incident_id,
+
+                before_state=
+                    request.before_state,
+
+                simulated_after_state=
+                    request.simulated_after_state,
+
+                response_result=
+                    request.response_result,
+            )
+        )
+
+        # --------------------------------------------------------
+        # RESPONSE
+        # --------------------------------------------------------
+
+        return {
+
+            "success":
+                result.get(
+                    "success",
+                    False,
+                ),
+
+            "incident_id":
+                incident_id,
+
+            "status":
+                result.get(
+                    "status"
+                ),
+
+            "verification":
+                serialize_value(
+                    result.get(
+                        "verification",
+                        {},
+                    )
+                ),
+
+            "persisted":
+                result.get(
+                    "persisted",
+                    False,
+                ),
+
+            "simulation_mode":
+                True,
+
+            "real_response_executed":
+                False,
+        }
+
+    except TypeError as error:
+
+        raise HTTPException(
+
+            status_code=400,
+
+            detail=str(
+                error
+            ),
+        )
+
+    except ValueError as error:
+
+        raise HTTPException(
+
+            status_code=409,
+
+            detail=str(
+                error
+            ),
+        )
+
+    except Exception as error:
+
+        raise HTTPException(
+
+            status_code=500,
+
+            detail=(
+                "Mitigation verification failed: "
+                f"{error}"
+            ),
+        )
 # ================================================================
 # DIGITAL TWIN
 # ================================================================
