@@ -3,112 +3,160 @@
 // ================================================================
 
 const API_BASE_URL =
-  import.meta.env.VITE_SOC_API_BASE_URL ||
-  "http://127.0.0.1:8003";
+    import.meta.env.VITE_SOC_API_BASE_URL ||
+    "http://127.0.0.1:8003";
 
 
 // ================================================================
-// GENERIC REQUEST HELPER
+// GENERIC REQUEST
 // ================================================================
 
 async function request(
-  endpoint,
-  options = {}
+    endpoint,
+    options = {}
 ) {
-  const response = await fetch(
-    `${API_BASE_URL}${endpoint}`,
-    {
-      headers: {
-        "Content-Type": "application/json",
+
+    const method =
+        (
+            options.method ||
+            "GET"
+        ).toUpperCase();
+
+
+    const headers = {
         ...(options.headers || {}),
-      },
+    };
 
-      ...options,
+
+    // Only requests containing a body need JSON Content-Type.
+    if (
+        options.body !== undefined
+        && options.body !== null
+    ) {
+
+        headers["Content-Type"] =
+            "application/json";
     }
-  );
 
-  let data = null;
 
-  try {
-    data = await response.json();
-  } catch {
-    data = null;
-  }
+    const response =
+        await fetch(
+            `${API_BASE_URL}${endpoint}`,
+            {
+                ...options,
+                method,
+                headers,
+            }
+        );
 
-  if (!response.ok) {
-    const message =
-      data?.detail ||
-      data?.message ||
-      `Request failed with HTTP ${response.status}`;
 
-    throw new Error(message);
-  }
+    let data = null;
 
-  return data;
+
+    try {
+
+        data =
+            await response.json();
+
+    } catch {
+
+        data = null;
+    }
+
+
+    if (!response.ok) {
+
+        const message =
+            data?.detail
+            || data?.message
+            || `HTTP ${response.status}: API request failed.`;
+
+
+        throw new Error(
+            message
+        );
+    }
+
+
+    return data;
 }
 
 
 // ================================================================
-// SYSTEM / HEALTH
+// HEALTH
 // ================================================================
 
 export async function getSOCHealth() {
-  return request(
-    "/api/v1/health"
-  );
-}
 
-
-export async function getEndpointOverview() {
-  return request(
-    "/api/v1/endpoint/overview"
-  );
+    return request(
+        "/api/v1/health"
+    );
 }
 
 
 // ================================================================
-// DASHBOARD
+// ENDPOINT OVERVIEW
+// ================================================================
+
+export async function getEndpointOverview() {
+
+    return request(
+        "/api/v1/endpoint/overview"
+    );
+}
+
+
+// ================================================================
+// DASHBOARD SUMMARY
 // ================================================================
 
 export async function getSOCDashboardSummary() {
-  return request(
-    "/api/v1/dashboard/summary"
-  );
+
+    return request(
+        "/api/v1/dashboard/summary"
+    );
 }
 
 
 // ================================================================
-// SOC CASES / INCIDENTS
+// SOC CASES
 // ================================================================
 
 export async function getSOCCases(
-  limit = 100
+    limit = 100
 ) {
-  return request(
-    `/api/v1/cases?limit=${limit}`
-  );
+
+    return request(
+        `/api/v1/cases?limit=${limit}`
+    );
 }
 
+
+// ================================================================
+// SINGLE SOC CASE
+// ================================================================
 
 export async function getSOCCase(
-  incidentId
+    incidentId
 ) {
-  return request(
-    `/api/v1/cases/${encodeURIComponent(
-      incidentId
-    )}`
-  );
+
+    return request(
+        `/api/v1/cases/${incidentId}`
+    );
 }
 
 
+// ================================================================
+// FULL INCIDENT
+// ================================================================
+
 export async function getFullIncident(
-  incidentId
+    incidentId
 ) {
-  return request(
-    `/api/v1/incidents/${encodeURIComponent(
-      incidentId
-    )}/full`
-  );
+
+    return request(
+        `/api/v1/incidents/${incidentId}/full`
+    );
 }
 
 
@@ -117,13 +165,12 @@ export async function getFullIncident(
 // ================================================================
 
 export async function getDigitalTwin(
-  incidentId
+    incidentId
 ) {
-  return request(
-    `/api/v1/cases/${encodeURIComponent(
-      incidentId
-    )}/digital-twin`
-  );
+
+    return request(
+        `/api/v1/cases/${incidentId}/digital-twin`
+    );
 }
 
 
@@ -132,128 +179,130 @@ export async function getDigitalTwin(
 // ================================================================
 
 export async function getResponseActions(
-  incidentId
+    incidentId
 ) {
-  return request(
-    `/api/v1/cases/${encodeURIComponent(
-      incidentId
-    )}/responses`
-  );
+
+    return request(
+        `/api/v1/cases/${incidentId}/responses`
+    );
 }
 
 
 // ================================================================
-// EVIDENCE
+// INCIDENT EVIDENCE
 // ================================================================
 
 export async function getIncidentEvidence(
-  incidentId
+    incidentId
 ) {
-  return request(
-    `/api/v1/cases/${encodeURIComponent(
-      incidentId
-    )}/evidence`
-  );
+
+    return request(
+        `/api/v1/cases/${incidentId}/evidence`
+    );
 }
 
 
 // ================================================================
-// TIMELINE
+// INCIDENT TIMELINE
 // ================================================================
 
 export async function getIncidentTimeline(
-  incidentId
+    incidentId
 ) {
-  return request(
-    `/api/v1/cases/${encodeURIComponent(
-      incidentId
-    )}/timeline`
-  );
+
+    return request(
+        `/api/v1/cases/${incidentId}/timeline`
+    );
 }
 
 
 // ================================================================
-// ANALYST APPROVAL
+// APPROVE SOC CASE
 // ================================================================
 
 export async function approveSOCCase(
-  incidentId,
-  analyst,
-  comment = ""
+    incidentId,
+    analyst,
+    comment = ""
 ) {
-  return request(
-    `/api/v1/cases/${encodeURIComponent(
-      incidentId
-    )}/approve`,
-    {
-      method: "POST",
 
-      body: JSON.stringify({
-        analyst,
-        comment,
-      }),
-    }
-  );
+    return request(
+        `/api/v1/cases/${incidentId}/approve`,
+        {
+            method: "POST",
+
+            body: JSON.stringify({
+                analyst,
+                comment,
+            }),
+        }
+    );
 }
 
 
 // ================================================================
-// ANALYST REJECTION
+// REJECT SOC CASE
 // ================================================================
 
 export async function rejectSOCCase(
-  incidentId,
-  analyst,
-  reason
+    incidentId,
+    analyst,
+    reason
 ) {
-  return request(
-    `/api/v1/cases/${encodeURIComponent(
-      incidentId
-    )}/reject`,
-    {
-      method: "POST",
 
-      body: JSON.stringify({
-        analyst,
-        reason,
-      }),
-    }
-  );
+    return request(
+        `/api/v1/cases/${incidentId}/reject`,
+        {
+            method: "POST",
+
+            body: JSON.stringify({
+                analyst,
+                reason,
+            }),
+        }
+    );
 }
 
 
 // ================================================================
-// TICKETS
+// ALL SOC TICKETS
 // ================================================================
 
 export async function getSOCTickets(
-  limit = 100
+    limit = 100
 ) {
-  return request(
-    `/api/v1/tickets?limit=${limit}`
-  );
+
+    return request(
+        `/api/v1/tickets?limit=${limit}`
+    );
 }
 
+
+// ================================================================
+// SINGLE SOC TICKET
+// ================================================================
 
 export async function getSOCTicket(
-  ticketId
+    ticketId
 ) {
-  return request(
-    `/api/v1/tickets/${encodeURIComponent(
-      ticketId
-    )}`
-  );
+
+    return request(
+        `/api/v1/tickets/${ticketId}`
+    );
 }
 
 
+// ================================================================
+// INCIDENT TICKETS
+// ================================================================
+
 export async function getIncidentTickets(
-  incidentId
+    incidentId
 ) {
-  return request(
-    `/api/v1/incidents/${encodeURIComponent(
-      incidentId
-    )}/tickets`
-  );
+
+    return request(
+        `/api/v1/incidents/${incidentId}/tickets`
+    );
 }
 
 
@@ -262,78 +311,92 @@ export async function getIncidentTickets(
 // ================================================================
 
 export async function getMitigationVerification(
-  incidentId
+    incidentId
 ) {
-  return request(
-    `/api/v1/cases/${encodeURIComponent(
-      incidentId
-    )}/mitigation-verification`
-  );
-}
 
-
-export async function verifyMitigation(
-  incidentId,
-  beforeState,
-  simulatedAfterState,
-  responseResult
-) {
-  return request(
-    `/api/v1/cases/${encodeURIComponent(
-      incidentId
-    )}/mitigation-verification`,
-    {
-      method: "POST",
-
-      body: JSON.stringify({
-        before_state:
-          beforeState,
-
-        simulated_after_state:
-          simulatedAfterState,
-
-        response_result:
-          responseResult,
-      }),
-    }
-  );
+    return request(
+        `/api/v1/cases/${incidentId}/mitigation-verification`
+    );
 }
 
 
 // ================================================================
-// SEARCH
+// VERIFY SIMULATED MITIGATION
+// ================================================================
+
+export async function verifyMitigation(
+    incidentId,
+    beforeState,
+    simulatedAfterState,
+    responseResult = {}
+) {
+
+    return request(
+        `/api/v1/cases/${incidentId}/mitigation-verification`,
+        {
+            method: "POST",
+
+            body: JSON.stringify({
+
+                before_state:
+                    beforeState,
+
+                simulated_after_state:
+                    simulatedAfterState,
+
+                response_result:
+                    responseResult,
+            }),
+        }
+    );
+}
+
+
+// ================================================================
+// SEARCH INCIDENTS
 // ================================================================
 
 export async function searchIncidents(
-  query
+    query
 ) {
-  return request(
-    `/api/v1/search/incidents?q=${encodeURIComponent(
-      query
-    )}`
-  );
+
+    return request(
+        `/api/v1/search/incidents?query=${encodeURIComponent(
+            query
+        )}`
+    );
 }
 
+
+// ================================================================
+// SEARCH TICKETS
+// ================================================================
 
 export async function searchTickets(
-  query
+    query
 ) {
-  return request(
-    `/api/v1/search/tickets?q=${encodeURIComponent(
-      query
-    )}`
-  );
+
+    return request(
+        `/api/v1/search/tickets?query=${encodeURIComponent(
+            query
+        )}`
+    );
 }
 
 
+// ================================================================
+// SEARCH RESPONSE ACTIONS
+// ================================================================
+
 export async function searchResponseActions(
-  query
+    query
 ) {
-  return request(
-    `/api/v1/search/actions?q=${encodeURIComponent(
-      query
-    )}`
-  );
+
+    return request(
+        `/api/v1/search/actions?query=${encodeURIComponent(
+            query
+        )}`
+    );
 }
 
 
@@ -342,20 +405,24 @@ export async function searchResponseActions(
 // ================================================================
 
 export async function getBackendIntegrity() {
-  return request(
-    "/api/v1/integrity"
-  );
+
+    return request(
+        "/api/v1/integrity"
+    );
 }
 
 
+// ================================================================
+// INCIDENT INTEGRITY
+// ================================================================
+
 export async function getIncidentIntegrity(
-  incidentId
+    incidentId
 ) {
-  return request(
-    `/api/v1/integrity/incidents/${encodeURIComponent(
-      incidentId
-    )}`
-  );
+
+    return request(
+        `/api/v1/integrity/incidents/${incidentId}`
+    );
 }
 
 
@@ -364,5 +431,5 @@ export async function getIncidentIntegrity(
 // ================================================================
 
 export {
-  API_BASE_URL,
+    API_BASE_URL,
 };

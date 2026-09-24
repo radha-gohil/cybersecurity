@@ -1,0 +1,173 @@
+.analyst-decision-panel {
+    margin-top: 20px;
+}
+
+
+.analyst-safety-banner {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+
+    margin-bottom: 18px;
+    padding: 12px 14px;
+
+    border: 1px solid #2d4867;
+    border-radius: 8px;
+
+    background: #102238;
+}
+
+
+.analyst-safety-banner strong {
+    color: #68a8ff;
+    font-size: 12px;
+}
+
+
+.analyst-safety-banner span {
+    color: #9dafc5;
+    font-size: 12px;
+}
+
+
+.analyst-form-grid {
+    display: grid;
+    grid-template-columns:
+        minmax(200px, 0.7fr)
+        minmax(300px, 2fr);
+
+    gap: 16px;
+}
+
+
+.analyst-form-grid label {
+    display: block;
+
+    margin-bottom: 7px;
+
+    color: #8fa1b8;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+
+.analyst-form-grid input,
+.analyst-form-grid textarea {
+    width: 100%;
+
+    box-sizing: border-box;
+
+    padding: 11px 12px;
+
+    border: 1px solid #293c56;
+    border-radius: 8px;
+
+    background: #0e1a2a;
+    color: #eaf2ff;
+
+    font-family: inherit;
+}
+
+
+.analyst-form-grid textarea {
+    resize: vertical;
+}
+
+
+.analyst-form-grid input:focus,
+.analyst-form-grid textarea:focus {
+    outline: none;
+    border-color: #547fb6;
+}
+
+
+.analyst-action-row {
+    display: flex;
+    gap: 12px;
+
+    margin-top: 18px;
+}
+
+
+.analyst-approve-button,
+.analyst-reject-button {
+    padding: 10px 18px;
+
+    border: none;
+    border-radius: 7px;
+
+    cursor: pointer;
+
+    font-weight: 600;
+}
+
+
+.analyst-approve-button {
+    background: #153f31;
+    color: #79e2b1;
+}
+
+
+.analyst-reject-button {
+    background: #49242b;
+    color: #ff9ca9;
+}
+
+
+.analyst-approve-button:disabled,
+.analyst-reject-button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+
+.analyst-message {
+    margin-bottom: 16px;
+
+    padding: 11px 13px;
+
+    border-radius: 7px;
+
+    font-size: 12px;
+}
+
+
+.analyst-message.success {
+    background: #123428;
+    color: #79e2b1;
+
+    border: 1px solid #245c46;
+}
+
+
+.analyst-message.error {
+    background: #3e1e24;
+    color: #ff9ca9;
+
+    border: 1px solid #71323d;
+}
+
+
+.analyst-completed {
+    margin-top: 16px;
+
+    color: #8799ae;
+    font-size: 12px;
+}
+
+
+@media (
+    max-width: 850px
+) {
+
+    .analyst-form-grid {
+        grid-template-columns:
+            1fr;
+    }
+
+
+    .analyst-action-row {
+        flex-direction: column;
+    }
+
+}

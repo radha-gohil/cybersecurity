@@ -35,6 +35,10 @@ from response.backend_integrity_service import (
     BackendIntegrityService,
 )
 
+from detection.fusion.incident_store import (
+    IncidentStore,
+)
+
 
 # ================================================================
 # APPLICATION
@@ -57,13 +61,27 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
+
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+
+        "http://localhost:5175",
+        "http://127.0.0.1:5175",
     ],
+
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+
+    allow_methods=[
+        "*"
+    ],
+
+    allow_headers=[
+        "*"
+    ],
 )
 
 
@@ -73,6 +91,15 @@ app.add_middleware(
 
 workflow = PersistentSOCWorkflow(
     simulation_mode=True
+)
+
+
+# ================================================================
+# DETECTION / CORRELATION INCIDENT STORE
+# ================================================================
+
+detected_incident_store = (
+    IncidentStore()
 )
 
 
@@ -152,13 +179,16 @@ class AnalystRejectionRequest(BaseModel):
         min_length=1,
     )
 
+
 class MitigationVerificationRequest(BaseModel):
-    
+
     before_state: dict
 
     simulated_after_state: dict
 
     response_result: dict
+
+
 # ================================================================
 # HELPERS
 # ================================================================
@@ -168,6 +198,227 @@ def now_iso():
     return datetime.now(
         timezone.utc
     ).isoformat()
+
+
+# ================================================================
+# ENRICH DETECTED INCIDENT
+# ================================================================
+
+def enrich_detected_incident(
+    incident: dict,
+):
+
+    if not isinstance(
+        incident,
+        dict,
+    ):
+
+        return {}
+
+
+    incident_id = (
+        incident.get(
+            "incident_id"
+        )
+    )
+
+
+    # ------------------------------------------------------------
+    # CHECK WHETHER THIS DETECTED INCIDENT HAS ALREADY ENTERED
+    # THE PERSISTENT SOC WORKFLOW
+    # ------------------------------------------------------------
+
+    soc_case = None
+
+
+    if incident_id:
+
+        try:
+
+            soc_case = (
+                workflow.recover_case(
+                    incident_id
+                )
+            )
+
+        except Exception:
+
+            soc_case = None
+
+
+    soc_case_exists = (
+        soc_case is not None
+    )
+
+
+    # ------------------------------------------------------------
+    # DEFAULT SOC VALUES
+    # ------------------------------------------------------------
+
+    soc_case_status = None
+
+    approval_status = None
+
+    ticket_id = None
+
+    ticket_priority = None
+
+    selected_plan = None
+
+    residual_risk = None
+
+    mitigation_status = (
+        "NOT_VERIFIED"
+    )
+
+
+    # ------------------------------------------------------------
+    # READ SOC INFORMATION WHEN AVAILABLE
+    # ------------------------------------------------------------
+
+    if soc_case_exists:
+
+        soc_case_status = (
+            soc_case.get(
+                "status"
+            )
+        )
+
+
+        ticket_data = (
+            soc_case.get(
+                "ticket_data"
+            )
+            or {}
+        )
+
+
+        if isinstance(
+            ticket_data,
+            dict,
+        ):
+
+            approval_status = (
+                ticket_data.get(
+                    "approval_status"
+                )
+            )
+
+            ticket_id = (
+                ticket_data.get(
+                    "ticket_id"
+                )
+            )
+
+            ticket_priority = (
+                ticket_data.get(
+                    "priority"
+                )
+            )
+
+
+        decision = (
+            soc_case.get(
+                "decision"
+            )
+            or {}
+        )
+
+
+        if isinstance(
+            decision,
+            dict,
+        ):
+
+            selected_plan = (
+                decision.get(
+                    "selected_plan_name"
+                )
+                or
+                decision.get(
+                    "selected_plan"
+                )
+                or
+                decision.get(
+                    "plan_name"
+                )
+            )
+
+
+            residual_risk = (
+                decision.get(
+                    "predicted_residual_risk"
+                )
+                or
+                decision.get(
+                    "residual_risk"
+                )
+            )
+
+
+        mitigation = (
+            soc_case.get(
+                "mitigation_verification"
+            )
+            or {}
+        )
+
+
+        if isinstance(
+            mitigation,
+            dict,
+        ):
+
+            mitigation_status = (
+                mitigation.get(
+                    "status"
+                )
+                or
+                "NOT_VERIFIED"
+            )
+
+
+    # ------------------------------------------------------------
+    # BUILD API VIEW
+    # ------------------------------------------------------------
+
+    return {
+
+        **incident,
+
+        "record_type":
+            "DETECTED_INCIDENT",
+
+        "soc_case_exists":
+            soc_case_exists,
+
+        "soc_case_status":
+            soc_case_status,
+
+        "approval_status":
+            approval_status,
+
+        "ticket_id":
+            ticket_id,
+
+        "ticket_priority":
+            ticket_priority,
+
+        "selected_plan":
+            selected_plan,
+
+        "residual_risk":
+            residual_risk,
+
+        "mitigation_status":
+            mitigation_status,
+
+        "simulation_mode":
+            True,
+
+        "real_response_executed":
+            False,
+    }
 
 
 def serialize_value(
@@ -815,6 +1066,151 @@ def list_cases(
 
 
 # ================================================================
+# LIST DETECTED / CORRELATED INCIDENTS
+# ================================================================
+
+@app.get(
+    "/api/v1/detected-incidents"
+)
+def list_detected_incidents(
+    limit: int = 100,
+):
+
+    limit = max(
+        1,
+        min(
+            limit,
+            1000,
+        ),
+    )
+
+
+    try:
+
+        incidents = (
+            detected_incident_store
+            .get_incidents()
+        )
+
+
+        incidents = (
+            incidents[
+                :limit
+            ]
+        )
+
+
+        enriched_incidents = [
+
+            enrich_detected_incident(
+                incident
+            )
+
+            for incident
+            in incidents
+        ]
+
+
+        return {
+
+            "count":
+                len(
+                    enriched_incidents
+                ),
+
+            "source":
+                "CORRELATION_INCIDENT_STORE",
+
+            "persistent":
+                True,
+
+            "incidents":
+                serialize_value(
+                    enriched_incidents
+                ),
+
+            "simulation_mode":
+                True,
+
+            "real_response_executed":
+                False,
+        }
+
+
+    except Exception as error:
+
+        raise HTTPException(
+
+            status_code=500,
+
+            detail=(
+                "Failed to retrieve detected "
+                f"incidents: {error}"
+            ),
+        )
+
+
+# ================================================================
+# GET ONE DETECTED / CORRELATED INCIDENT
+# ================================================================
+
+@app.get(
+    "/api/v1/detected-incidents/{incident_id}"
+)
+def get_detected_incident(
+    incident_id: str,
+):
+
+    try:
+
+        incident = (
+            detected_incident_store
+            .get_incident(
+                incident_id
+            )
+        )
+
+
+        if incident is None:
+
+            raise HTTPException(
+
+                status_code=404,
+
+                detail=(
+                    f"Detected incident "
+                    f"{incident_id} "
+                    "was not found."
+                ),
+            )
+
+
+        return (
+            enrich_detected_incident(
+                incident
+            )
+        )
+
+
+    except HTTPException:
+
+        raise
+
+
+    except Exception as error:
+
+        raise HTTPException(
+
+            status_code=500,
+
+            detail=(
+                "Failed to retrieve detected "
+                f"incident: {error}"
+            ),
+        )
+
+
+# ================================================================
 # GET CASE
 # ================================================================
 
@@ -903,6 +1299,7 @@ def get_case(
             False,
     }
 
+
 # ================================================================
 # GET MITIGATION VERIFICATION
 # ================================================================
@@ -922,6 +1319,7 @@ def get_mitigation_verification(
         incident_id
     )
 
+
     # ------------------------------------------------------------
     # GET PERSISTED VERIFICATION
     # ------------------------------------------------------------
@@ -931,6 +1329,7 @@ def get_mitigation_verification(
             incident_id
         )
     )
+
 
     # ------------------------------------------------------------
     # NOT YET VERIFIED
@@ -961,6 +1360,7 @@ def get_mitigation_verification(
             "real_response_executed":
                 False,
         }
+
 
     # ------------------------------------------------------------
     # VERIFIED RESULT
@@ -993,7 +1393,8 @@ def get_mitigation_verification(
         "real_response_executed":
             False,
     }
-    
+
+
 # ================================================================
 # RUN SIMULATED MITIGATION VERIFICATION
 # ================================================================
@@ -1013,6 +1414,7 @@ def run_mitigation_verification(
     require_case(
         incident_id
     )
+
 
     try:
 
@@ -1035,6 +1437,7 @@ def run_mitigation_verification(
                 "can be verified through this API."
             )
 
+
         # --------------------------------------------------------
         # RUN PERSISTENT VERIFICATION
         # --------------------------------------------------------
@@ -1055,6 +1458,7 @@ def run_mitigation_verification(
                     request.response_result,
             )
         )
+
 
         # --------------------------------------------------------
         # RESPONSE
@@ -1097,6 +1501,7 @@ def run_mitigation_verification(
                 False,
         }
 
+
     except TypeError as error:
 
         raise HTTPException(
@@ -1107,6 +1512,7 @@ def run_mitigation_verification(
                 error
             ),
         )
+
 
     except ValueError as error:
 
@@ -1119,6 +1525,7 @@ def run_mitigation_verification(
             ),
         )
 
+
     except Exception as error:
 
         raise HTTPException(
@@ -1130,6 +1537,8 @@ def run_mitigation_verification(
                 f"{error}"
             ),
         )
+
+
 # ================================================================
 # DIGITAL TWIN
 # ================================================================
