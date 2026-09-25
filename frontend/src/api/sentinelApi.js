@@ -1,13 +1,18 @@
 import axios from "axios";
 
 
+// ================================================================
+// SENTINEL-X SOC API CLIENT
+// ================================================================
+
 const sentinelApi =
     axios.create({
 
         baseURL:
             "http://127.0.0.1:8003/api/v1",
 
-        timeout: 5000,
+        timeout:
+            30000,
 
         headers: {
             "Content-Type":
@@ -33,6 +38,13 @@ export const getHealth =
     };
 
 
+export const getSOCHealth =
+    async () => {
+
+        return getHealth();
+    };
+
+
 // ================================================================
 // DASHBOARD
 // ================================================================
@@ -49,8 +61,119 @@ export const getDashboardSummary =
     };
 
 
+export const getSOCDashboardSummary =
+    async () => {
+
+        return getDashboardSummary();
+    };
+
+
 // ================================================================
-// INCIDENTS
+// DETECTED / CORRELATED INCIDENTS
+// ================================================================
+
+export const getDetectedIncidents =
+    async (
+        limit = 100
+    ) => {
+
+        const response =
+            await sentinelApi.get(
+                "/detected-incidents",
+                {
+                    params: {
+                        limit,
+                    },
+                }
+            );
+
+        return response.data;
+    };
+
+
+export const getDetectedIncident =
+    async (
+        incidentId
+    ) => {
+
+        const response =
+            await sentinelApi.get(
+                `/detected-incidents/${encodeURIComponent(
+                    incidentId
+                )}`
+            );
+
+        return response.data;
+    };
+
+
+// ================================================================
+// INVESTIGATE / PROMOTE DETECTED INCIDENT
+// ================================================================
+
+export const investigateDetectedIncident =
+    async (
+        incidentId
+    ) => {
+
+        const response =
+            await sentinelApi.post(
+                `/detected-incidents/${encodeURIComponent(
+                    incidentId
+                )}/investigate`
+            );
+
+        return response.data;
+    };
+
+
+// ================================================================
+// SOC CASES
+// ================================================================
+
+export const getSOCCases =
+    async (
+        limit = 100
+    ) => {
+
+        const response =
+            await sentinelApi.get(
+                "/cases",
+                {
+                    params: {
+                        limit,
+                    },
+                }
+            );
+
+        return response.data;
+    };
+
+
+export const createSOCCase =
+    async (
+        incidentId,
+        intelligence
+    ) => {
+
+        const response =
+            await sentinelApi.post(
+                "/cases",
+                {
+                    incident_id:
+                        incidentId,
+
+                    intelligence:
+                        intelligence,
+                }
+            );
+
+        return response.data;
+    };
+
+
+// ================================================================
+// INCIDENT SEARCH
 // ================================================================
 
 export const searchIncidents =
@@ -62,13 +185,18 @@ export const searchIncidents =
             await sentinelApi.get(
                 "/search/incidents",
                 {
-                    params: filters,
+                    params:
+                        filters,
                 }
             );
 
         return response.data;
     };
 
+
+// ================================================================
+// SINGLE SOC CASE
+// ================================================================
 
 export const getCase =
     async (
@@ -77,12 +205,29 @@ export const getCase =
 
         const response =
             await sentinelApi.get(
-                `/cases/${incidentId}`
+                `/cases/${encodeURIComponent(
+                    incidentId
+                )}`
             );
 
         return response.data;
     };
 
+
+export const getSOCCase =
+    async (
+        incidentId
+    ) => {
+
+        return getCase(
+            incidentId
+        );
+    };
+
+
+// ================================================================
+// FULL INCIDENT
+// ================================================================
 
 export const getFullIncident =
     async (
@@ -91,7 +236,89 @@ export const getFullIncident =
 
         const response =
             await sentinelApi.get(
-                `/incidents/${incidentId}/full`
+                `/incidents/${encodeURIComponent(
+                    incidentId
+                )}/full`
+            );
+
+        return response.data;
+    };
+
+
+// ================================================================
+// DIGITAL TWIN
+// ================================================================
+
+export const getDigitalTwin =
+    async (
+        incidentId
+    ) => {
+
+        const response =
+            await sentinelApi.get(
+                `/cases/${encodeURIComponent(
+                    incidentId
+                )}/digital-twin`
+            );
+
+        return response.data;
+    };
+
+
+// ================================================================
+// RESPONSE ACTIONS
+// ================================================================
+
+export const getResponseActions =
+    async (
+        incidentId
+    ) => {
+
+        const response =
+            await sentinelApi.get(
+                `/cases/${encodeURIComponent(
+                    incidentId
+                )}/responses`
+            );
+
+        return response.data;
+    };
+
+
+// ================================================================
+// INCIDENT EVIDENCE
+// ================================================================
+
+export const getIncidentEvidence =
+    async (
+        incidentId
+    ) => {
+
+        const response =
+            await sentinelApi.get(
+                `/cases/${encodeURIComponent(
+                    incidentId
+                )}/evidence`
+            );
+
+        return response.data;
+    };
+
+
+// ================================================================
+// INCIDENT TIMELINE
+// ================================================================
+
+export const getIncidentTimeline =
+    async (
+        incidentId
+    ) => {
+
+        const response =
+            await sentinelApi.get(
+                `/cases/${encodeURIComponent(
+                    incidentId
+                )}/timeline`
             );
 
         return response.data;
@@ -103,14 +330,32 @@ export const getFullIncident =
 // ================================================================
 
 export const getTickets =
-    async () => {
+    async (
+        limit = 100
+    ) => {
 
         const response =
             await sentinelApi.get(
-                "/tickets"
+                "/tickets",
+                {
+                    params: {
+                        limit,
+                    },
+                }
             );
 
         return response.data;
+    };
+
+
+export const getSOCTickets =
+    async (
+        limit = 100
+    ) => {
+
+        return getTickets(
+            limit
+        );
     };
 
 
@@ -123,7 +368,8 @@ export const searchTickets =
             await sentinelApi.get(
                 "/search/tickets",
                 {
-                    params: filters,
+                    params:
+                        filters,
                 }
             );
 
@@ -138,10 +384,23 @@ export const getTicket =
 
         const response =
             await sentinelApi.get(
-                `/tickets/${ticketId}`
+                `/tickets/${encodeURIComponent(
+                    ticketId
+                )}`
             );
 
         return response.data;
+    };
+
+
+export const getSOCTicket =
+    async (
+        ticketId
+    ) => {
+
+        return getTicket(
+            ticketId
+        );
     };
 
 
@@ -152,7 +411,9 @@ export const getIncidentTickets =
 
         const response =
             await sentinelApi.get(
-                `/incidents/${incidentId}/tickets`
+                `/incidents/${encodeURIComponent(
+                    incidentId
+                )}/tickets`
             );
 
         return response.data;
@@ -172,7 +433,9 @@ export const approveCase =
 
         const response =
             await sentinelApi.post(
-                `/cases/${incidentId}/approve`,
+                `/cases/${encodeURIComponent(
+                    incidentId
+                )}/approve`,
                 {
                     analyst,
                     comment,
@@ -183,6 +446,25 @@ export const approveCase =
     };
 
 
+export const approveSOCCase =
+    async (
+        incidentId,
+        analyst,
+        comment = ""
+    ) => {
+
+        return approveCase(
+            incidentId,
+            analyst,
+            comment
+        );
+    };
+
+
+// ================================================================
+// REJECTION
+// ================================================================
+
 export const rejectCase =
     async (
         incidentId,
@@ -192,7 +474,9 @@ export const rejectCase =
 
         const response =
             await sentinelApi.post(
-                `/cases/${incidentId}/reject`,
+                `/cases/${encodeURIComponent(
+                    incidentId
+                )}/reject`,
                 {
                     analyst,
                     reason,
@@ -203,8 +487,23 @@ export const rejectCase =
     };
 
 
+export const rejectSOCCase =
+    async (
+        incidentId,
+        analyst,
+        reason
+    ) => {
+
+        return rejectCase(
+            incidentId,
+            analyst,
+            reason
+        );
+    };
+
+
 // ================================================================
-// RESPONSE ACTIONS
+// SEARCH RESPONSE ACTIONS
 // ================================================================
 
 export const searchActions =
@@ -216,7 +515,8 @@ export const searchActions =
             await sentinelApi.get(
                 "/search/actions",
                 {
-                    params: filters,
+                    params:
+                        filters,
                 }
             );
 
@@ -224,8 +524,19 @@ export const searchActions =
     };
 
 
+export const searchResponseActions =
+    async (
+        filters = {}
+    ) => {
+
+        return searchActions(
+            filters
+        );
+    };
+
+
 // ================================================================
-// ENDPOINT
+// ENDPOINT OVERVIEW
 // ================================================================
 
 export const getEndpointOverview =
@@ -241,18 +552,86 @@ export const getEndpointOverview =
 
 
 // ================================================================
+// MITIGATION VERIFICATION
+// ================================================================
+
+export const getMitigationVerification =
+    async (
+        incidentId
+    ) => {
+
+        const response =
+            await sentinelApi.get(
+                `/cases/${encodeURIComponent(
+                    incidentId
+                )}/mitigation-verification`
+            );
+
+        return response.data;
+    };
+
+
+export const verifyMitigation =
+    async (
+        incidentId,
+        beforeState,
+        simulatedAfterState,
+        responseResult = {}
+    ) => {
+
+        const response =
+            await sentinelApi.post(
+                `/cases/${encodeURIComponent(
+                    incidentId
+                )}/mitigation-verification`,
+                {
+
+                    before_state:
+                        beforeState,
+
+                    simulated_after_state:
+                        simulatedAfterState,
+
+                    response_result:
+                        responseResult,
+                }
+            );
+
+        return response.data;
+    };
+
+
+// ================================================================
 // INTEGRITY / SYSTEM HEALTH
 // ================================================================
 
 export const getIntegritySummary =
-    async () => {
+    async (
+        limit = 1000
+    ) => {
 
         const response =
             await sentinelApi.get(
-                "/integrity"
+                "/integrity",
+                {
+                    params: {
+                        limit,
+                    },
+                }
             );
 
         return response.data;
+    };
+
+
+export const getBackendIntegrity =
+    async (
+        limit = 1000
+    ) => {
+
+        return getIntegritySummary(
+            limit
+        );
     };
 
 
@@ -263,11 +642,17 @@ export const getIncidentIntegrity =
 
         const response =
             await sentinelApi.get(
-                `/integrity/incidents/${incidentId}`
+                `/integrity/incidents/${encodeURIComponent(
+                    incidentId
+                )}`
             );
 
         return response.data;
     };
 
+
+// ================================================================
+// EXPORT AXIOS INSTANCE
+// ================================================================
 
 export default sentinelApi;

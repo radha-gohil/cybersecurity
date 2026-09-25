@@ -4,22 +4,305 @@ import {
 } from "react";
 
 import {
-    useParams,
     useNavigate,
+    useParams,
 } from "react-router-dom";
 
 import {
     getFullIncident,
+    getMitigationVerification,
 } from "../api/sentinelApi";
-
 
 import EvidencePanel from "../components/incidents/EvidencePanel";
 import TimelinePanel from "../components/incidents/TimelinePanel";
 import AgentIntelligencePanel from "../components/incidents/AgentIntelligencePanel";
 import AnalystDecisionPanel from "../components/incidents/AnalystDecisionPanel";
-import MitigationVerificationPanel from "../components/incidents/MitigationVerificationPanel";
 import PlanComparison from "../components/digitalTwin/PlanComparison";
 
+
+// ================================================================
+// HELPERS
+// ================================================================
+
+function safeObject(
+    value
+) {
+    return (
+        value
+        && typeof value === "object"
+        && !Array.isArray(value)
+    )
+        ? value
+        : {};
+}
+
+
+function safeArray(
+    value
+) {
+    return Array.isArray(value)
+        ? value
+        : [];
+}
+
+
+function formatValue(
+    value,
+    fallback = "-"
+) {
+    if (
+        value === null
+        || value === undefined
+        || value === ""
+    ) {
+        return fallback;
+    }
+
+    return value;
+}
+
+
+function formatPercentage(
+    value
+) {
+    if (
+        value === null
+        || value === undefined
+        || value === ""
+    ) {
+        return "Not applicable";
+    }
+
+    const text =
+        String(value);
+
+    if (
+        text.includes("%")
+    ) {
+        return text;
+    }
+
+    return `${value}%`;
+}
+
+
+function formatDate(
+    value
+) {
+    if (!value) {
+        return "-";
+    }
+
+    const date =
+        new Date(value);
+
+    if (
+        Number.isNaN(
+            date.getTime()
+        )
+    ) {
+        return String(value);
+    }
+
+    return date.toLocaleString();
+}
+
+
+function riskClass(
+    level
+) {
+    const value =
+        String(
+            level || ""
+        ).toUpperCase();
+
+    if (
+        value === "CRITICAL"
+    ) {
+        return "badge critical";
+    }
+
+    if (
+        value === "HIGH"
+    ) {
+        return "badge high";
+    }
+
+    if (
+        value === "MEDIUM"
+    ) {
+        return "badge medium";
+    }
+
+    if (
+        value === "LOW"
+        || value === "INFO"
+    ) {
+        return "badge low";
+    }
+
+    return "badge neutral";
+}
+
+
+function statusClass(
+    value
+) {
+    const status =
+        String(
+            value || ""
+        ).toUpperCase();
+
+    if (
+        status === "APPROVED"
+        || status === "VERIFIED"
+        || status === "SIMULATION_VERIFIED"
+        || status === "NOT_REQUIRED"
+        || status === "SUCCESS"
+    ) {
+        return "badge low";
+    }
+
+    if (
+        status === "REJECTED"
+        || status === "FAILED"
+        || status === "SIMULATION_NO_IMPROVEMENT"
+    ) {
+        return "badge critical";
+    }
+
+    if (
+        status === "PENDING"
+        || status === "AWAITING_APPROVAL"
+        || status === "AWAITING_ANALYST_REVIEW"
+        || status === "PARTIAL"
+        || status === "SIMULATION_PARTIAL"
+    ) {
+        return "badge high";
+    }
+
+    return "badge neutral";
+}
+
+
+function getEvidenceCount(
+    evidence
+) {
+    const data =
+        safeObject(
+            evidence
+        );
+
+    return (
+        safeArray(
+            data.processes
+        ).length
+        +
+        safeArray(
+            data.files
+        ).length
+        +
+        safeArray(
+            data.network_connections
+        ).length
+        +
+        safeArray(
+            data.registry_artifacts
+        ).length
+    );
+}
+
+
+// ================================================================
+// SUMMARY CARD
+// ================================================================
+
+function SummaryCard({
+    title,
+    children,
+}) {
+    return (
+        <div className="summary-card">
+
+            <span>
+                {title}
+            </span>
+
+            <div>
+                {children}
+            </div>
+
+        </div>
+    );
+}
+
+
+// ================================================================
+// DETAIL ROW
+// ================================================================
+
+function DetailRow({
+    label,
+    children,
+}) {
+    return (
+        <div>
+
+            <span>
+                {label}
+            </span>
+
+            <strong>
+                {children}
+            </strong>
+
+        </div>
+    );
+}
+
+
+// ================================================================
+// EMPTY PANEL
+// ================================================================
+
+function EmptyPanel({
+    title,
+    subtitle,
+    message,
+}) {
+    return (
+        <section className="detail-panel full-width-panel">
+
+            <div className="panel-heading">
+
+                <div>
+
+                    <h3>
+                        {title}
+                    </h3>
+
+                    {subtitle && (
+                        <p>
+                            {subtitle}
+                        </p>
+                    )}
+
+                </div>
+
+            </div>
+
+            <div className="empty-inline">
+                {message}
+            </div>
+
+        </section>
+    );
+}
+
+
+// ================================================================
+// INCIDENT DETAIL
+// ================================================================
 
 function IncidentDetail() {
 
@@ -34,6 +317,12 @@ function IncidentDetail() {
     const [
         incident,
         setIncident,
+    ] = useState(null);
+
+
+    const [
+        mitigation,
+        setMitigation,
     ] = useState(null);
 
 
@@ -53,207 +342,125 @@ function IncidentDetail() {
     // LOAD INCIDENT
     // ============================================================
 
-    const loadIncident = async () => {
+    const loadIncident =
+        async () => {
 
-        try {
+            try {
 
-            setLoading(true);
+                setLoading(
+                    true
+                );
 
-            const data =
-                await getFullIncident(
-                    incidentId
+                setError(
+                    ""
                 );
 
 
-            setIncident(
-                data
-            );
+                // ------------------------------------------------
+                // Full incident is required.
+                // Mitigation verification is optional because a
+                // case may not have been verified yet.
+                // ------------------------------------------------
+
+                const [
+                    incidentResult,
+                    mitigationResult,
+                ] = await Promise.allSettled([
+
+                    getFullIncident(
+                        incidentId
+                    ),
+
+                    getMitigationVerification(
+                        incidentId
+                    ),
+                ]);
 
 
-            setError("");
+                if (
+                    incidentResult.status
+                    !== "fulfilled"
+                ) {
+                    throw incidentResult.reason;
+                }
 
-        } catch (err) {
 
-            console.error(
-                "Incident detail loading failed:",
+                setIncident(
+                    incidentResult.value
+                    || null
+                );
+
+
+                if (
+                    mitigationResult.status
+                    === "fulfilled"
+                ) {
+                    setMitigation(
+                        mitigationResult.value
+                        || null
+                    );
+                } else {
+                    setMitigation(
+                        null
+                    );
+                }
+
+
+            } catch (
                 err
-            );
+            ) {
+
+                console.error(
+                    "Incident detail loading failed:",
+                    err
+                );
 
 
-            setError(
-                "Unable to load incident details."
-            );
+                setError(
+                    err?.response
+                        ?.data
+                        ?.detail
+                    || err?.message
+                    || "Unable to load incident details."
+                );
 
-        } finally {
 
-            setLoading(false);
-        }
-    };
+            } finally {
+
+                setLoading(
+                    false
+                );
+            }
+        };
 
 
     // ============================================================
-    // LOAD ON PAGE OPEN
+    // INITIAL LOAD
     // ============================================================
 
-    useEffect(() => {
+    useEffect(
+        () => {
 
-        loadIncident();
+            loadIncident();
 
-    }, [incidentId]);
-
-
-    // ============================================================
-    // HELPERS
-    // ============================================================
-
-    const formatValue = (
-        value
-    ) => {
-
-        if (
-            value === null
-            || value === undefined
-            || value === ""
-        ) {
-
-            return "-";
-        }
-
-
-        return value;
-    };
-
-
-    const formatPercentage = (
-        value
-    ) => {
-
-        if (
-            value === null
-            || value === undefined
-            || value === ""
-        ) {
-
-            return "-";
-        }
-
-
-        const text =
-            String(
-                value
-            );
-
-
-        if (
-            text.includes("%")
-        ) {
-
-            return text;
-        }
-
-
-        return `${value}%`;
-    };
-
-
-    const riskClass = (
-        level
-    ) => {
-
-        const value =
-            String(
-                level || ""
-            ).toUpperCase();
-
-
-        if (
-            value === "CRITICAL"
-        ) {
-
-            return "badge critical";
-        }
-
-
-        if (
-            value === "HIGH"
-        ) {
-
-            return "badge high";
-        }
-
-
-        if (
-            value === "MEDIUM"
-        ) {
-
-            return "badge medium";
-        }
-
-
-        if (
-            value === "LOW"
-        ) {
-
-            return "badge low";
-        }
-
-
-        return "badge neutral";
-    };
-
-
-    const statusClass = (
-        value
-    ) => {
-
-        const status =
-            String(
-                value || ""
-            ).toUpperCase();
-
-
-        if (
-            status === "APPROVED"
-        ) {
-
-            return "badge low";
-        }
-
-
-        if (
-            status === "REJECTED"
-        ) {
-
-            return "badge critical";
-        }
-
-
-        if (
-            status === "PENDING"
-            || status === "AWAITING_APPROVAL"
-            || status === "AWAITING_ANALYST_REVIEW"
-        ) {
-
-            return "badge high";
-        }
-
-
-        return "badge neutral";
-    };
+        },
+        [
+            incidentId,
+        ]
+    );
 
 
     // ============================================================
     // LOADING
     // ============================================================
 
-    if (loading) {
-
+    if (
+        loading
+        && !incident
+    ) {
         return (
-
             <div className="message-card">
-
                 Loading incident investigation...
-
             </div>
         );
     }
@@ -263,21 +470,20 @@ function IncidentDetail() {
     // ERROR
     // ============================================================
 
-    if (error) {
-
+    if (
+        error
+        && !incident
+    ) {
         return (
-
             <div className="message-card error">
 
                 <h3>
                     Incident unavailable
                 </h3>
 
-
                 <p>
                     {error}
                 </p>
-
 
                 <button
                     className="secondary-button"
@@ -288,9 +494,7 @@ function IncidentDetail() {
                             )
                     }
                 >
-
                     Back to Incidents
-
                 </button>
 
             </div>
@@ -299,68 +503,195 @@ function IncidentDetail() {
 
 
     // ============================================================
-    // INCIDENT NOT AVAILABLE
+    // INCIDENT MISSING
     // ============================================================
 
     if (!incident) {
-
         return (
-
             <div className="message-card">
-
                 Incident data is not available.
-
             </div>
         );
     }
 
 
     // ============================================================
-    // INCIDENT SECTIONS
+    // NORMALIZED INCIDENT DATA
     // ============================================================
 
     const risk =
-        incident.risk || {};
+        safeObject(
+            incident.risk
+        );
 
 
     const evidence =
-        incident.evidence || {};
+        safeObject(
+            incident.evidence
+        );
 
 
     const timeline =
-        incident.timeline || {};
-
-
-    const digitalTwin =
-        incident.digital_twin || {};
-
-
-    const ticket =
-        incident.ticket || {};
-
-
-    const response =
-        incident.response || {};
-
-
-    const safety =
-        incident.safety || {};
-
-
-    const explanation =
-        incident.explanation || {};
+        safeObject(
+            incident.timeline
+        );
 
 
     const intelligence =
-        incident.intelligence || {};
+        safeObject(
+            incident.intelligence
+        );
+
+
+    const intelligenceData =
+        safeObject(
+            intelligence.data
+        );
+
+
+    const digitalTwin =
+        safeObject(
+            incident.digital_twin
+        );
+
+
+    const explanation =
+        safeObject(
+            incident.explanation
+        );
+
+
+    const ticket =
+        safeObject(
+            incident.ticket
+        );
+
+
+    const response =
+        safeObject(
+            incident.response
+        );
+
+
+    const safety =
+        safeObject(
+            incident.safety
+        );
+
+
+    const persistence =
+        safeObject(
+            incident.persistence
+        );
 
 
     const selectedPlan =
-        digitalTwin.selected_plan || {};
+        safeObject(
+            digitalTwin.selected_plan
+        );
+
+
+    const candidatePlans =
+        safeArray(
+            digitalTwin.candidate_plans
+        );
 
 
     const actions =
-        response.actions || [];
+        safeArray(
+            response.actions
+        );
+
+
+    const timelineEvents =
+        safeArray(
+            timeline.events
+        );
+
+
+    const evidenceCount =
+        getEvidenceCount(
+            evidence
+        );
+
+
+    // ============================================================
+    // DERIVED WORKFLOW STATE
+    // ============================================================
+
+    const decision =
+        String(
+            digitalTwin.decision
+            || ""
+        ).toUpperCase();
+
+
+    const noResponsePlan =
+        (
+            decision
+            === "NO_RESPONSE_PLAN_AVAILABLE"
+        )
+        || (
+            candidatePlans.length === 0
+            && Object.keys(
+                selectedPlan
+            ).length === 0
+        );
+
+
+    const approvalRequired =
+        Boolean(
+            digitalTwin
+                .analyst_approval_required
+        )
+        ||
+        Boolean(
+            ticket
+                .approval_required
+        );
+
+
+    const approvalStatus =
+        String(
+            ticket.approval_status
+            || (
+                approvalRequired
+                    ? "PENDING"
+                    : "NOT_REQUIRED"
+            )
+        ).toUpperCase();
+
+
+    const showAnalystDecision =
+        approvalRequired
+        ||
+        approvalStatus === "PENDING"
+        ||
+        approvalStatus
+            === "AWAITING_APPROVAL";
+
+
+    const intelligenceAvailable =
+        intelligence.available
+        === true
+        &&
+        Object.keys(
+            intelligenceData
+        ).length > 0;
+
+
+    const mitigationStatus =
+        String(
+
+            mitigation?.status
+
+            || mitigation
+                ?.verification
+                ?.status
+
+            || "NOT_VERIFIED"
+
+        ).toUpperCase();
 
 
     // ============================================================
@@ -368,11 +699,10 @@ function IncidentDetail() {
     // ============================================================
 
     return (
-
         <div>
 
             {/* ===================================================
-                PAGE HEADER
+                HEADER
                =================================================== */}
 
             <div className="page-heading">
@@ -383,7 +713,6 @@ function IncidentDetail() {
                         Incident Investigation
                     </h2>
 
-
                     <p className="incident-detail-id">
                         {incident.incident_id}
                     </p>
@@ -393,8 +722,10 @@ function IncidentDetail() {
 
                 <div
                     style={{
-                        display: "flex",
-                        gap: "10px",
+                        display:
+                            "flex",
+                        gap:
+                            "10px",
                     }}
                 >
 
@@ -403,8 +734,15 @@ function IncidentDetail() {
                         onClick={
                             loadIncident
                         }
+                        disabled={
+                            loading
+                        }
                     >
-                        Refresh
+                        {
+                            loading
+                                ? "Refreshing..."
+                                : "Refresh"
+                        }
                     </button>
 
 
@@ -426,47 +764,115 @@ function IncidentDetail() {
 
 
             {/* ===================================================
-                SUMMARY CARDS
+                OPTIONAL REFRESH ERROR
                =================================================== */}
 
-            <div className="incident-summary-grid">
+            {
+                error
+                ? (
+                    <div className="message-card error">
+                        {error}
+                    </div>
+                )
+                : null
+            }
 
-                <div className="summary-card">
 
-                    <span>
-                        Case Status
-                    </span>
+            {/* ===================================================
+                WORKFLOW INTERPRETATION
+               =================================================== */}
 
+            {
+                noResponsePlan
+                && !approvalRequired
+                ? (
+                    <div className="approval-safety-banner">
 
-                    <div>
+                        <strong>
+                            No Response Plan Required
+                        </strong>
 
-                        <span
-                            className={
-                                statusClass(
-                                    incident.case_status
-                                )
-                            }
-                        >
+                        <span>
+
+                            SENTINEL-X assessed this
+                            incident at
+
+                            {" "}
 
                             {
-                                incident.case_status
-                                || "UNKNOWN"
+                                risk.initial_risk_level
+                                || "INFO"
                             }
+
+                            {" "}
+
+                            risk with score
+
+                            {" "}
+
+                            {
+                                formatValue(
+                                    risk.initial_risk_score,
+                                    "0"
+                                )
+                            }
+
+                            . The Digital Twin produced
+                            no response plan, no containment
+                            approval is required, and no
+                            response action has been executed.
 
                         </span>
 
                     </div>
+                )
+                : (
+                    <div className="approval-safety-banner">
 
-                </div>
+                        <strong>
+                            Analyst-Supervised Incident
+                        </strong>
+
+                        <span>
+
+                            Response recommendations remain
+                            simulation-only. Real endpoint
+                            modification is disabled.
+
+                        </span>
+
+                    </div>
+                )
+            }
 
 
-                <div className="summary-card">
+            {/* ===================================================
+                SUMMARY
+               =================================================== */}
 
-                    <span>
-                        Initial Risk
+            <div className="incident-summary-grid">
+
+                <SummaryCard
+                    title="Case Status"
+                >
+                    <span
+                        className={
+                            statusClass(
+                                incident.case_status
+                            )
+                        }
+                    >
+                        {
+                            incident.case_status
+                            || "UNKNOWN"
+                        }
                     </span>
+                </SummaryCard>
 
 
+                <SummaryCard
+                    title="Initial Risk"
+                >
                     <strong>
                         {
                             formatValue(
@@ -474,113 +880,82 @@ function IncidentDetail() {
                             )
                         }
                     </strong>
-
-                </div>
-
-
-                <div className="summary-card">
-
-                    <span>
-                        Risk Level
-                    </span>
+                </SummaryCard>
 
 
-                    <div>
-
-                        <span
-                            className={
-                                riskClass(
-                                    risk.initial_risk_level
-                                )
-                            }
-                        >
-
-                            {
+                <SummaryCard
+                    title="Risk Level"
+                >
+                    <span
+                        className={
+                            riskClass(
                                 risk.initial_risk_level
-                                || "UNKNOWN"
-                            }
-
-                        </span>
-
-                    </div>
-
-                </div>
-
-
-                <div className="summary-card">
-
-                    <span>
-                        Residual Risk
-                    </span>
-
-
-                    <strong>
-                        {
-                            formatValue(
-                                risk.predicted_residual_risk
                             )
                         }
-                    </strong>
-
-                </div>
-
-
-                <div className="summary-card">
-
-                    <span>
-                        Ticket Priority
+                    >
+                        {
+                            risk.initial_risk_level
+                            || "UNKNOWN"
+                        }
                     </span>
+                </SummaryCard>
 
 
+                <SummaryCard
+                    title="Digital Twin"
+                >
                     <strong>
                         {
-                            ticket.priority
-                            || "-"
+                            noResponsePlan
+                                ? "NO RESPONSE PLAN"
+                                : (
+                                    digitalTwin.decision
+                                    || "UNKNOWN"
+                                )
                         }
                     </strong>
+                </SummaryCard>
 
-                </div>
 
-
-                <div className="summary-card">
-
-                    <span>
-                        Approval
+                <SummaryCard
+                    title="Approval"
+                >
+                    <span
+                        className={
+                            statusClass(
+                                approvalStatus
+                            )
+                        }
+                    >
+                        {
+                            approvalStatus
+                        }
                     </span>
+                </SummaryCard>
 
 
-                    <div>
-
-                        <span
-                            className={
-                                statusClass(
-                                    ticket.approval_status
-                                )
-                            }
-                        >
-
-                            {
-                                ticket.approval_status
-                                || "-"
-                            }
-
-                        </span>
-
-                    </div>
-
-                </div>
+                <SummaryCard
+                    title="Response Actions"
+                >
+                    <strong>
+                        {
+                            response.action_count
+                            ?? actions.length
+                        }
+                    </strong>
+                </SummaryCard>
 
             </div>
 
 
             {/* ===================================================
-                RISK + DIGITAL TWIN SUMMARY
+                RISK + DIGITAL TWIN
                =================================================== */}
 
             <div className="incident-detail-grid">
 
                 {/* ===============================================
-                    RISK ASSESSMENT
+                    RISK
                    =============================================== */}
 
                 <section className="detail-panel">
@@ -592,7 +967,6 @@ function IncidentDetail() {
                             <h3>
                                 Risk Assessment
                             </h3>
-
 
                             <p>
                                 Deterministic heuristic
@@ -606,130 +980,88 @@ function IncidentDetail() {
 
                     <div className="detail-list">
 
-                        <div>
-
-                            <span>
-                                Initial Risk Score
-                            </span>
-
-
-                            <strong>
-                                {
-                                    formatValue(
-                                        risk.initial_risk_score
-                                    )
-                                }
-                            </strong>
-
-                        </div>
+                        <DetailRow
+                            label="Initial Risk Score"
+                        >
+                            {
+                                formatValue(
+                                    risk.initial_risk_score
+                                )
+                            }
+                        </DetailRow>
 
 
-                        <div>
-
-                            <span>
-                                Risk Level
-                            </span>
-
-
-                            <strong>
-                                {
-                                    risk.initial_risk_level
-                                    || "-"
-                                }
-                            </strong>
-
-                        </div>
+                        <DetailRow
+                            label="Risk Level"
+                        >
+                            {
+                                risk.initial_risk_level
+                                || "-"
+                            }
+                        </DetailRow>
 
 
-                        <div>
-
-                            <span>
-                                Predicted Residual Risk
-                            </span>
-
-
-                            <strong>
-                                {
-                                    formatValue(
-                                        risk.predicted_residual_risk
-                                    )
-                                }
-                            </strong>
-
-                        </div>
+                        <DetailRow
+                            label="Predicted Residual Risk"
+                        >
+                            {
+                                formatValue(
+                                    risk
+                                        .predicted_residual_risk
+                                )
+                            }
+                        </DetailRow>
 
 
-                        <div>
-
-                            <span>
-                                Modeled Risk Reduction
-                            </span>
-
-
-                            <strong>
-                                {
-                                    formatValue(
-                                        risk.modeled_risk_reduction
-                                    )
-                                }
-                            </strong>
-
-                        </div>
+                        <DetailRow
+                            label="Modeled Risk Reduction"
+                        >
+                            {
+                                risk
+                                    .modeled_risk_reduction
+                                ?? (
+                                    noResponsePlan
+                                        ? "Not applicable"
+                                        : "-"
+                                )
+                            }
+                        </DetailRow>
 
 
-                        <div>
-
-                            <span>
-                                Risk Reduction %
-                            </span>
-
-
-                            <strong>
-                                {
-                                    formatPercentage(
+                        <DetailRow
+                            label="Risk Reduction %"
+                        >
+                            {
+                                noResponsePlan
+                                    ? "Not applicable"
+                                    : formatPercentage(
                                         risk
                                             .modeled_risk_reduction_percentage
                                     )
-                                }
-                            </strong>
-
-                        </div>
+                            }
+                        </DetailRow>
 
 
-                        <div>
-
-                            <span>
-                                Model Type
-                            </span>
-
-
-                            <strong>
-                                {
-                                    risk.model_type
-                                    || "-"
-                                }
-                            </strong>
-
-                        </div>
+                        <DetailRow
+                            label="Model Type"
+                        >
+                            {
+                                risk.model_type
+                                || "-"
+                            }
+                        </DetailRow>
 
 
-                        <div>
-
-                            <span>
-                                Calibrated Probability
-                            </span>
-
-
-                            <strong>
-                                {
-                                    risk.calibrated_probability
-                                    === true
-                                        ? "YES"
-                                        : "NO"
-                                }
-                            </strong>
-
-                        </div>
+                        <DetailRow
+                            label="Calibrated Probability"
+                        >
+                            {
+                                risk.calibrated_probability
+                                === true
+                                    ? "YES"
+                                    : "NO"
+                            }
+                        </DetailRow>
 
                     </div>
 
@@ -737,7 +1069,7 @@ function IncidentDetail() {
 
 
                 {/* ===============================================
-                    DIGITAL TWIN SUMMARY
+                    DIGITAL TWIN
                    =============================================== */}
 
                 <section className="detail-panel">
@@ -750,10 +1082,9 @@ function IncidentDetail() {
                                 Digital Twin Decision
                             </h3>
 
-
                             <p>
-                                Response planning using
-                                virtual endpoint simulation.
+                                Simulation-based response
+                                planning and decision support.
                             </p>
 
                         </div>
@@ -763,177 +1094,116 @@ function IncidentDetail() {
 
                     <div className="detail-list">
 
-                        <div>
-
-                            <span>
-                                Decision
-                            </span>
-
-
-                            <strong>
-                                {
-                                    digitalTwin.decision
-                                    || "-"
-                                }
-                            </strong>
-
-                        </div>
+                        <DetailRow
+                            label="Decision"
+                        >
+                            {
+                                digitalTwin.decision
+                                || "-"
+                            }
+                        </DetailRow>
 
 
-                        <div>
-
-                            <span>
-                                Selected Plan
-                            </span>
-
-
-                            <strong>
-                                {
-                                    selectedPlan.plan_name
-                                    || selectedPlan.name
-                                    || "-"
-                                }
-                            </strong>
-
-                        </div>
-
-
-                        <div>
-
-                            <span>
-                                Predicted Residual Risk
-                            </span>
-
-
-                            <strong>
-                                {
-                                    formatValue(
-                                        selectedPlan
-                                            .predicted_residual_risk
-                                        ?? selectedPlan
-                                            .residual_risk
+                        <DetailRow
+                            label="Selected Plan"
+                        >
+                            {
+                                noResponsePlan
+                                    ? "No Response Plan Selected"
+                                    : (
+                                        selectedPlan.plan_name
+                                        || selectedPlan.name
+                                        || ticket.selected_plan
+                                        || "-"
                                     )
-                                }
-                            </strong>
-
-                        </div>
+                            }
+                        </DetailRow>
 
 
-                        <div>
+                        <DetailRow
+                            label="Candidate Plans"
+                        >
+                            {
+                                digitalTwin
+                                    .candidate_plan_count
+                                ?? candidatePlans.length
+                            }
+                        </DetailRow>
 
-                            <span>
-                                Risk Reduction
-                            </span>
+
+                        <DetailRow
+                            label="Predicted Residual Risk"
+                        >
+                            {
+                                selectedPlan
+                                    .predicted_residual_risk
+                                ?? selectedPlan
+                                    .residual_risk
+                                ?? risk
+                                    .predicted_residual_risk
+                                ?? "-"
+                            }
+                        </DetailRow>
 
 
-                            <strong>
-                                {
-                                    formatPercentage(
+                        <DetailRow
+                            label="Risk Reduction"
+                        >
+                            {
+                                noResponsePlan
+                                    ? "Not applicable"
+                                    : formatPercentage(
                                         selectedPlan
                                             .risk_reduction_percentage
                                         ?? selectedPlan
                                             .risk_reduction
                                     )
-                                }
-                            </strong>
-
-                        </div>
+                            }
+                        </DetailRow>
 
 
-                        <div>
-
-                            <span>
-                                Operational Impact
-                            </span>
-
-
-                            <strong>
-                                {
-                                    selectedPlan
-                                        .operational_impact
-                                    || "-"
-                                }
-                            </strong>
-
-                        </div>
-
-
-                        <div>
-
-                            <span>
-                                Plan Score
-                            </span>
-
-
-                            <strong>
-                                {
-                                    formatValue(
-                                        selectedPlan.score
-                                        ?? selectedPlan.plan_score
-                                        ?? selectedPlan.security_score
+                        <DetailRow
+                            label="Operational Impact"
+                        >
+                            {
+                                noResponsePlan
+                                    ? "NONE"
+                                    : (
+                                        selectedPlan
+                                            .operational_impact
+                                        || ticket
+                                            .operational_impact
+                                        || "-"
                                     )
-                                }
-                            </strong>
-
-                        </div>
+                            }
+                        </DetailRow>
 
 
-                        <div>
-
-                            <span>
-                                Candidate Plans
-                            </span>
-
-
-                            <strong>
-                                {
-                                    digitalTwin
-                                        .candidate_plan_count
-                                    ?? 0
-                                }
-                            </strong>
-
-                        </div>
-
-
-                        <div>
-
-                            <span>
-                                Analyst Approval
-                            </span>
-
-
-                            <strong>
-                                {
-                                    digitalTwin
-                                        .analyst_approval_required
+                        <DetailRow
+                            label="Analyst Approval"
+                        >
+                            {
+                                approvalRequired
                                     ? "REQUIRED"
                                     : "NOT REQUIRED"
-                                }
-                            </strong>
-
-                        </div>
+                            }
+                        </DetailRow>
 
 
-                        <div>
-
-                            <span>
-                                Real Endpoint Modified
-                            </span>
-
-
-                            <strong className="safe-disabled">
-
+                        <DetailRow
+                            label="Real Endpoint Modified"
+                        >
+                            <span
+                                className="safe-disabled"
+                            >
                                 {
                                     digitalTwin
                                         .real_endpoint_modified
                                     ? "YES"
                                     : "NO"
                                 }
-
-                            </strong>
-
-                        </div>
+                            </span>
+                        </DetailRow>
 
                     </div>
 
@@ -943,73 +1213,180 @@ function IncidentDetail() {
 
 
             {/* ===================================================
-                DIGITAL TWIN PLAN COMPARISON
+                PLAN COMPARISON
                =================================================== */}
 
-            <PlanComparison
-                digitalTwin={
-                    digitalTwin
-                }
-            />
+            {
+                candidatePlans.length > 0
+                ? (
+                    <PlanComparison
+                        digitalTwin={
+                            digitalTwin
+                        }
+                    />
+                )
+                : (
+                    <EmptyPanel
+                        title="Digital Twin Plan Comparison"
+                        subtitle={
+                            "Candidate response plans "
+                            + "evaluated by the Digital Twin."
+                        }
+                        message={
+                            "No candidate response plans "
+                            + "were generated for this "
+                            + "incident because the current "
+                            + "risk assessment did not "
+                            + "produce a response plan."
+                        }
+                    />
+                )
+            }
+
 
             {/* ===================================================
                 ANALYST DECISION
-            =================================================== */}
+               =================================================== */}
 
-            <AnalystDecisionPanel
-                incidentId={
-                    incident.incident_id
-                }
-
-                caseStatus={
-                    incident.case_status
-                }
-
-                approvalStatus={
-                    ticket.approval_status
-                }
-
-                onDecisionComplete={
-                    loadIncident
-                }
-            />
+            {
+                showAnalystDecision
+                ? (
+                    <AnalystDecisionPanel
+                        incidentId={
+                            incident.incident_id
+                        }
+                        caseStatus={
+                            incident.case_status
+                        }
+                        approvalStatus={
+                            approvalStatus
+                        }
+                        onDecisionComplete={
+                            loadIncident
+                        }
+                    />
+                )
+                : (
+                    <EmptyPanel
+                        title="Analyst Response Approval"
+                        subtitle={
+                            "Human approval state for "
+                            + "recommended response actions."
+                        }
+                        message={
+                            "No response approval is "
+                            + "required for this incident. "
+                            + "The Digital Twin did not "
+                            + "select a response plan and "
+                            + "there are no response "
+                            + "actions awaiting execution."
+                        }
+                    />
+                )
+            }
 
 
             {/* ===================================================
                 EVIDENCE
                =================================================== */}
 
-            <EvidencePanel
-                evidence={
-                    evidence
-                }
-            />
+            {
+                evidenceCount > 0
+                ? (
+                    <EvidencePanel
+                        evidence={
+                            evidence
+                        }
+                    />
+                )
+                : (
+                    <EmptyPanel
+                        title="Investigation Evidence"
+                        subtitle={
+                            "Persisted process, file, "
+                            + "network and registry "
+                            + "artifacts."
+                        }
+                        message={
+                            "No investigation evidence "
+                            + "artifacts were persisted "
+                            + "for this SOC case. This "
+                            + "does not indicate that the "
+                            + "endpoint database contains "
+                            + "no telemetry; it only means "
+                            + "this case currently has no "
+                            + "persisted evidence artifacts."
+                        }
+                    />
+                )
+            }
 
 
             {/* ===================================================
-                ATTACK TIMELINE
+                TIMELINE
                =================================================== */}
 
-            <TimelinePanel
-                timeline={
-                    timeline
-                }
-            />
+            {
+                timelineEvents.length > 0
+                ? (
+                    <TimelinePanel
+                        timeline={
+                            timeline
+                        }
+                    />
+                )
+                : (
+                    <EmptyPanel
+                        title="Attack Timeline"
+                        subtitle={
+                            "Persisted chronological "
+                            + "incident activity."
+                        }
+                        message={
+                            "No attack timeline events "
+                            + "were persisted for this "
+                            + "SOC case."
+                        }
+                    />
+                )
+            }
 
 
             {/* ===================================================
                 MULTI-AGENT INTELLIGENCE
                =================================================== */}
 
-            <AgentIntelligencePanel
-                intelligence={
-                    intelligence
-                }
-            />
+            {
+                intelligenceAvailable
+                ? (
+                    <AgentIntelligencePanel
+                        intelligence={
+                            intelligence
+                        }
+                    />
+                )
+                : (
+                    <EmptyPanel
+                        title="Multi-Agent Intelligence"
+                        subtitle={
+                            "Investigation and reasoning "
+                            + "persisted from SENTINEL-X "
+                            + "agents."
+                        }
+                        message={
+                            "No additional multi-agent "
+                            + "intelligence payload is "
+                            + "available in the persisted "
+                            + "full incident view for "
+                            + "this case."
+                        }
+                    />
+                )
+            }
 
 
             {/* ===================================================
-                DECISION EXPLANATION
+                EXPLANATION
                =================================================== */}
 
             <section className="detail-panel full-width-panel">
@@ -1022,11 +1399,9 @@ function IncidentDetail() {
                             Decision Explanation
                         </h3>
 
-
                         <p>
-                            Explainability information
-                            associated with the selected
-                            Digital Twin plan.
+                            Human-readable explanation of
+                            the Digital Twin decision.
                         </p>
 
                     </div>
@@ -1035,48 +1410,116 @@ function IncidentDetail() {
 
 
                 {
-                    explanation
-                    && Object.keys(
+                    Object.keys(
                         explanation
                     ).length > 0
-                    ? (
+                        ? (
+                            <>
+                                <div className="detail-list">
 
-                        <pre
-                            className="incident-json-block"
-                        >
+                                    <DetailRow
+                                        label="Status"
+                                    >
+                                        {
+                                            explanation.status
+                                            || "-"
+                                        }
+                                    </DetailRow>
 
-                            {
-                                JSON.stringify(
-                                    explanation,
-                                    null,
-                                    2
-                                )
-                            }
 
-                        </pre>
+                                    <DetailRow
+                                        label="Summary"
+                                    >
+                                        {
+                                            explanation.summary
+                                            || "-"
+                                        }
+                                    </DetailRow>
 
-                    )
-                    : (
 
-                        <div className="empty-inline">
+                                    <DetailRow
+                                        label="Explainability Engine"
+                                    >
+                                        {
+                                            explanation.explainability
+                                            || "-"
+                                        }
+                                    </DetailRow>
 
-                            No explanation data available.
 
-                        </div>
-                    )
+                                    <DetailRow
+                                        label="Generated At"
+                                    >
+                                        {
+                                            formatDate(
+                                                explanation
+                                                    .generated_at
+                                            )
+                                        }
+                                    </DetailRow>
+
+
+                                    <DetailRow
+                                        label="Real Endpoint Modified"
+                                    >
+                                        <span
+                                            className="safe-disabled"
+                                        >
+                                            {
+                                                explanation
+                                                    .real_endpoint_modified
+                                                ? "YES"
+                                                : "NO"
+                                            }
+                                        </span>
+                                    </DetailRow>
+
+                                </div>
+
+
+                                <details
+                                    className="timeline-details"
+                                    style={{
+                                        marginTop:
+                                            "16px",
+                                    }}
+                                >
+                                    <summary>
+                                        View raw explanation
+                                    </summary>
+
+                                    <pre
+                                        className="incident-json-block"
+                                    >
+                                        {
+                                            JSON.stringify(
+                                                explanation,
+                                                null,
+                                                2
+                                            )
+                                        }
+                                    </pre>
+                                </details>
+                            </>
+                        )
+                        : (
+                            <div className="empty-inline">
+                                No explanation data available.
+                            </div>
+                        )
                 }
 
             </section>
 
 
             {/* ===================================================
-                SOC TICKET + SAFETY
+                TICKET + SAFETY
                =================================================== */}
 
             <div className="incident-detail-grid">
 
                 {/* ===============================================
-                    SOC TICKET
+                    TICKET
                    =============================================== */}
 
                 <section className="detail-panel">
@@ -1089,10 +1532,9 @@ function IncidentDetail() {
                                 SOC Ticket
                             </h3>
 
-
                             <p>
-                                Persistent ticket generated
-                                for this incident.
+                                Persistent ticket associated
+                                with this incident.
                             </p>
 
                         </div>
@@ -1102,167 +1544,115 @@ function IncidentDetail() {
 
                     <div className="detail-list">
 
-                        <div>
-
-                            <span>
-                                Ticket ID
-                            </span>
-
-
-                            <strong className="mono-text">
-
-                                {
-                                    ticket.ticket_id
-                                    || "-"
-                                }
-
-                            </strong>
-
-                        </div>
+                        <DetailRow
+                            label="Ticket ID"
+                        >
+                            {
+                                ticket.ticket_id
+                                || "-"
+                            }
+                        </DetailRow>
 
 
-                        <div>
-
-                            <span>
-                                Priority
-                            </span>
-
-
-                            <strong>
-                                {
-                                    ticket.priority
-                                    || "-"
-                                }
-                            </strong>
-
-                        </div>
+                        <DetailRow
+                            label="Priority"
+                        >
+                            {
+                                ticket.priority
+                                || "-"
+                            }
+                        </DetailRow>
 
 
-                        <div>
+                        <DetailRow
+                            label="Risk Score"
+                        >
+                            {
+                                formatValue(
+                                    ticket.risk_score
+                                )
+                            }
+                        </DetailRow>
 
-                            <span>
-                                Risk Score
-                            </span>
+
+                        <DetailRow
+                            label="Risk Level"
+                        >
+                            {
+                                ticket.risk_level
+                                || "-"
+                            }
+                        </DetailRow>
 
 
-                            <strong>
-                                {
-                                    formatValue(
-                                        ticket.risk_score
+                        <DetailRow
+                            label="Selected Plan"
+                        >
+                            {
+                                ticket.selected_plan
+                                || (
+                                    noResponsePlan
+                                        ? "No Response Plan Selected"
+                                        : "-"
+                                )
+                            }
+                        </DetailRow>
+
+
+                        <DetailRow
+                            label="Status"
+                        >
+                            <span
+                                className={
+                                    statusClass(
+                                        ticket.status
                                     )
                                 }
-                            </strong>
-
-                        </div>
-
-
-                        <div>
-
-                            <span>
-                                Risk Level
-                            </span>
-
-
-                            <strong>
+                            >
                                 {
-                                    ticket.risk_level
+                                    ticket.status
                                     || "-"
                                 }
-                            </strong>
-
-                        </div>
-
-
-                        <div>
-
-                            <span>
-                                Selected Plan
                             </span>
+                        </DetailRow>
 
 
-                            <strong>
-                                {
-                                    ticket.selected_plan
-                                    || "-"
+                        <DetailRow
+                            label="Approval Required"
+                        >
+                            {
+                                approvalRequired
+                                    ? "YES"
+                                    : "NO"
+                            }
+                        </DetailRow>
+
+
+                        <DetailRow
+                            label="Approval Status"
+                        >
+                            <span
+                                className={
+                                    statusClass(
+                                        approvalStatus
+                                    )
                                 }
-                            </strong>
-
-                        </div>
-
-
-                        <div>
-
-                            <span>
-                                Status
-                            </span>
-
-
-                            <div>
-
-                                <span
-                                    className={
-                                        statusClass(
-                                            ticket.status
-                                        )
-                                    }
-                                >
-
-                                    {
-                                        ticket.status
-                                        || "-"
-                                    }
-
-                                </span>
-
-                            </div>
-
-                        </div>
-
-
-                        <div>
-
-                            <span>
-                                Approval Status
-                            </span>
-
-
-                            <div>
-
-                                <span
-                                    className={
-                                        statusClass(
-                                            ticket.approval_status
-                                        )
-                                    }
-                                >
-
-                                    {
-                                        ticket.approval_status
-                                        || "-"
-                                    }
-
-                                </span>
-
-                            </div>
-
-                        </div>
-
-
-                        <div>
-
-                            <span>
-                                Assigned Analyst
-                            </span>
-
-
-                            <strong>
+                            >
                                 {
-                                    ticket.assigned_analyst
-                                    || "-"
+                                    approvalStatus
                                 }
-                            </strong>
+                            </span>
+                        </DetailRow>
 
-                        </div>
+
+                        <DetailRow
+                            label="Assigned Analyst"
+                        >
+                            {
+                                ticket.assigned_analyst
+                                || "Not assigned"
+                            }
+                        </DetailRow>
 
                     </div>
 
@@ -1283,10 +1673,9 @@ function IncidentDetail() {
                                 Safety State
                             </h3>
 
-
                             <p>
-                                Response execution safeguards
-                                for the current environment.
+                                SENTINEL-X response execution
+                                safeguards.
                             </p>
 
                         </div>
@@ -1296,138 +1685,93 @@ function IncidentDetail() {
 
                     <div className="detail-list">
 
-                        <div>
-
-                            <span>
-                                Simulation Mode
-                            </span>
-
-
-                            <strong>
-                                {
-                                    safety.simulation_mode
+                        <DetailRow
+                            label="Simulation Mode"
+                        >
+                            {
+                                safety.simulation_mode
                                     ? "ENABLED"
                                     : "DISABLED"
-                                }
-                            </strong>
-
-                        </div>
+                            }
+                        </DetailRow>
 
 
-                        <div>
-
-                            <span>
-                                Real Endpoint Modified
-                            </span>
-
-
-                            <strong className="safe-disabled">
-
+                        <DetailRow
+                            label="Real Endpoint Modified"
+                        >
+                            <span
+                                className="safe-disabled"
+                            >
                                 {
                                     safety
                                         .real_endpoint_modified
                                     ? "YES"
                                     : "NO"
                                 }
-
-                            </strong>
-
-                        </div>
-
-
-                        <div>
-
-                            <span>
-                                Real Response Executed
                             </span>
+                        </DetailRow>
 
 
-                            <strong className="safe-disabled">
-
+                        <DetailRow
+                            label="Real Response Executed"
+                        >
+                            <span
+                                className="safe-disabled"
+                            >
                                 {
                                     safety
                                         .real_response_executed
                                     ? "YES"
                                     : "NO"
                                 }
-
-                            </strong>
-
-                        </div>
-
-
-                        <div>
-
-                            <span>
-                                Response Action Count
                             </span>
+                        </DetailRow>
 
 
-                            <strong>
-                                {
-                                    response.action_count
-                                    ?? actions.length
-                                }
-                            </strong>
-
-                        </div>
-
-
-                        <div>
-
-                            <span>
-                                Approved Actions
-                            </span>
+                        <DetailRow
+                            label="Response Actions"
+                        >
+                            {
+                                response.action_count
+                                ?? actions.length
+                            }
+                        </DetailRow>
 
 
-                            <strong>
-                                {
-                                    response
-                                        .approval_counts
-                                        ?.APPROVED
-                                    ?? 0
-                                }
-                            </strong>
-
-                        </div>
-
-
-                        <div>
-
-                            <span>
-                                Pending Actions
-                            </span>
+                        <DetailRow
+                            label="Approved Actions"
+                        >
+                            {
+                                response
+                                    .approval_counts
+                                    ?.APPROVED
+                                ?? 0
+                            }
+                        </DetailRow>
 
 
-                            <strong>
-                                {
-                                    response
-                                        .approval_counts
-                                        ?.PENDING
-                                    ?? 0
-                                }
-                            </strong>
-
-                        </div>
-
-
-                        <div>
-
-                            <span>
-                                Ready Actions
-                            </span>
+                        <DetailRow
+                            label="Pending Actions"
+                        >
+                            {
+                                response
+                                    .approval_counts
+                                    ?.PENDING
+                                ?? 0
+                            }
+                        </DetailRow>
 
 
-                            <strong>
-                                {
-                                    response
-                                        .execution_counts
-                                        ?.READY
-                                    ?? 0
-                                }
-                            </strong>
-
-                        </div>
+                        <DetailRow
+                            label="Ready Actions"
+                        >
+                            {
+                                response
+                                    .execution_counts
+                                    ?.READY
+                                ?? 0
+                            }
+                        </DetailRow>
 
                     </div>
 
@@ -1450,11 +1794,10 @@ function IncidentDetail() {
                             Response Actions
                         </h3>
 
-
                         <p>
-                            Policy-controlled response
-                            actions generated for this
-                            incident.
+                            Policy-controlled simulated
+                            response actions generated for
+                            the incident.
                         </p>
 
                     </div>
@@ -1462,8 +1805,12 @@ function IncidentDetail() {
 
                     <div className="timeline-count">
 
-                        {actions.length}
+                        {
+                            actions.length
+                        }
+
                         {" "}
+
                         actions
 
                     </div>
@@ -1473,209 +1820,423 @@ function IncidentDetail() {
 
                 {
                     actions.length === 0
-                    ? (
+                        ? (
+                            <div className="empty-inline">
 
-                        <div className="empty-inline">
+                                {
+                                    noResponsePlan
+                                        ? (
+                                            <>
+                                                No response actions were
+                                                generated because the
+                                                Digital Twin selected no
+                                                response plan for the
+                                                current assessed risk.
+                                            </>
+                                        )
+                                        : (
+                                            <>
+                                                No response actions are
+                                                available for this
+                                                incident.
+                                            </>
+                                        )
+                                }
 
-                            No response actions available.
+                            </div>
+                        )
+                        : (
+                            <div
+                                className={
+                                    "table-container "
+                                    + "response-table-wrap"
+                                }
+                            >
 
-                        </div>
+                                <table className="soc-table">
 
-                    )
-                    : (
+                                    <thead>
 
-                        <div
-                            className="
-                                table-container
-                                response-table-wrap
-                            "
-                        >
+                                        <tr>
 
-                            <table className="soc-table">
+                                            <th>
+                                                Action
+                                            </th>
 
-                                <thead>
+                                            <th>
+                                                Risk
+                                            </th>
 
-                                    <tr>
+                                            <th>
+                                                Approval
+                                            </th>
 
-                                        <th>
-                                            Action
-                                        </th>
+                                            <th>
+                                                Execution
+                                            </th>
 
-                                        <th>
-                                            Risk
-                                        </th>
+                                            <th>
+                                                Approval Required
+                                            </th>
 
-                                        <th>
-                                            Approval
-                                        </th>
+                                            <th>
+                                                Requested By
+                                            </th>
 
-                                        <th>
-                                            Execution
-                                        </th>
+                                        </tr>
 
-                                        <th>
-                                            Approval Required
-                                        </th>
-
-                                        <th>
-                                            Requested By
-                                        </th>
-
-                                    </tr>
-
-                                </thead>
+                                    </thead>
 
 
-                                <tbody>
+                                    <tbody>
 
-                                    {
-                                        actions.map(
-                                            (
-                                                action,
-                                                index
-                                            ) => (
+                                        {
+                                            actions.map(
+                                                (
+                                                    action,
+                                                    index
+                                                ) => (
 
-                                            <tr
-                                                key={
-                                                    action
-                                                        .action_id
-                                                    || index
-                                                }
-                                            >
-
-                                                <td>
-
-                                                    <strong>
-                                                        {
+                                                    <tr
+                                                        key={
                                                             action
-                                                                .action_type
-                                                            || "-"
-                                                        }
-                                                    </strong>
-
-                                                </td>
-
-
-                                                <td>
-
-                                                    <span
-                                                        className={
-                                                            riskClass(
-                                                                action
-                                                                    .risk_level
-                                                            )
+                                                                .action_id
+                                                            || index
                                                         }
                                                     >
 
-                                                        {
-                                                            action
-                                                                .risk_level
-                                                            || "-"
-                                                        }
+                                                        <td>
+                                                            <strong>
+                                                                {
+                                                                    action
+                                                                        .action_type
+                                                                    || "-"
+                                                                }
+                                                            </strong>
+                                                        </td>
 
-                                                    </span>
 
-                                                </td>
+                                                        <td>
+
+                                                            <span
+                                                                className={
+                                                                    riskClass(
+                                                                        action
+                                                                            .risk_level
+                                                                    )
+                                                                }
+                                                            >
+                                                                {
+                                                                    action
+                                                                        .risk_level
+                                                                    || "-"
+                                                                }
+                                                            </span>
+
+                                                        </td>
 
 
-                                                <td>
+                                                        <td>
 
-                                                    <span
-                                                        className={
-                                                            statusClass(
+                                                            <span
+                                                                className={
+                                                                    statusClass(
+                                                                        action
+                                                                            .approval_status
+                                                                    )
+                                                                }
+                                                            >
+                                                                {
+                                                                    action
+                                                                        .approval_status
+                                                                    || "-"
+                                                                }
+                                                            </span>
+
+                                                        </td>
+
+
+                                                        <td>
+
+                                                            <span
+                                                                className={
+                                                                    statusClass(
+                                                                        action
+                                                                            .execution_status
+                                                                    )
+                                                                }
+                                                            >
+                                                                {
+                                                                    action
+                                                                        .execution_status
+                                                                    || "-"
+                                                                }
+                                                            </span>
+
+                                                        </td>
+
+
+                                                        <td>
+                                                            {
                                                                 action
-                                                                    .approval_status
-                                                            )
-                                                        }
-                                                    >
-
-                                                        {
-                                                            action
-                                                                .approval_status
-                                                            || "-"
-                                                        }
-
-                                                    </span>
-
-                                                </td>
+                                                                    .approval_required
+                                                                ? "YES"
+                                                                : "NO"
+                                                            }
+                                                        </td>
 
 
-                                                <td>
-
-                                                    <span
-                                                        className={
-                                                            statusClass(
+                                                        <td>
+                                                            {
                                                                 action
-                                                                    .execution_status
-                                                            )
-                                                        }
-                                                    >
+                                                                    .requested_by
+                                                                || "-"
+                                                            }
+                                                        </td>
 
-                                                        {
-                                                            action
-                                                                .execution_status
-                                                            || "-"
-                                                        }
+                                                    </tr>
+                                                )
+                                            )
+                                        }
 
-                                                    </span>
+                                    </tbody>
 
-                                                </td>
+                                </table>
 
-
-                                                <td>
-                                                    {
-                                                        action
-                                                            .approval_required
-                                                        ? "YES"
-                                                        : "NO"
-                                                    }
-                                                </td>
-
-
-                                                <td>
-                                                    {
-                                                        action
-                                                            .requested_by
-                                                        || "-"
-                                                    }
-                                                </td>
-
-                                            </tr>
-                                        ))
-                                    }
-
-                                </tbody>
-
-                            </table>
-
-                        </div>
-                    )
+                            </div>
+                        )
                 }
 
             </section>
 
-            {/* ===================================================
-                MITIGATION VERIFICATION
-            =================================================== */}
-
-            <MitigationVerificationPanel
-                incidentId={
-                    incident.incident_id
-                }
-            />
 
             {/* ===================================================
                 MITIGATION VERIFICATION
-            =================================================== */}
+               =================================================== */}
 
-            <MitigationVerificationPanel
-                incidentId={
-                    incident.incident_id
+            <section className="detail-panel full-width-panel">
+
+                <div className="panel-heading">
+
+                    <div>
+
+                        <h3>
+                            Mitigation Verification
+                        </h3>
+
+                        <p>
+                            Verification state for simulated
+                            mitigation outcomes.
+                        </p>
+
+                    </div>
+
+                </div>
+
+
+                {
+                    mitigation
+                        ? (
+                            <>
+                                <div className="detail-list">
+
+                                    <DetailRow
+                                        label="Status"
+                                    >
+                                        <span
+                                            className={
+                                                statusClass(
+                                                    mitigationStatus
+                                                )
+                                            }
+                                        >
+                                            {
+                                                mitigationStatus
+                                            }
+                                        </span>
+                                    </DetailRow>
+
+
+                                    <DetailRow
+                                        label="Verification Type"
+                                    >
+                                        {
+                                            mitigation
+                                                .verification_type
+                                            || mitigation
+                                                .verification
+                                                ?.verification_type
+                                            || "-"
+                                        }
+                                    </DetailRow>
+
+
+                                    <DetailRow
+                                        label="Overall Improvement"
+                                    >
+                                        {
+                                            mitigation
+                                                .overall_improvement
+                                            ?? mitigation
+                                                .verification
+                                                ?.overall_improvement
+                                            ?? "-"
+                                        }
+                                    </DetailRow>
+
+
+                                    <DetailRow
+                                        label="Residual Risk"
+                                    >
+                                        {
+                                            mitigation
+                                                .residual_risk
+                                            ?? mitigation
+                                                .verification
+                                                ?.residual_risk
+                                            ?? "-"
+                                        }
+                                    </DetailRow>
+
+
+                                    <DetailRow
+                                        label="Simulation Mode"
+                                    >
+                                        {
+                                            (
+                                                mitigation
+                                                    .simulation_mode
+                                                ?? true
+                                            )
+                                                ? "ENABLED"
+                                                : "DISABLED"
+                                        }
+                                    </DetailRow>
+
+
+                                    <DetailRow
+                                        label="Real Response Executed"
+                                    >
+                                        <span
+                                            className="safe-disabled"
+                                        >
+                                            {
+                                                mitigation
+                                                    .real_response_executed
+                                                ? "YES"
+                                                : "NO"
+                                            }
+                                        </span>
+                                    </DetailRow>
+
+                                </div>
+
+
+                                <details
+                                    className="timeline-details"
+                                    style={{
+                                        marginTop:
+                                            "16px",
+                                    }}
+                                >
+                                    <summary>
+                                        View mitigation details
+                                    </summary>
+
+                                    <pre
+                                        className="incident-json-block"
+                                    >
+                                        {
+                                            JSON.stringify(
+                                                mitigation,
+                                                null,
+                                                2
+                                            )
+                                        }
+                                    </pre>
+                                </details>
+                            </>
+                        )
+                        : (
+                            <div className="empty-inline">
+
+                                Mitigation verification has
+                                not been performed for this
+                                incident.
+
+                            </div>
+                        )
                 }
-            />
+
+            </section>
+
 
             {/* ===================================================
-                DIGITAL TWIN MODEL NOTE
+                PERSISTENCE
+               =================================================== */}
+
+            <section className="detail-panel full-width-panel">
+
+                <div className="panel-heading">
+
+                    <div>
+
+                        <h3>
+                            Persistence State
+                        </h3>
+
+                        <p>
+                            Persistent SOC case storage
+                            information.
+                        </p>
+
+                    </div>
+
+                </div>
+
+
+                <div className="detail-list">
+
+                    <DetailRow
+                        label="Recovered From Database"
+                    >
+                        {
+                            persistence
+                                .recovered_from_database
+                            ? "YES"
+                            : "NO"
+                        }
+                    </DetailRow>
+
+
+                    <DetailRow
+                        label="Created At"
+                    >
+                        {
+                            formatDate(
+                                persistence.created_at
+                            )
+                        }
+                    </DetailRow>
+
+
+                    <DetailRow
+                        label="Updated At"
+                    >
+                        {
+                            formatDate(
+                                persistence.updated_at
+                            )
+                        }
+                    </DetailRow>
+
+                </div>
+
+            </section>
+
+
+            {/* ===================================================
+                MODEL NOTE
                =================================================== */}
 
             <div className="digital-twin-note">
@@ -1687,12 +2248,13 @@ function IncidentDetail() {
                 {" "}
 
                 Risk scores, residual-risk values and
-                Digital Twin plan scores shown here
-                are deterministic heuristic
+                Digital Twin plan scores are
+                deterministic heuristic
                 decision-support values used by the
-                SENTINEL-X prototype. They should not
-                be interpreted as calibrated
-                probabilities.
+                SENTINEL-X prototype. They are not
+                calibrated real-world probabilities.
+                All response execution remains
+                simulation-only.
 
             </div>
 

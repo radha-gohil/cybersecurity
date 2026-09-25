@@ -296,6 +296,12 @@ class CorrelationManager:
 
         for event in all_events:
 
+            if not isinstance(
+                event,
+                dict,
+            ):
+                continue
+
             event_id = (
                 event.get(
                     "event_id"
@@ -306,46 +312,181 @@ class CorrelationManager:
                 event_id
                 and event_id in seen
             ):
-
                 continue
 
             if event_id:
-
                 seen.add(
                     event_id
                 )
 
-            timeline.append(
-                {
-                    "event_id":
-                        event_id,
+            # ========================================================
+            # PRESERVE COMPLETE TELEMETRY CONTEXT
+            #
+            # Previously this timeline only retained:
+            # event_id/event_type/source/severity/timestamp.
+            #
+            # That caused downstream agents to lose the original
+            # process/file/network/registry evidence.
+            # ========================================================
 
-                    "event_type":
-                        event.get(
-                            "event_type"
-                        ),
-
-                    "source":
-                        event.get(
-                            "source"
-                        ),
-
-                    "severity":
-                        event.get(
-                            "severity"
-                        ),
-
-                    "timestamp":
-                        event.get(
-                            "timestamp"
-                        ),
-
-                    "timestamp_unix":
-                        event.get(
-                            "timestamp_unix"
-                        ),
-                }
+            process = (
+                event.get(
+                    "process"
+                )
+                or {}
             )
+
+            file_data = (
+                event.get(
+                    "file"
+                )
+                or {}
+            )
+
+            network = (
+                event.get(
+                    "network"
+                )
+                or {}
+            )
+
+            registry = (
+                event.get(
+                    "registry"
+                )
+                or {}
+            )
+
+            metadata = (
+                event.get(
+                    "metadata"
+                )
+                or {}
+            )
+
+            entity_link = (
+                event.get(
+                    "_entity_link"
+                )
+                or event.get(
+                    "entity_link"
+                )
+                or {}
+            )
+
+            event_type = (
+                event.get(
+                    "event_type",
+                    ""
+                )
+            )
+
+            timeline_item = {
+
+                "event_id":
+                    event_id,
+
+                "event_type":
+                    event_type,
+
+                "event_category":
+                    self.get_event_category(
+                        event_type
+                    ),
+
+                "source":
+                    event.get(
+                        "source"
+                    ),
+
+                "severity":
+                    event.get(
+                        "severity"
+                    ),
+
+                "timestamp":
+                    event.get(
+                        "timestamp"
+                    ),
+
+                "timestamp_unix":
+                    event.get(
+                        "timestamp_unix"
+                    ),
+
+                "device_id":
+                    event.get(
+                        "device_id"
+                    ),
+
+                # ----------------------------------------------------
+                # FULL EVENT EVIDENCE
+                # ----------------------------------------------------
+
+                "process":
+                    dict(process)
+                    if isinstance(
+                        process,
+                        dict,
+                    )
+                    else {},
+
+                "file":
+                    dict(file_data)
+                    if isinstance(
+                        file_data,
+                        dict,
+                    )
+                    else {},
+
+                "network":
+                    dict(network)
+                    if isinstance(
+                        network,
+                        dict,
+                    )
+                    else {},
+
+                "registry":
+                    dict(registry)
+                    if isinstance(
+                        registry,
+                        dict,
+                    )
+                    else {},
+
+                "metadata":
+                    dict(metadata)
+                    if isinstance(
+                        metadata,
+                        dict,
+                    )
+                    else {},
+            }
+
+            # --------------------------------------------------------
+            # Preserve correlation relationship information without
+            # storing the private/internal key name.
+            # --------------------------------------------------------
+
+            if isinstance(
+                entity_link,
+                dict,
+            ) and entity_link:
+
+                timeline_item[
+                    "entity_link"
+                ] = dict(
+                    entity_link
+                )
+
+            timeline.append(
+                timeline_item
+            )
+
+        # ============================================================
+        # SORT
+        # ============================================================
 
         timeline.sort(
             key=lambda item:
