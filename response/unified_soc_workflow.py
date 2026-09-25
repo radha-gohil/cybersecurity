@@ -96,7 +96,109 @@ class UnifiedSOCWorkflow:
 
 
     # ============================================================
-    # CONVERT BEST PLAN ACTION
+    # ENDPOINT TARGET EXTRACTION
+    # ============================================================
+
+    def extract_endpoint_target(
+        self,
+        intelligence,
+    ):
+
+        intelligence = self.safe_dict(
+            intelligence
+        )
+
+        source_incident = self.safe_dict(
+            intelligence.get(
+                "source_incident"
+            )
+        )
+
+        source_timeline = self.safe_list(
+            source_incident.get(
+                "timeline"
+            )
+        )
+
+        device_id = (
+            source_incident.get(
+                "device_id"
+            )
+        )
+
+        hostname = (
+            source_incident.get(
+                "hostname"
+            )
+        )
+
+
+        for event in source_timeline:
+
+            event = self.safe_dict(
+                event
+            )
+
+            metadata = self.safe_dict(
+                event.get(
+                    "metadata"
+                )
+            )
+
+
+            if not device_id:
+
+                device_id = (
+                    event.get(
+                        "device_id"
+                    )
+                    or metadata.get(
+                        "device_id"
+                    )
+                )
+
+
+            if not hostname:
+
+                hostname = (
+                    event.get(
+                        "hostname"
+                    )
+                    or metadata.get(
+                        "hostname"
+                    )
+                )
+
+
+            if (
+                device_id
+                and hostname
+            ):
+                break
+
+
+        endpoint_target = {}
+
+
+        if device_id:
+
+            endpoint_target[
+                "device_id"
+            ] = device_id
+
+
+        if hostname:
+
+            endpoint_target[
+                "hostname"
+            ] = hostname
+
+
+        return endpoint_target
+
+
+    # ============================================================
+    # CONVERT DIGITAL TWIN ACTION
     # INTO RESPONSE ACTION
     # ============================================================
 
@@ -105,19 +207,23 @@ class UnifiedSOCWorkflow:
         incident_id,
         plan_action,
         risk_level,
+        endpoint_target=None,
     ):
 
         plan_action = self.safe_dict(
             plan_action
         )
 
-
-        action_type = (
-            plan_action.get(
-                "action_type"
-            )
+        endpoint_target = self.safe_dict(
+            endpoint_target
         )
 
+        action_type = str(
+            plan_action.get(
+                "action_type",
+                "",
+            )
+        ).upper()
 
         target = self.safe_dict(
             plan_action.get(
@@ -126,55 +232,78 @@ class UnifiedSOCWorkflow:
         )
 
 
-        # --------------------------------------------------------
-        # ADAPT DIGITAL TWIN TARGET
-        # TO RESPONSE ORCHESTRATOR TARGET FORMAT
-        # --------------------------------------------------------
+        # ========================================================
+        # IMPORTANT
+        #
+        # DigitalTwinDecisionIntegration already produces targets
+        # in the structures expected by the response managers.
+        #
+        # Example:
+        #
+        # {
+        #     "files": [...]
+        # }
+        #
+        # Do NOT wrap this again as:
+        #
+        # {
+        #     "files": [
+        #         {
+        #             "files": [...]
+        #         }
+        #     ]
+        # }
+        #
+        # That was the cause of INVALID_TARGET during E2E.
+        # ========================================================
 
-        if action_type == "QUARANTINE_FILE":
+        if action_type in {
 
-            mapped_target = {
-                "files": [
+            "QUARANTINE_FILE",
+
+            "TERMINATE_PROCESS",
+
+            "BLOCK_NETWORK",
+
+            "REMEDIATE_PERSISTENCE",
+
+        }:
+
+            mapped_target = dict(
+                target
+            )
+
+
+        elif (
+            action_type
+            == "ISOLATE_ENDPOINT"
+        ):
+
+            # Digital Twin may intentionally return an empty
+            # isolation target because endpoint identity is not
+            # part of risk evidence.
+            #
+            # For the persistent response layer, use endpoint
+            # identity preserved from the source incident.
+
+            if target:
+
+                mapped_target = dict(
                     target
-                ]
-            }
+                )
 
+            else:
 
-        elif action_type == "TERMINATE_PROCESS":
-
-            mapped_target = {
-                "processes": [
-                    target
-                ]
-            }
-
-
-        elif action_type == "BLOCK_NETWORK":
-
-            mapped_target = {
-                "connections": [
-                    target
-                ]
-            }
-
-
-        elif action_type == "REMEDIATE_PERSISTENCE":
-
-            mapped_target = {
-                "registry_artifacts": [
-                    target
-                ]
-            }
-
-
-        elif action_type == "ISOLATE_ENDPOINT":
-
-            mapped_target = target
+                mapped_target = dict(
+                    endpoint_target
+                )
 
 
         else:
 
-            mapped_target = target
+            mapped_target = dict(
+                target
+            )
 
 
         action = ResponseAction(
@@ -188,11 +317,10 @@ class UnifiedSOCWorkflow:
             target=
                 mapped_target,
 
-            reason=
-                (
-                    "Selected by SENTINEL-X "
-                    "Digital Twin response planner."
-                ),
+            reason=(
+                "Selected by SENTINEL-X "
+                "Digital Twin response planner."
+            ),
 
             requested_by=
                 self.name,
@@ -220,6 +348,11 @@ class UnifiedSOCWorkflow:
         incident_id,
         intelligence,
     ):
+
+        intelligence = self.safe_dict(
+            intelligence
+        )
+
 
         # --------------------------------------------------------
         # DIGITAL TWIN DECISION
@@ -264,10 +397,6 @@ class UnifiedSOCWorkflow:
         )
 
 
-        # --------------------------------------------------------
-        # LOAD TICKET OBJECT DETAILS
-        # --------------------------------------------------------
-
         ticket_data = (
             ticket_result[
                 "ticket"
@@ -285,18 +414,27 @@ class UnifiedSOCWorkflow:
             )
         )
 
-
         plan_actions = self.safe_list(
             best_plan.get(
                 "actions"
             )
         )
 
-
         risk_level = (
             decision.get(
                 "initial_risk_level",
                 "INFO",
+            )
+        )
+
+
+        # --------------------------------------------------------
+        # ENDPOINT IDENTITY
+        # --------------------------------------------------------
+
+        endpoint_target = (
+            self.extract_endpoint_target(
+                intelligence
             )
         )
 
@@ -321,6 +459,9 @@ class UnifiedSOCWorkflow:
 
                     risk_level=
                         risk_level,
+
+                    endpoint_target=
+                        endpoint_target,
                 )
             )
 
@@ -332,6 +473,23 @@ class UnifiedSOCWorkflow:
 
             response_actions.append(
                 action
+            )
+
+
+        # --------------------------------------------------------
+        # CASE STATUS
+        # --------------------------------------------------------
+
+        if response_actions:
+
+            case_status = (
+                "AWAITING_ANALYST_REVIEW"
+            )
+
+        else:
+
+            case_status = (
+                "AWAITING_ANALYST_REVIEW"
             )
 
 
@@ -363,8 +521,14 @@ class UnifiedSOCWorkflow:
                     response_actions
                 ),
 
+            "endpoint_target":
+                endpoint_target,
+
             "status":
-                "AWAITING_ANALYST_REVIEW",
+                case_status,
+
+            "simulation_mode":
+                self.simulation_mode,
 
             "real_response_executed":
                 False,
@@ -389,7 +553,6 @@ class UnifiedSOCWorkflow:
                 []
             )
         )
-
 
         approval_results = []
 
@@ -442,7 +605,9 @@ class UnifiedSOCWorkflow:
 
 
             # ----------------------------------------------------
-            # ROUTE THROUGH SAFE ORCHESTRATOR
+            # ROUTE THROUGH SAFE RESPONSE ORCHESTRATOR
+            #
+            # ResponseOrchestrator remains simulation-only.
             # ----------------------------------------------------
 
             if ready_result.get(
@@ -467,18 +632,23 @@ class UnifiedSOCWorkflow:
                 )
 
 
+        approval_success = all(
+
+            result.get(
+                "success",
+                False,
+            )
+
+            for result
+            in approval_results
+
+        ) if approval_results else True
+
+
         return {
 
             "success":
-                all(
-                    result.get(
-                        "success",
-                        False,
-                    )
-
-                    for result
-                    in approval_results
-                ),
+                approval_success,
 
             "ticket_id":
                 ticket.ticket_id,
@@ -530,7 +700,6 @@ class UnifiedSOCWorkflow:
             )
         )
 
-
         rejection_results = []
 
 
@@ -559,18 +728,23 @@ class UnifiedSOCWorkflow:
             )
 
 
+        rejection_success = all(
+
+            result.get(
+                "success",
+                False,
+            )
+
+            for result
+            in rejection_results
+
+        ) if rejection_results else True
+
+
         return {
 
             "success":
-                all(
-                    result.get(
-                        "success",
-                        False,
-                    )
-
-                    for result
-                    in rejection_results
-                ),
+                rejection_success,
 
             "ticket_id":
                 ticket.ticket_id,
@@ -588,6 +762,9 @@ class UnifiedSOCWorkflow:
 
             "routing_results":
                 [],
+
+            "simulation_mode":
+                self.simulation_mode,
 
             "real_response_executed":
                 False,

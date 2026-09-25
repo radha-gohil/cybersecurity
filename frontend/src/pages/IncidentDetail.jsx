@@ -58,7 +58,102 @@ function formatValue(
         return fallback;
     }
 
+    if (
+        typeof value === "object"
+        && !Array.isArray(value)
+    ) {
+        if (value.impact_level) {
+            return value.impact_level;
+        }
+
+        if (value.status) {
+            return value.status;
+        }
+
+        if (value.plan_name) {
+            return value.plan_name;
+        }
+
+        if (value.name) {
+            return value.name;
+        }
+
+        try {
+            return JSON.stringify(value);
+        } catch {
+            return fallback;
+        }
+    }
+
+    if (Array.isArray(value)) {
+        return value.length > 0
+            ? value
+                .map(
+                    (item) =>
+                        typeof item === "object"
+                            ? JSON.stringify(item)
+                            : String(item)
+                )
+                .join(", ")
+            : fallback;
+    }
+
     return value;
+}
+
+
+function formatOperationalImpact(
+    value,
+    fallback = "-"
+) {
+    if (
+        value === null
+        || value === undefined
+        || value === ""
+    ) {
+        return fallback;
+    }
+
+    if (
+        typeof value === "object"
+        && !Array.isArray(value)
+    ) {
+        return (
+            value.impact_level
+            || value.level
+            || value.status
+            || fallback
+        );
+    }
+
+    return String(value);
+}
+
+
+function sanitizePlanForRendering(
+    plan
+) {
+    const data =
+        safeObject(
+            plan
+        );
+
+    if (
+        Object.keys(data).length
+        === 0
+    ) {
+        return {};
+    }
+
+    return {
+        ...data,
+
+        operational_impact:
+            formatOperationalImpact(
+                data.operational_impact,
+                "-"
+            ),
+    };
 }
 
 
@@ -595,6 +690,68 @@ function IncidentDetail() {
         safeArray(
             digitalTwin.candidate_plans
         );
+
+
+    // ============================================================
+    // SAFE DIGITAL TWIN DATA FOR CHILD COMPONENTS
+    //
+    // CRITICAL incidents contain structured operational_impact
+    // objects. React cannot render plain objects directly, and an
+    // older PlanComparison implementation may attempt to do so.
+    // Convert those fields to readable strings before rendering.
+    // ============================================================
+
+    const safeSelectedPlan =
+        sanitizePlanForRendering(
+            selectedPlan
+        );
+
+
+    const safeCandidatePlans =
+        candidatePlans.map(
+            (
+                plan
+            ) =>
+                sanitizePlanForRendering(
+                    plan
+                )
+        );
+
+
+    const safeRankedPlans =
+        safeArray(
+            digitalTwin.ranked_plans
+        ).map(
+            (
+                plan
+            ) =>
+                sanitizePlanForRendering(
+                    plan
+                )
+        );
+
+
+    const safeBestPlan =
+        sanitizePlanForRendering(
+            digitalTwin.best_plan
+        );
+
+
+    const planComparisonTwin = {
+        ...digitalTwin,
+
+        selected_plan:
+            safeSelectedPlan,
+
+        best_plan:
+            safeBestPlan,
+
+        candidate_plans:
+            safeCandidatePlans,
+
+        ranked_plans:
+            safeRankedPlans,
+    };
 
 
     const actions =
@@ -1168,12 +1325,11 @@ function IncidentDetail() {
                             {
                                 noResponsePlan
                                     ? "NONE"
-                                    : (
+                                    : formatOperationalImpact(
                                         selectedPlan
                                             .operational_impact
-                                        || ticket
+                                        ?? ticket
                                             .operational_impact
-                                        || "-"
                                     )
                             }
                         </DetailRow>
@@ -1221,7 +1377,7 @@ function IncidentDetail() {
                 ? (
                     <PlanComparison
                         digitalTwin={
-                            digitalTwin
+                            planComparisonTwin
                         }
                     />
                 )
@@ -1431,8 +1587,9 @@ function IncidentDetail() {
                                         label="Summary"
                                     >
                                         {
-                                            explanation.summary
-                                            || "-"
+                                            formatValue(
+                                                explanation.summary
+                                            )
                                         }
                                     </DetailRow>
 

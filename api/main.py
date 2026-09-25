@@ -39,13 +39,17 @@ from detection.fusion.incident_store import (
     IncidentStore,
 )
 
-from agents.multi_agent_pipeline import (
-    MultiAgentSecurityPipeline,
-)
 
 from endpoint.storage.database import (
     get_endpoint_database_summary,
 )
+
+
+from agents.multi_agent_pipeline import (
+    MultiAgentSecurityPipeline,
+)
+
+
 # ================================================================
 # APPLICATION
 # ================================================================
@@ -240,6 +244,11 @@ def enrich_detected_incident(
     )
 
 
+    # ------------------------------------------------------------
+    # CHECK WHETHER THIS DETECTED INCIDENT HAS ALREADY ENTERED
+    # THE PERSISTENT SOC WORKFLOW
+    # ------------------------------------------------------------
+
     soc_case = None
 
 
@@ -263,6 +272,10 @@ def enrich_detected_incident(
     )
 
 
+    # ------------------------------------------------------------
+    # DEFAULT SOC VALUES
+    # ------------------------------------------------------------
+
     soc_case_status = None
 
     approval_status = None
@@ -279,6 +292,10 @@ def enrich_detected_incident(
         "NOT_VERIFIED"
     )
 
+
+    # ------------------------------------------------------------
+    # READ SOC INFORMATION WHEN AVAILABLE
+    # ------------------------------------------------------------
 
     if soc_case_exists:
 
@@ -381,6 +398,10 @@ def enrich_detected_incident(
                 "NOT_VERIFIED"
             )
 
+
+    # ------------------------------------------------------------
+    # BUILD API VIEW
+    # ------------------------------------------------------------
 
     return {
 
@@ -615,38 +636,33 @@ def health():
     "/api/v1/endpoint/overview"
 )
 def endpoint_overview(
-    limit: int = 50,
+    recent_limit: int = 25,
 ):
 
-    limit = max(
+    recent_limit = max(
         1,
         min(
-            limit,
-            200,
+            recent_limit,
+            100,
         ),
     )
 
 
     try:
 
-        # --------------------------------------------------------
-        # REAL STORED ENDPOINT DATA
-        # --------------------------------------------------------
-
         endpoint_data = (
             get_endpoint_database_summary(
-                recent_limit=limit
+                recent_limit=
+                    recent_limit
             )
+            or {}
         )
 
-
-        # --------------------------------------------------------
-        # CORRELATED INCIDENT INFORMATION
-        # --------------------------------------------------------
 
         detected_incidents = (
             detected_incident_store
             .get_incidents()
+            or []
         )
 
 
@@ -658,27 +674,23 @@ def endpoint_overview(
             detected_incidents = []
 
 
-        # --------------------------------------------------------
-        # CHECK WHICH DETECTED INCIDENTS HAVE ENTERED SOC
-        # --------------------------------------------------------
-
         promoted_incident_count = 0
 
 
         for incident in detected_incidents:
 
-            incident_id = (
+            if not isinstance(
+                incident,
+                dict,
+            ):
 
+                continue
+
+
+            incident_id = (
                 incident.get(
                     "incident_id"
                 )
-
-                if isinstance(
-                    incident,
-                    dict,
-                )
-
-                else None
             )
 
 
@@ -689,27 +701,26 @@ def endpoint_overview(
 
             try:
 
-                existing_case = (
+                soc_case = (
                     workflow.recover_case(
                         incident_id
                     )
                 )
 
-
-                if existing_case is not None:
-
-                    promoted_incident_count += 1
-
-
             except Exception:
 
-                # Do not break endpoint telemetry if a single
-                # SOC recovery lookup fails.
-                continue
+                soc_case = None
 
 
-        incident_count = len(
-            detected_incidents
+            if soc_case is not None:
+
+                promoted_incident_count += 1
+
+
+        incident_count = (
+            len(
+                detected_incidents
+            )
         )
 
 
@@ -721,10 +732,6 @@ def endpoint_overview(
             - promoted_incident_count,
         )
 
-
-        # --------------------------------------------------------
-        # RESPONSE
-        # --------------------------------------------------------
 
         return {
 
@@ -742,15 +749,6 @@ def endpoint_overview(
 
             "real_response_execution":
                 False,
-
-
-            # ----------------------------------------------------
-            # COLLECTOR RUNTIME
-            #
-            # IMPORTANT:
-            # FastAPI does not currently launch the collector
-            # processes. Therefore we must not falsely say ACTIVE.
-            # ----------------------------------------------------
 
             "collector_runtime_tracking":
                 False,
@@ -773,35 +771,30 @@ def endpoint_overview(
                     "CONFIGURED",
             },
 
-            "collector_note": (
-
-                "Collector modules are configured, but this "
-                "FastAPI process does not start or heartbeat-monitor "
-                "them. Telemetry and detections shown below are read "
-                "from the persisted endpoint SQLite database."
-            ),
-
-
-            # ----------------------------------------------------
-            # STORED TELEMETRY
-            # ----------------------------------------------------
+            "note":
+                (
+                    "Collector runtime heartbeats are not "
+                    "currently persisted, so collector state "
+                    "is reported as CONFIGURED rather than ACTIVE."
+                ),
 
             "event_count":
-                endpoint_data.get(
-                    "event_count",
-                    0,
+                int(
+                    endpoint_data.get(
+                        "event_count",
+                        0,
+                    )
+                    or 0
                 ),
 
             "detection_count":
-                endpoint_data.get(
-                    "detection_count",
-                    0,
+                int(
+                    endpoint_data.get(
+                        "detection_count",
+                        0,
+                    )
+                    or 0
                 ),
-
-
-            # ----------------------------------------------------
-            # INCIDENTS
-            # ----------------------------------------------------
 
             "incident_count":
                 incident_count,
@@ -812,69 +805,57 @@ def endpoint_overview(
             "awaiting_investigation_count":
                 awaiting_investigation_count,
 
-
-            # ----------------------------------------------------
-            # EVENT ANALYTICS
-            # ----------------------------------------------------
-
-            "event_category_counts":
-                endpoint_data.get(
-                    "event_category_counts",
-                    {},
-                ),
-
             "event_severity_counts":
                 endpoint_data.get(
                     "event_severity_counts",
                     {},
-                ),
-
-
-            # ----------------------------------------------------
-            # DETECTION ANALYTICS
-            # ----------------------------------------------------
+                )
+                or {},
 
             "detection_severity_counts":
                 endpoint_data.get(
                     "detection_severity_counts",
                     {},
-                ),
+                )
+                or {},
 
             "detection_engine_counts":
                 endpoint_data.get(
                     "detection_engine_counts",
                     {},
-                ),
+                )
+                or {},
 
             "detection_type_counts":
                 endpoint_data.get(
                     "detection_type_counts",
                     {},
-                ),
+                )
+                or {},
 
-
-            # ----------------------------------------------------
-            # RECENT REAL STORED DATA
-            # ----------------------------------------------------
+            "event_category_counts":
+                endpoint_data.get(
+                    "event_category_counts",
+                    {},
+                )
+                or {},
 
             "events":
-                serialize_value(
-                    endpoint_data.get(
-                        "events",
-                        [],
-                    )
-                ),
+                endpoint_data.get(
+                    "events",
+                    [],
+                )
+                or [],
 
             "detections":
-                serialize_value(
-                    endpoint_data.get(
-                        "detections",
-                        [],
-                    )
-                ),
+                endpoint_data.get(
+                    "detections",
+                    [],
+                )
+                or [],
 
             "recent_limit":
-                limit,
+                recent_limit,
         }
 
 
@@ -885,11 +866,12 @@ def endpoint_overview(
             status_code=500,
 
             detail=(
-
                 "Failed to load endpoint overview: "
                 f"{error}"
             ),
         )
+
+
 
 # ================================================================
 # DASHBOARD SUMMARY
@@ -903,7 +885,7 @@ def dashboard_summary():
     try:
 
         # ========================================================
-        # PERSISTENT SOC DATA
+        # PERSISTENT SOC
         # ========================================================
 
         cases = (
@@ -931,23 +913,25 @@ def dashboard_summary():
 
 
         # ========================================================
-        # REAL ENDPOINT DATABASE DATA
+        # ENDPOINT DATABASE
         # ========================================================
 
         endpoint_data = (
             get_endpoint_database_summary(
                 recent_limit=1
             )
+            or {}
         )
 
 
         # ========================================================
-        # DETECTED / CORRELATED INCIDENTS
+        # DETECTED INCIDENTS
         # ========================================================
 
         detected_incidents = (
             detected_incident_store
             .get_incidents()
+            or []
         )
 
 
@@ -960,7 +944,7 @@ def dashboard_summary():
 
 
         # ========================================================
-        # SAFE VALUE HELPER
+        # SAFE VALUE
         # ========================================================
 
         def get_value(
@@ -988,7 +972,7 @@ def dashboard_summary():
 
 
         # ========================================================
-        # CASE ID SET
+        # SOC CASE IDS
         # ========================================================
 
         soc_case_ids = set()
@@ -996,17 +980,19 @@ def dashboard_summary():
 
         for case in cases:
 
-            incident_id = get_value(
-                case,
-                "incident_id",
+            case_incident_id = (
+                get_value(
+                    case,
+                    "incident_id",
+                )
             )
 
 
-            if incident_id:
+            if case_incident_id:
 
                 soc_case_ids.add(
                     str(
-                        incident_id
+                        case_incident_id
                     )
                 )
 
@@ -1015,30 +1001,34 @@ def dashboard_summary():
         # DETECTED INCIDENT COUNTS
         # ========================================================
 
+        detected_incident_count = (
+            len(
+                detected_incidents
+            )
+        )
+
+
         promoted_incident_count = 0
 
 
         for incident in detected_incidents:
 
-            incident_id = get_value(
-                incident,
-                "incident_id",
+            detected_id = (
+                get_value(
+                    incident,
+                    "incident_id",
+                )
             )
 
 
             if (
-                incident_id
+                detected_id
                 and str(
-                    incident_id
+                    detected_id
                 ) in soc_case_ids
             ):
 
                 promoted_incident_count += 1
-
-
-        detected_incident_count = len(
-            detected_incidents
-        )
 
 
         awaiting_investigation_count = max(
@@ -1057,10 +1047,15 @@ def dashboard_summary():
         incident_severity_counts = {
 
             "CRITICAL": 0,
+
             "HIGH": 0,
+
             "MEDIUM": 0,
+
             "LOW": 0,
+
             "INFO": 0,
+
             "UNKNOWN": 0,
         }
 
@@ -1084,7 +1079,9 @@ def dashboard_summary():
                 incident_severity_counts
             ):
 
-                severity = "UNKNOWN"
+                severity = (
+                    "UNKNOWN"
+                )
 
 
             incident_severity_counts[
@@ -1093,14 +1090,17 @@ def dashboard_summary():
 
 
         # ========================================================
-        # TICKET PRIORITY COUNTS
+        # PRIORITY COUNTS
         # ========================================================
 
         priority_counts = {
 
             "P1": 0,
+
             "P2": 0,
+
             "P3": 0,
+
             "P4": 0,
         }
 
@@ -1133,7 +1133,7 @@ def dashboard_summary():
 
 
         # ========================================================
-        # TICKET APPROVAL COUNTS
+        # TICKET COUNTS
         # ========================================================
 
         pending_approvals = 0
@@ -1173,26 +1173,17 @@ def dashboard_summary():
             ).upper()
 
 
-            if (
-                approval_status
-                == "PENDING"
-            ):
+            if approval_status == "PENDING":
 
                 pending_approvals += 1
 
 
-            elif (
-                approval_status
-                == "APPROVED"
-            ):
+            elif approval_status == "APPROVED":
 
                 approved_tickets += 1
 
 
-            elif (
-                approval_status
-                == "REJECTED"
-            ):
+            elif approval_status == "REJECTED":
 
                 rejected_tickets += 1
 
@@ -1200,7 +1191,9 @@ def dashboard_summary():
             if ticket_status not in {
 
                 "CLOSED",
+
                 "RESOLVED",
+
                 "REJECTED",
 
             }:
@@ -1228,34 +1221,37 @@ def dashboard_summary():
         mitigation_status_counts = {
 
             "VERIFIED": 0,
+
             "PARTIAL": 0,
+
             "FAILED": 0,
+
             "NOT_VERIFIED": 0,
+
             "UNKNOWN": 0,
         }
 
 
         for case in cases:
 
-            case_status = (
+            # ----------------------------------------------------
+            # CASE STATUS
+            # ----------------------------------------------------
+
+            case_status = str(
 
                 get_value(
                     case,
                     "case_status",
-                )
-
-                or get_value(
-                    case,
-                    "status",
-                    "",
+                    get_value(
+                        case,
+                        "status",
+                        "",
+                    ),
                 )
 
                 or ""
-            )
 
-
-            case_status = str(
-                case_status
             ).upper()
 
 
@@ -1268,40 +1264,17 @@ def dashboard_summary():
 
 
             # ----------------------------------------------------
-            # RISK
+            # RISK LEVEL
             # ----------------------------------------------------
-
-            risk_level = get_value(
-                case,
-                "risk_level",
-            )
-
-
-            ticket_data = get_value(
-                case,
-                "ticket_data",
-                {},
-            )
-
-
-            if (
-                not risk_level
-                and isinstance(
-                    ticket_data,
-                    dict,
-                )
-            ):
-
-                risk_level = (
-                    ticket_data.get(
-                        "risk_level"
-                    )
-                )
-
 
             risk_level = str(
 
-                risk_level
+                get_value(
+                    case,
+                    "risk_level",
+                    "INFO",
+                )
+
                 or "INFO"
 
             ).upper()
@@ -1332,102 +1305,106 @@ def dashboard_summary():
                 info_cases += 1
 
 
-            # ----------------------------------------------------
-            # MITIGATION
-            # ----------------------------------------------------
+            # ====================================================
+            # MITIGATION VERIFICATION
+            # ====================================================
 
-            mitigation_status = (
+            case_incident_id = (
                 get_value(
                     case,
-                    "mitigation_status",
+                    "incident_id",
                 )
             )
 
 
-            mitigation_verification = (
-                get_value(
-                    case,
-                    "mitigation_verification",
-                )
-            )
+            mitigation_verification = {}
 
 
-            if (
-                not mitigation_status
-                and isinstance(
-                    mitigation_verification,
-                    dict,
-                )
-            ):
+            if case_incident_id:
 
-                mitigation_status = (
+                try:
 
-                    mitigation_verification.get(
-                        "status"
+                    mitigation_verification = (
+                        workflow
+                        .get_mitigation_verification(
+                            case_incident_id
+                        )
+                        or {}
                     )
 
-                    or mitigation_verification.get(
-                        "verification_status"
-                    )
-                )
+                except Exception:
+
+                    mitigation_verification = {}
 
 
             mitigation_status = str(
 
-                mitigation_status
+                mitigation_verification.get(
+                    "status",
+                    "NOT_VERIFIED",
+                )
+
                 or "NOT_VERIFIED"
 
             ).upper()
 
 
-            if (
-                mitigation_status
-                in {
-                    "VERIFIED",
-                    "MITIGATION_VERIFIED",
-                }
-            ):
+            if mitigation_status in {
+
+                "VERIFIED",
+
+                "SIMULATION_VERIFIED",
+
+                "MITIGATION_VERIFIED",
+
+            }:
 
                 mitigation_key = (
                     "VERIFIED"
                 )
 
 
-            elif (
-                mitigation_status
-                in {
-                    "PARTIAL",
-                    "PARTIALLY_VERIFIED",
-                    "PARTIAL_SUCCESS",
-                }
-            ):
+            elif mitigation_status in {
+
+                "PARTIAL",
+
+                "SIMULATION_PARTIAL",
+
+                "PARTIALLY_VERIFIED",
+
+                "PARTIAL_SUCCESS",
+
+            }:
 
                 mitigation_key = (
                     "PARTIAL"
                 )
 
 
-            elif (
-                mitigation_status
-                in {
-                    "FAILED",
-                    "MITIGATION_FAILED",
-                }
-            ):
+            elif mitigation_status in {
+
+                "FAILED",
+
+                "SIMULATION_NO_IMPROVEMENT",
+
+                "MITIGATION_FAILED",
+
+            }:
 
                 mitigation_key = (
                     "FAILED"
                 )
 
 
-            elif (
-                mitigation_status
-                in {
-                    "NOT_VERIFIED",
-                    "PENDING",
-                    "NOT_RUN",
-                }
-            ):
+            elif mitigation_status in {
+
+                "NOT_VERIFIED",
+
+                "PENDING",
+
+                "NOT_RUN",
+
+            }:
 
                 mitigation_key = (
                     "NOT_VERIFIED"
@@ -1453,6 +1430,10 @@ def dashboard_summary():
         ready_actions = 0
 
         pending_actions = 0
+
+        successful_actions = 0
+
+        failed_actions = 0
 
 
         for action in actions:
@@ -1483,24 +1464,28 @@ def dashboard_summary():
             ).upper()
 
 
-            if (
-                execution_status
-                == "READY"
-            ):
+            if execution_status == "READY":
 
                 ready_actions += 1
 
 
-            if (
-                approval_status
-                == "PENDING"
-            ):
+            elif execution_status == "SUCCESS":
+
+                successful_actions += 1
+
+
+            elif execution_status == "FAILED":
+
+                failed_actions += 1
+
+
+            if approval_status == "PENDING":
 
                 pending_actions += 1
 
 
         # ========================================================
-        # ENDPOINT DATABASE COUNTS
+        # ENDPOINT COUNTS
         # ========================================================
 
         event_count = int(
@@ -1581,17 +1566,13 @@ def dashboard_summary():
 
 
         # ========================================================
-        # COMPLETE DASHBOARD RESPONSE
-        #
-        # IMPORTANT:
-        # Existing keys are preserved for SOCDashboard.jsx.
-        # New telemetry / detection keys are added for Dashboard.jsx.
+        # RESPONSE
         # ========================================================
 
         return {
 
             # ----------------------------------------------------
-            # TIMESTAMP / SOURCE
+            # GENERAL
             # ----------------------------------------------------
 
             "timestamp":
@@ -1628,7 +1609,7 @@ def dashboard_summary():
 
 
             # ----------------------------------------------------
-            # DETECTION / CORRELATION
+            # CORRELATED INCIDENTS
             # ----------------------------------------------------
 
             "detected_incidents":
@@ -1654,8 +1635,7 @@ def dashboard_summary():
 
 
             # ----------------------------------------------------
-            # PERSISTENT SOC CASES
-            # Existing fields retained.
+            # SOC CASES
             # ----------------------------------------------------
 
             "persistent_soc_cases":
@@ -1722,6 +1702,12 @@ def dashboard_summary():
             "ready_response_actions":
                 ready_actions,
 
+            "successful_response_actions":
+                successful_actions,
+
+            "failed_response_actions":
+                failed_actions,
+
 
             # ----------------------------------------------------
             # MITIGATION
@@ -1752,7 +1738,7 @@ def dashboard_summary():
 
 
             # ----------------------------------------------------
-            # PLATFORM SAFETY
+            # SAFETY
             # ----------------------------------------------------
 
             "simulation_mode":
@@ -1789,6 +1775,7 @@ def dashboard_summary():
                 f"{error}"
             ),
         )
+
 
 
 # ================================================================
@@ -2152,12 +2139,18 @@ def investigate_detected_incident(
     if not incident_id:
 
         raise HTTPException(
+
             status_code=400,
+
             detail=(
                 "incident_id cannot be empty."
             ),
         )
 
+
+    # ============================================================
+    # LOAD DETECTED / CORRELATED INCIDENT
+    # ============================================================
 
     try:
 
@@ -2171,7 +2164,9 @@ def investigate_detected_incident(
     except Exception as error:
 
         raise HTTPException(
+
             status_code=500,
+
             detail=(
                 "Failed to load detected "
                 f"incident: {error}"
@@ -2182,7 +2177,9 @@ def investigate_detected_incident(
     if incident is None:
 
         raise HTTPException(
+
             status_code=404,
+
             detail=(
                 f"Detected incident "
                 f"{incident_id} "
@@ -2190,6 +2187,10 @@ def investigate_detected_incident(
             ),
         )
 
+
+    # ============================================================
+    # IDEMPOTENT CHECK
+    # ============================================================
 
     existing = (
         workflow.recover_case(
@@ -2230,6 +2231,22 @@ def investigate_detected_incident(
                     0,
                 ),
 
+            "response_actions":
+                serialize_value(
+                    existing.get(
+                        "response_actions",
+                        [],
+                    )
+                ),
+
+            "digital_twin_decision":
+                serialize_value(
+                    existing.get(
+                        "decision",
+                        {},
+                    )
+                ),
+
             "simulation_mode":
                 True,
 
@@ -2239,6 +2256,10 @@ def investigate_detected_incident(
 
 
     try:
+
+        # ========================================================
+        # STEP 1 - MULTI-AGENT INVESTIGATION
+        # ========================================================
 
         intelligence = (
             multi_agent_pipeline
@@ -2259,6 +2280,22 @@ def investigate_detected_incident(
             )
 
 
+        # ========================================================
+        # PRESERVE ORIGINAL CORRELATED INCIDENT
+        #
+        # Required downstream for endpoint identity and complete
+        # response target construction.
+        # ========================================================
+
+        intelligence[
+            "source_incident"
+        ] = incident
+
+
+        # ========================================================
+        # VALIDATE COORDINATED ANALYSIS
+        # ========================================================
+
         coordinated_analysis = (
             intelligence.get(
                 "coordinated_analysis"
@@ -2278,23 +2315,34 @@ def investigate_detected_incident(
 
 
         pipeline_status = str(
+
             intelligence.get(
                 "status",
                 "UNKNOWN",
             )
+
         ).upper()
 
 
-        if pipeline_status == "INCOMPLETE":
+        if (
+            pipeline_status
+            == "INCOMPLETE"
+        ):
 
             raise ValueError(
                 "Multi-agent investigation "
-                "completed with an INCOMPLETE status."
+                "completed with an "
+                "INCOMPLETE status."
             )
 
 
+        # ========================================================
+        # STEP 2 - CREATE PERSISTENT SOC CASE
+        # ========================================================
+
         case = (
             workflow.create_case(
+
                 incident_id=
                     incident_id,
 
@@ -2303,6 +2351,10 @@ def investigate_detected_incident(
             )
         )
 
+
+        # ========================================================
+        # RETURN COMPLETE PROMOTION RESULT
+        # ========================================================
 
         return {
 
@@ -2391,6 +2443,14 @@ def investigate_detected_incident(
                     0,
                 ),
 
+            "response_actions":
+                serialize_value(
+                    case.get(
+                        "response_actions",
+                        [],
+                    )
+                ),
+
             "digital_twin_decision":
                 serialize_value(
                     case.get(
@@ -2431,7 +2491,9 @@ def investigate_detected_incident(
     except ValueError as error:
 
         raise HTTPException(
+
             status_code=422,
+
             detail=str(
                 error
             ),
@@ -2441,12 +2503,15 @@ def investigate_detected_incident(
     except Exception as error:
 
         raise HTTPException(
+
             status_code=500,
+
             detail=(
                 "Failed to investigate detected "
                 f"incident: {error}"
             ),
         )
+
 
 
 # ================================================================
@@ -2550,10 +2615,18 @@ def get_mitigation_verification(
     incident_id: str,
 ):
 
+    # ------------------------------------------------------------
+    # VERIFY CASE EXISTS
+    # ------------------------------------------------------------
+
     require_case(
         incident_id
     )
 
+
+    # ------------------------------------------------------------
+    # GET PERSISTED VERIFICATION
+    # ------------------------------------------------------------
 
     verification = (
         workflow.get_mitigation_verification(
@@ -2561,6 +2634,10 @@ def get_mitigation_verification(
         )
     )
 
+
+    # ------------------------------------------------------------
+    # NOT YET VERIFIED
+    # ------------------------------------------------------------
 
     if not verification:
 
@@ -2588,6 +2665,10 @@ def get_mitigation_verification(
                 False,
         }
 
+
+    # ------------------------------------------------------------
+    # VERIFIED RESULT
+    # ------------------------------------------------------------
 
     return {
 
@@ -2630,12 +2711,22 @@ def run_mitigation_verification(
     request: MitigationVerificationRequest,
 ):
 
+    # ------------------------------------------------------------
+    # VERIFY CASE EXISTS
+    # ------------------------------------------------------------
+
     require_case(
         incident_id
     )
 
 
     try:
+
+        # --------------------------------------------------------
+        # SAFETY CHECK
+        #
+        # API remains simulation-only.
+        # --------------------------------------------------------
 
         if (
             request.response_result.get(
@@ -2650,6 +2741,10 @@ def run_mitigation_verification(
                 "can be verified through this API."
             )
 
+
+        # --------------------------------------------------------
+        # RUN PERSISTENT VERIFICATION
+        # --------------------------------------------------------
 
         result = (
             workflow.verify_simulated_mitigation(
@@ -2668,6 +2763,10 @@ def run_mitigation_verification(
             )
         )
 
+
+        # --------------------------------------------------------
+        # RESPONSE
+        # --------------------------------------------------------
 
         return {
 
@@ -2710,7 +2809,9 @@ def run_mitigation_verification(
     except TypeError as error:
 
         raise HTTPException(
+
             status_code=400,
+
             detail=str(
                 error
             ),
@@ -2720,7 +2821,9 @@ def run_mitigation_verification(
     except ValueError as error:
 
         raise HTTPException(
+
             status_code=409,
+
             detail=str(
                 error
             ),
@@ -2730,7 +2833,9 @@ def run_mitigation_verification(
     except Exception as error:
 
         raise HTTPException(
+
             status_code=500,
+
             detail=(
                 "Mitigation verification failed: "
                 f"{error}"

@@ -1,35 +1,34 @@
-
 import sys
+
 from pathlib import Path
 
 
 # ================================================================
-# PROJECT ROOT
-# ================================================================
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-
-if str(PROJECT_ROOT) not in sys.path:
-
-    sys.path.insert(
-        0,
-        str(PROJECT_ROOT),
-    )
-
-from endpoint.agent.telemetry_manager import (
-    TelemetryManager,
-    shared_correlation_manager,
-)
-
-
-# ============================================================
 # PROJECT PATH
-# ============================================================
+# ================================================================
 
 PROJECT_ROOT = (
     Path(__file__)
     .resolve()
     .parents[1]
+)
+
+
+if str(
+    PROJECT_ROOT
+) not in sys.path:
+
+    sys.path.insert(
+        0,
+        str(
+            PROJECT_ROOT
+        ),
+    )
+
+
+from endpoint.agent.telemetry_manager import (
+    TelemetryManager,
+    shared_correlation_manager,
 )
 
 
@@ -40,39 +39,63 @@ OUTPUT_FILE = (
 )
 
 
-# ============================================================
-# SYNTHETIC E2E TELEMETRY
-#
-# Metadata only.
-# No executable is launched.
-# No file is modified.
-# No network connection is made.
-# No registry key is changed.
-# ============================================================
+# ================================================================
+# MAIN
+# ================================================================
 
 def main():
 
     print()
-    print("=" * 80)
+
+    print(
+        "=" * 80
+    )
+
     print(
         "SENTINEL-X HIGH-RISK E2E INCIDENT SEED"
     )
-    print("=" * 80)
+
+    print(
+        "=" * 80
+    )
 
     print()
+
     print(
         "SIMULATION / METADATA ONLY"
     )
+
     print(
         "No real endpoint action is performed."
     )
+
     print()
 
 
-    telemetry = TelemetryManager(
-        device_id="sentinelx-e2e-device"
+    # ============================================================
+    # SYNTHETIC ENDPOINT IDENTITY
+    # ============================================================
+
+    demo_device_id = (
+        "sentinelx-e2e-device"
     )
 
+    demo_hostname = (
+        "sentinelx-e2e-host"
+    )
+
+
+    telemetry = (
+        TelemetryManager(
+            device_id=
+                demo_device_id
+        )
+    )
+
+
+    # ============================================================
+    # SYNTHETIC ARTIFACTS
+    # ============================================================
 
     demo_path = (
         r"C:\Temp\sentinelx_e2e_demo.exe"
@@ -90,9 +113,9 @@ def main():
     )
 
 
-    # ========================================================
+    # ============================================================
     # EVENT 1 — PROCESS
-    # ========================================================
+    # ============================================================
 
     process_event = telemetry.emit(
 
@@ -147,6 +170,12 @@ def main():
             "synthetic_e2e":
                 True,
 
+            "device_id":
+                demo_device_id,
+
+            "hostname":
+                demo_hostname,
+
             "test_stage":
                 "PROCESS",
 
@@ -162,12 +191,9 @@ def main():
     )
 
 
-    # ========================================================
+    # ============================================================
     # EVENT 2 — FILE
-    #
-    # Process data is deliberately retained so correlation can
-    # link this event to the process event through PID and path.
-    # ========================================================
+    # ============================================================
 
     file_event = telemetry.emit(
 
@@ -243,6 +269,12 @@ def main():
             "synthetic_e2e":
                 True,
 
+            "device_id":
+                demo_device_id,
+
+            "hostname":
+                demo_hostname,
+
             "test_stage":
                 "FILE",
 
@@ -252,9 +284,13 @@ def main():
     )
 
 
-    # ========================================================
+    # ============================================================
     # EVENT 3 — NETWORK
-    # ========================================================
+    #
+    # 203.0.113.0/24 is TEST-NET-3 and is used only as
+    # documentation/example metadata.
+    # No real connection is made.
+    # ============================================================
 
     network_event_1 = telemetry.emit(
 
@@ -296,7 +332,6 @@ def main():
             "local_port":
                 53000,
 
-            # RFC 5737 TEST-NET address.
             "remote_ip":
                 "203.0.113.250",
 
@@ -315,6 +350,12 @@ def main():
             "synthetic_e2e":
                 True,
 
+            "device_id":
+                demo_device_id,
+
+            "hostname":
+                demo_hostname,
+
             "test_stage":
                 "NETWORK",
 
@@ -327,9 +368,9 @@ def main():
     )
 
 
-    # ========================================================
+    # ============================================================
     # EVENT 4 — REGISTRY
-    # ========================================================
+    # ============================================================
 
     registry_event = telemetry.emit(
 
@@ -377,6 +418,12 @@ def main():
             "synthetic_e2e":
                 True,
 
+            "device_id":
+                demo_device_id,
+
+            "hostname":
+                demo_hostname,
+
             "test_stage":
                 "REGISTRY",
 
@@ -389,11 +436,9 @@ def main():
     )
 
 
-    # ========================================================
+    # ============================================================
     # EVENT 5 — SECOND NETWORK OBSERVATION
-    #
-    # Extra strongly-linked event increases correlation context.
-    # ========================================================
+    # ============================================================
 
     network_event_2 = telemetry.emit(
 
@@ -453,6 +498,12 @@ def main():
             "synthetic_e2e":
                 True,
 
+            "device_id":
+                demo_device_id,
+
+            "hostname":
+                demo_hostname,
+
             "test_stage":
                 "NETWORK_REPEAT",
 
@@ -460,14 +511,17 @@ def main():
                 98,
 
             "indicator":
-                "synthetic_repeated_external_activity",
+                (
+                    "synthetic_repeated_"
+                    "external_activity"
+                ),
         },
     )
 
 
-    # ========================================================
+    # ============================================================
     # EVENTS CREATED
-    # ========================================================
+    # ============================================================
 
     emitted_events = [
 
@@ -504,9 +558,9 @@ def main():
         )
 
 
-    # ========================================================
-    # CORRELATED INCIDENTS CREATED IN THIS PROCESS
-    # ========================================================
+    # ============================================================
+    # CORRELATED INCIDENTS
+    # ============================================================
 
     incidents = (
         shared_correlation_manager
@@ -524,7 +578,6 @@ def main():
         )
 
 
-    # Highest-scoring synthetic incident created by this run.
     incident = max(
 
         incidents,
@@ -551,9 +604,9 @@ def main():
         )
 
 
-    # ========================================================
-    # SAVE INCIDENT ID FOR POWERSHELL
-    # ========================================================
+    # ============================================================
+    # SAVE INCIDENT ID
+    # ============================================================
 
     OUTPUT_FILE.parent.mkdir(
         parents=True,
@@ -567,16 +620,24 @@ def main():
     )
 
 
-    # ========================================================
+    # ============================================================
     # SUMMARY
-    # ========================================================
+    # ============================================================
 
     print()
-    print("=" * 80)
+
+    print(
+        "=" * 80
+    )
+
     print(
         "CORRELATED INCIDENT"
     )
-    print("=" * 80)
+
+    print(
+        "=" * 80
+    )
+
 
     print(
         "Incident ID:",
@@ -626,7 +687,19 @@ def main():
     )
 
 
+    print(
+        "Device ID:",
+        demo_device_id,
+    )
+
+    print(
+        "Hostname:",
+        demo_hostname,
+    )
+
+
     print()
+
     print(
         "Incident ID saved to:"
     )
@@ -637,13 +710,21 @@ def main():
 
 
     print()
-    print("=" * 80)
+
+    print(
+        "=" * 80
+    )
+
     print(
         "E2E SEED COMPLETED"
     )
-    print("=" * 80)
+
+    print(
+        "=" * 80
+    )
 
     print()
+
     print(
         "Verified so far:"
     )
@@ -684,6 +765,10 @@ def main():
 
     print(
         "No registry key modified."
+    )
+
+    print(
+        "No endpoint isolated."
     )
 
 
