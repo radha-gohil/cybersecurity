@@ -1,0 +1,107 @@
+{
+    "calibration_name": "sentinelx_temporal_anomaly_calibration",
+    "calibration_version": "v1",
+    "created_at": "2026-09-29T04:45:48.784010+00:00",
+    "model_name": "sentinelx_process_temporal_transformer",
+    "model_version": "v1",
+    "model_path": "C:\\Users\\T10002\\Downloads\\cyber\\models\\temporal\\sentinelx_process_temporal_transformer_v1.pt",
+    "calibration_source": "validation_split_only",
+    "validation_window_count": 20,
+    "reconstruction_error_method": "leave_one_timestep_out_mean_squared_error",
+    "validation_error_statistics": {
+        "count": 20,
+        "min": 0.013038493692874908,
+        "max": 9.840163230895996,
+        "mean": 2.4227664622012526,
+        "std": 3.2009213070428095,
+        "p50": 0.5543169006705284,
+        "p75": 4.249373078346252,
+        "p90": 8.001636934280397,
+        "p95": 8.738594627380373,
+        "p97": 9.17922206878662,
+        "p99": 9.61984951019287
+    },
+    "score_anchors": [
+        {
+            "name": "minimum",
+            "error": 0.013038493692874908,
+            "score": 0.0
+        },
+        {
+            "name": "median",
+            "error": 0.5543169006705284,
+            "score": 10.0
+        },
+        {
+            "name": "p90",
+            "error": 8.001636934280397,
+            "score": 30.0
+        },
+        {
+            "name": "p95",
+            "error": 8.738594627380373,
+            "score": 40.0
+        },
+        {
+            "name": "p97",
+            "error": 9.17922206878662,
+            "score": 60.0
+        },
+        {
+            "name": "p99",
+            "error": 9.61984951019287,
+            "score": 80.0
+        },
+        {
+            "name": "maximum",
+            "error": 9.840163230895996,
+            "score": 95.0
+        }
+    ],
+    "tail_scale": 3.2009213070428095,
+    "labels": {
+        "NORMAL": {
+            "minimum_score": 0.0,
+            "maximum_score_exclusive": 40.0
+        },
+        "UNUSUAL": {
+            "minimum_score": 40.0,
+            "maximum_score_exclusive": 60.0
+        },
+        "SUSPICIOUS": {
+            "minimum_score": 60.0,
+            "maximum_score_exclusive": 80.0
+        },
+        "HIGH_ANOMALY": {
+            "minimum_score": 80.0,
+            "maximum_score": 100.0
+        }
+    },
+    "signal_policy": {
+        "active_threshold": 60.0,
+        "strong_threshold": 80.0,
+        "should_alert_threshold": 60.0,
+        "critical_from_temporal_model_alone": false
+    },
+    "representation_dimension": 64,
+    "representation_health": {
+        "healthy": true,
+        "sample_count": 20,
+        "dimension_count": 64,
+        "active_dimension_count": 64,
+        "active_dimension_percent": 100.0,
+        "mean_dimension_std": 0.7125983834266663,
+        "minimum_dimension_std": 0.13550305366516113,
+        "maximum_dimension_std": 1.8691500425338745,
+        "unique_representation_count": 20,
+        "unique_representation_percent": 100.0,
+        "matrix_rank": 19,
+        "checks": {
+            "active_dimensions": true,
+            "representation_diversity": true,
+            "nonzero_variance": true
+        }
+    },
+    "test_split_used": false,
+    "scientific_note": "The 0-100 value is an endpoint-relative temporal anomaly score calibrated from validation reconstruction errors. It is not a probability of malware or compromise."
+}

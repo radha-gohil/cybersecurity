@@ -1,0 +1,106 @@
+{
+    "dataset_name": "sentinelx_process_temporal_sequence_dataset",
+    "dataset_version": "v2",
+    "created_at": "2026-09-29T04:12:28.564004+00:00",
+    "sequence_length": 8,
+    "window_stride": 2,
+    "measured_sampling_cadence": {
+        "source": "measured",
+        "candidate_gap_count": 2169,
+        "median_cadence_seconds": 93.561003,
+        "p25_seconds": 61.636207,
+        "p75_seconds": 133.690245,
+        "session_gap_seconds": 180.0
+    },
+    "feature_count": 27,
+    "temporal_feature_names": [
+        "cpu_percent",
+        "memory_percent",
+        "rss_mb",
+        "num_threads",
+        "num_handles",
+        "process_age_seconds",
+        "child_process_count",
+        "network_connection_count",
+        "unique_remote_ip_count",
+        "recent_event_count",
+        "command_line_length",
+        "command_arg_count",
+        "executable_path_depth",
+        "is_temp_path",
+        "is_user_profile_path",
+        "is_system_path",
+        "is_script_interpreter",
+        "parent_is_office_app",
+        "parent_is_script_interpreter",
+        "behavior_embedding_0",
+        "behavior_embedding_1",
+        "behavior_embedding_2",
+        "behavior_embedding_3",
+        "isolation_forest_score",
+        "autoencoder_score",
+        "dual_ai_consensus_score",
+        "delta_seconds"
+    ],
+    "paired_samples": 3638,
+    "session_count": 1469,
+    "eligible_sessions": 16,
+    "maximum_session_depth": 27,
+    "temporal_windows": 160,
+    "unique_window_processes": 9,
+    "matrix_shape": [
+        160,
+        8,
+        27
+    ],
+    "top_processes": [
+        {
+            "process_name": "svchost.exe",
+            "windows": 70
+        },
+        {
+            "process_name": "wudfhost.exe",
+            "windows": 20
+        },
+        {
+            "process_name": "smss.exe",
+            "windows": 10
+        },
+        {
+            "process_name": "csrss.exe",
+            "windows": 10
+        },
+        {
+            "process_name": "wininit.exe",
+            "windows": 10
+        },
+        {
+            "process_name": "services.exe",
+            "windows": 10
+        },
+        {
+            "process_name": "lsaiso.exe",
+            "windows": 10
+        },
+        {
+            "process_name": "lsass.exe",
+            "windows": 10
+        },
+        {
+            "process_name": "fontdrvhost.exe",
+            "windows": 10
+        }
+    ],
+    "rejections": {
+        "missing_autoencoder": 2
+    },
+    "readiness_checks": {
+        "enough_paired_samples": true,
+        "enough_eligible_sessions": true,
+        "enough_windows": true,
+        "enough_process_diversity": true
+    },
+    "ready_for_training": true,
+    "dataset_fingerprint_sha256": "a0691707cd71a6edf9e342edb39afca16d8123c8da5f36edad2efd0f44bedc0e",
+    "note": "Temporal sequences are unlabeled endpoint behavior and are not malicious/benign ground-truth labels."
+}

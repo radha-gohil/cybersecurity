@@ -4,6 +4,8 @@ import {
     Route,
 } from "react-router-dom";
 
+import SystemHealth from "./pages/SystemHealth";
+
 import Layout from "./components/Layout";
 
 import Dashboard from "./pages/Dashboard";
@@ -33,6 +35,12 @@ function App() {
                     {/* =========================================
                         EXISTING DASHBOARD
                     ========================================== */}
+                    <Route
+                        path="/health"
+                        element={
+                            <SystemHealth />
+                        }
+                    />
 
                     <Route
                         path="/"

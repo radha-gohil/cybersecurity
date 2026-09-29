@@ -1,30 +1,109 @@
-from endpoint.models.security_event import SecurityEvent
-from endpoint.storage.database import save_event
-from endpoint.utils.logger import get_logger
+from __future__ import annotations
+
+
+from endpoint.models.security_event import (
+    SecurityEvent,
+)
+
+from endpoint.storage.database import (
+    save_event,
+)
+
+from endpoint.utils.logger import (
+    get_logger,
+)
+
 
 from detection.fusion.correlation_manager import (
     CorrelationManager,
 )
 
 
-logger = get_logger(__name__)
+from ai_detection.graph.provenance_graph_builder import (
+    ProvenanceGraphBuilder,
+)
 
 
-# ============================================================
+logger = get_logger(
+    __name__
+)
+
+
+# ================================================================
 # SHARED CORRELATION MANAGER
-# ============================================================
-
-# One shared manager for all telemetry events handled
-# inside this Python process.
+# ================================================================
 #
-# This means file, process, network, and registry events
-# can all contribute to the same evolving incident.
+# One correlation manager is shared by all TelemetryManager
+# instances inside this Python process.
+#
+# This allows:
+#
+#   Process
+#   File
+#   Network
+#   Registry
+#
+# events to contribute to the same evolving incident.
+# ================================================================
+
 shared_correlation_manager = (
     CorrelationManager(
-        correlation_window_seconds=120,
-        incident_threshold=35,
+
+        correlation_window_seconds=
+            120,
+
+        incident_threshold=
+            35,
     )
 )
+
+
+# ================================================================
+# SHARED PROVENANCE GRAPH BUILDER
+#
+# Lazy initialization is intentional.
+#
+# We do NOT create the graph database simply because this module
+# was imported.
+#
+# The first TelemetryManager instance that needs the graph creates
+# it.
+#
+# ProvenanceGraphStore uses short-lived SQLite connections, so this
+# builder is safe to share between collector threads.
+# ================================================================
+
+_shared_provenance_graph_builder = None
+
+
+def get_shared_provenance_graph_builder():
+
+    global _shared_provenance_graph_builder
+
+
+    if (
+        _shared_provenance_graph_builder
+        is None
+    ):
+
+        _shared_provenance_graph_builder = (
+            ProvenanceGraphBuilder()
+        )
+
+
+        logger.info(
+            "SENTINEL-X Provenance Graph initialized."
+        )
+
+
+    return (
+        _shared_provenance_graph_builder
+    )
+
+
+# ================================================================
+# TELEMETRY MANAGER
+# ================================================================
 
 
 class TelemetryManager:
@@ -32,9 +111,59 @@ class TelemetryManager:
     def __init__(
         self,
         device_id: str = "local-device",
+        provenance_builder=None,
+        correlation_manager=None,
     ):
 
-        self.device_id = device_id
+        # ========================================================
+        # DEVICE
+        # ========================================================
+
+        self.device_id = (
+            device_id
+        )
+
+
+        # ========================================================
+        # PROVENANCE GRAPH
+        #
+        # Tests can inject their own isolated builder.
+        #
+        # Production automatically receives the shared graph
+        # builder.
+        # ========================================================
+
+        self.provenance_builder = (
+
+            provenance_builder
+
+            if provenance_builder
+            is not None
+
+            else
+            get_shared_provenance_graph_builder()
+        )
+
+
+        # ========================================================
+        # CORRELATION
+        #
+        # Tests can inject a controlled correlation manager.
+        #
+        # Production automatically uses the existing shared
+        # CorrelationManager.
+        # ========================================================
+
+        self.correlation_manager = (
+
+            correlation_manager
+
+            if correlation_manager
+            is not None
+
+            else
+            shared_correlation_manager
+        )
 
 
     # ============================================================
@@ -52,12 +181,20 @@ class TelemetryManager:
         ).lower()
 
 
+        # ========================================================
+        # PROCESS
+        # ========================================================
+
         if event_type.startswith(
             "process"
         ):
 
             return "PROCESS"
 
+
+        # ========================================================
+        # FILE
+        # ========================================================
 
         if event_type.startswith(
             "file"
@@ -66,12 +203,20 @@ class TelemetryManager:
             return "FILE"
 
 
+        # ========================================================
+        # NETWORK
+        # ========================================================
+
         if event_type.startswith(
             "network"
         ):
 
             return "NETWORK"
 
+
+        # ========================================================
+        # REGISTRY
+        # ========================================================
 
         if event_type.startswith(
             "registry"
@@ -80,6 +225,10 @@ class TelemetryManager:
             return "REGISTRY"
 
 
+        # ========================================================
+        # STARTUP
+        # ========================================================
+
         if event_type.startswith(
             "startup"
         ):
@@ -87,12 +236,20 @@ class TelemetryManager:
             return "STARTUP"
 
 
+        # ========================================================
+        # SECURITY
+        # ========================================================
+
         if event_type.startswith(
             "security"
         ):
 
             return "SECURITY"
 
+
+        # ========================================================
+        # RESPONSE
+        # ========================================================
 
         if event_type.startswith(
             "response"
@@ -105,7 +262,340 @@ class TelemetryManager:
 
 
     # ============================================================
+    # WRITE EVENT TO PROVENANCE GRAPH
+    #
+    # IMPORTANT:
+    #
+    # Provenance failure must NEVER stop:
+    #
+    #       raw telemetry
+    #       detection
+    #       correlation
+    #       incident creation
+    #
+    # It is an additional intelligence layer.
+    # ============================================================
+
+    def write_provenance_graph(
+        self,
+        event,
+    ):
+
+        if (
+            self.provenance_builder
+            is None
+        ):
+
+            return None
+
+
+        try:
+
+            # SecurityEvent already provides to_dict().
+            event_dict = (
+                event.to_dict()
+            )
+
+
+            graph_result = (
+                self.provenance_builder
+                .build_from_event(
+                    event_dict
+                )
+            )
+
+
+            logger.info(
+                "Provenance graph updated | "
+                "EventID=%s | "
+                "Category=%s | "
+                "Nodes=%s | "
+                "Edges=%s",
+
+                event.event_id,
+
+                graph_result.get(
+                    "category"
+                ),
+
+                len(
+                    graph_result.get(
+                        "nodes",
+                        {},
+                    )
+                ),
+
+                graph_result.get(
+                    "edge_count",
+                    0,
+                ),
+            )
+
+
+            return (
+                graph_result
+            )
+
+
+        except Exception as error:
+
+            # ----------------------------------------------------
+            # Provenance processing is intentionally isolated.
+            #
+            # A graph problem must not interrupt endpoint
+            # telemetry.
+            # ----------------------------------------------------
+
+            logger.exception(
+                "Provenance graph processing failed | "
+                "EventID=%s | %s",
+
+                event.event_id,
+
+                error,
+            )
+
+
+            return None
+
+
+    # ============================================================
+    # PROCESS CORRELATION
+    # ============================================================
+
+    def process_correlation(
+        self,
+        event,
+    ):
+
+        try:
+
+            correlation_result = (
+                self.correlation_manager
+                .process_event(
+                    event
+                )
+            )
+
+
+            if not isinstance(
+                correlation_result,
+                dict,
+            ):
+
+                correlation_result = {}
+
+
+            correlation = (
+                correlation_result.get(
+                    "correlation",
+                    {},
+                )
+            )
+
+
+            if not isinstance(
+                correlation,
+                dict,
+            ):
+
+                correlation = {}
+
+
+            correlation_score = (
+                correlation.get(
+                    "correlation_score",
+                    0,
+                )
+            )
+
+
+            related_event_count = (
+                correlation.get(
+                    "related_event_count",
+                    0,
+                )
+            )
+
+
+            # ====================================================
+            # CORRELATED EVENT
+            # ====================================================
+
+            if (
+                correlation.get(
+                    "correlated",
+                    False,
+                )
+            ):
+
+                logger.info(
+                    "Event correlation detected | "
+                    "EventID=%s | "
+                    "Score=%s | "
+                    "RelatedEvents=%s",
+
+                    event.event_id,
+
+                    correlation_score,
+
+                    related_event_count,
+                )
+
+
+            # ====================================================
+            # INCIDENT CREATED
+            # ====================================================
+
+            if correlation_result.get(
+                "incident_created",
+                False,
+            ):
+
+                incident = (
+                    correlation_result.get(
+                        "incident",
+                        {},
+                    )
+                )
+
+
+                if not isinstance(
+                    incident,
+                    dict,
+                ):
+
+                    incident = {}
+
+
+                logger.warning(
+                    "Incident created | "
+                    "IncidentID=%s | "
+                    "Title=%s | "
+                    "Score=%s | "
+                    "Severity=%s | "
+                    "Events=%s",
+
+                    incident.get(
+                        "incident_id"
+                    ),
+
+                    incident.get(
+                        "title"
+                    ),
+
+                    incident.get(
+                        "correlation_score"
+                    ),
+
+                    incident.get(
+                        "severity"
+                    ),
+
+                    incident.get(
+                        "event_count"
+                    ),
+                )
+
+
+            # ====================================================
+            # INCIDENT UPDATED
+            # ====================================================
+
+            elif correlation_result.get(
+                "incident_updated",
+                False,
+            ):
+
+                incident = (
+                    correlation_result.get(
+                        "incident",
+                        {},
+                    )
+                )
+
+
+                if not isinstance(
+                    incident,
+                    dict,
+                ):
+
+                    incident = {}
+
+
+                logger.warning(
+                    "Incident updated | "
+                    "IncidentID=%s | "
+                    "Title=%s | "
+                    "Score=%s | "
+                    "Severity=%s | "
+                    "Events=%s",
+
+                    incident.get(
+                        "incident_id"
+                    ),
+
+                    incident.get(
+                        "title"
+                    ),
+
+                    incident.get(
+                        "correlation_score"
+                    ),
+
+                    incident.get(
+                        "severity"
+                    ),
+
+                    incident.get(
+                        "event_count"
+                    ),
+                )
+
+
+            return (
+                correlation_result
+            )
+
+
+        except Exception as error:
+
+            # ----------------------------------------------------
+            # Correlation failure must NEVER stop telemetry
+            # collection.
+            # ----------------------------------------------------
+
+            logger.exception(
+                "Correlation processing failed | "
+                "EventID=%s | %s",
+
+                event.event_id,
+
+                error,
+            )
+
+
+            return None
+
+
+    # ============================================================
     # EMIT TELEMETRY EVENT
+    #
+    # FINAL PIPELINE
+    #
+    # Collector
+    #     ↓
+    # TelemetryManager.emit()
+    #     ↓
+    # SecurityEvent
+    #     ↓
+    # Raw event persistence
+    #     ↓
+    # Provenance graph
+    #     ↓
+    # Correlation
+    #     ↓
+    # Incident creation / update
     # ============================================================
 
     def emit(
@@ -120,29 +610,33 @@ class TelemetryManager:
         metadata: dict = None,
     ):
 
-        # --------------------------------------------------------
+        # ========================================================
         # NORMALIZE INPUT
-        # --------------------------------------------------------
+        # ========================================================
 
         process = (
             process
             or {}
         )
 
+
         file = (
             file
             or {}
         )
+
 
         network = (
             network
             or {}
         )
 
+
         registry = (
             registry
             or {}
         )
+
 
         metadata = (
             metadata
@@ -150,9 +644,9 @@ class TelemetryManager:
         )
 
 
-        # --------------------------------------------------------
+        # ========================================================
         # CATEGORY
-        # --------------------------------------------------------
+        # ========================================================
 
         category = (
             self.get_event_category(
@@ -161,9 +655,9 @@ class TelemetryManager:
         )
 
 
-        # --------------------------------------------------------
-        # ADD CENTRAL TELEMETRY METADATA
-        # --------------------------------------------------------
+        # ========================================================
+        # CENTRAL TELEMETRY METADATA
+        # ========================================================
 
         metadata = dict(
             metadata
@@ -181,9 +675,9 @@ class TelemetryManager:
         )
 
 
-        # --------------------------------------------------------
+        # ========================================================
         # CREATE SECURITY EVENT
-        # --------------------------------------------------------
+        # ========================================================
 
         event = (
             SecurityEvent(
@@ -218,9 +712,9 @@ class TelemetryManager:
         )
 
 
-        # --------------------------------------------------------
-        # SAVE RAW TELEMETRY
-        # --------------------------------------------------------
+        # ========================================================
+        # 1. SAVE RAW TELEMETRY
+        # ========================================================
 
         save_event(
             event
@@ -241,181 +735,93 @@ class TelemetryManager:
         )
 
 
-        # --------------------------------------------------------
-        # CORRELATION
-        # --------------------------------------------------------
+        # ========================================================
+        # 2. PROVENANCE GRAPH
+        #
+        # Every SecurityEvent now automatically updates the graph.
+        # ========================================================
 
-        try:
+        provenance_result = (
+            self.write_provenance_graph(
+                event
+            )
+        )
 
-            correlation_result = (
-                shared_correlation_manager.process_event(
-                    event
-                )
+
+        # ========================================================
+        # 3. CORRELATION
+        # ========================================================
+
+        correlation_result = (
+            self.process_correlation(
+                event
+            )
+        )
+
+
+        # ========================================================
+        # OPTIONAL RUNTIME METADATA
+        #
+        # This modifies only the returned in-memory SecurityEvent.
+        # Raw event persistence already happened above.
+        # ========================================================
+
+        if isinstance(
+            event.metadata,
+            dict,
+        ):
+
+            event.metadata[
+                "provenance_graph"
+            ] = {
+                "processed":
+                    provenance_result
+                    is not None,
+
+                "node_count":
+                    (
+                        len(
+                            provenance_result.get(
+                                "nodes",
+                                {},
+                            )
+                        )
+
+                        if isinstance(
+                            provenance_result,
+                            dict,
+                        )
+
+                        else 0
+                    ),
+
+                "edge_count":
+                    (
+                        provenance_result.get(
+                            "edge_count",
+                            0,
+                        )
+
+                        if isinstance(
+                            provenance_result,
+                            dict,
+                        )
+
+                        else 0
+                    ),
+            }
+
+
+            event.metadata[
+                "correlation_processed"
+            ] = (
+                correlation_result
+                is not None
             )
 
 
-            correlation = (
-                correlation_result.get(
-                    "correlation",
-                    {}
-                )
-            )
-
-
-            correlation_score = (
-                correlation.get(
-                    "correlation_score",
-                    0,
-                )
-            )
-
-
-            related_event_count = (
-                correlation.get(
-                    "related_event_count",
-                    0,
-                )
-            )
-
-
-            # ----------------------------------------------------
-            # CORRELATION LOG
-            # ----------------------------------------------------
-
-            if (
-                correlation.get(
-                    "correlated",
-                    False,
-                )
-            ):
-
-                logger.info(
-                    "Event correlation detected | "
-                    "EventID=%s | "
-                    "Score=%s | "
-                    "RelatedEvents=%s",
-
-                    event.event_id,
-
-                    correlation_score,
-
-                    related_event_count,
-                )
-
-
-            # ----------------------------------------------------
-            # INCIDENT CREATED
-            # ----------------------------------------------------
-
-            if correlation_result.get(
-                "incident_created",
-                False,
-            ):
-
-                incident = (
-                    correlation_result.get(
-                        "incident",
-                        {}
-                    )
-                )
-
-
-                logger.warning(
-                    "Incident created | "
-                    "IncidentID=%s | "
-                    "Title=%s | "
-                    "Score=%s | "
-                    "Severity=%s | "
-                    "Events=%s",
-
-                    incident.get(
-                        "incident_id"
-                    ),
-
-                    incident.get(
-                        "title"
-                    ),
-
-                    incident.get(
-                        "correlation_score"
-                    ),
-
-                    incident.get(
-                        "severity"
-                    ),
-
-                    incident.get(
-                        "event_count"
-                    ),
-                )
-
-
-            # ----------------------------------------------------
-            # INCIDENT UPDATED
-            # ----------------------------------------------------
-
-            elif correlation_result.get(
-                "incident_updated",
-                False,
-            ):
-
-                incident = (
-                    correlation_result.get(
-                        "incident",
-                        {}
-                    )
-                )
-
-
-                logger.warning(
-                    "Incident updated | "
-                    "IncidentID=%s | "
-                    "Title=%s | "
-                    "Score=%s | "
-                    "Severity=%s | "
-                    "Events=%s",
-
-                    incident.get(
-                        "incident_id"
-                    ),
-
-                    incident.get(
-                        "title"
-                    ),
-
-                    incident.get(
-                        "correlation_score"
-                    ),
-
-                    incident.get(
-                        "severity"
-                    ),
-
-                    incident.get(
-                        "event_count"
-                    ),
-                )
-
-
-        except Exception as error:
-
-            # ----------------------------------------------------
-            # Correlation failure must NEVER stop telemetry
-            # collection.
-            # ----------------------------------------------------
-
-            logger.error(
-                "Correlation processing failed | "
-                "EventID=%s | %s",
-
-                event.event_id,
-
-                error,
-            )
-
-
-        # --------------------------------------------------------
+        # ========================================================
         # RETURN SECURITY EVENT
-        # --------------------------------------------------------
+        # ========================================================
 
         return event

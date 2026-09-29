@@ -1,0 +1,70 @@
+{
+  "model": "sentinelx_graph_encoder_v1",
+  "learning_mode": "SELF_SUPERVISED_MASKED_FEATURE_RECONSTRUCTION",
+  "ground_truth_labels_used": false,
+  "classifier_trained": false,
+  "dataset_path": "C:\\Users\\T10002\\Downloads\\cyber\\data\\graph\\sentinelx_process_graph_dataset_v1.npz",
+  "model_path": "C:\\Users\\T10002\\Downloads\\cyber\\models\\graph\\sentinelx_graph_encoder_v1.pt",
+  "metadata_path": "C:\\Users\\T10002\\Downloads\\cyber\\models\\graph\\sentinelx_graph_encoder_v1_metadata.json",
+  "embeddings_path": "C:\\Users\\T10002\\Downloads\\cyber\\models\\graph\\sentinelx_graph_encoder_v1_embeddings.npz",
+  "total_graph_count": 15,
+  "total_node_count": 721,
+  "total_edge_count": 1052,
+  "feature_count": 32,
+  "embedding_dimension": 64,
+  "train_graph_count": 12,
+  "validation_graph_count": 3,
+  "validation_available": true,
+  "train_indices": [
+    6,
+    7,
+    9,
+    3,
+    0,
+    11,
+    14,
+    10,
+    5,
+    2,
+    4,
+    12
+  ],
+  "validation_indices": [
+    1,
+    13,
+    8
+  ],
+  "final_masked_training_loss": 0.005369814112782478,
+  "full_train_reconstruction_loss": 0.005669854581356049,
+  "train_embedding_health": {
+    "count": 12,
+    "dimension": 64,
+    "finite": true,
+    "all_zero_fraction": 0.0,
+    "unique_fraction": 0.6666666666666666,
+    "mean_norm": 8.490763664245605
+  },
+  "train_embedding_health_pass": true,
+  "entire_dataset_embedding_health": {
+    "count": 15,
+    "dimension": 64,
+    "finite": true,
+    "all_zero_fraction": 0.0,
+    "unique_fraction": 0.6666666666666666,
+    "mean_norm": 8.490775108337402
+  },
+  "entire_dataset_embedding_health_pass": true,
+  "validation": {
+    "masked_reconstruction_loss": 0.01085646077990532,
+    "embedding_health": {
+      "count": 3,
+      "dimension": 64,
+      "finite": true,
+      "all_zero_fraction": 0.0,
+      "unique_fraction": 1.0,
+      "mean_norm": 8.490066528320312
+    },
+    "embedding_health_pass": true
+  },
+  "interpretation": "The 64-D output is a learned process-centered graph representation. It is not a malware probability, attack probability, or calibrated threat score."
+}

@@ -1,0 +1,68 @@
+{
+    "dataset_version": "v3",
+    "schema_version": "process_temporal_schema_v2",
+    "created_at": "2026-09-29T05:56:57.644696+00:00",
+    "source_dataset": "C:\\Users\\T10002\\Downloads\\cyber\\data\\temporal\\process_sequence_dataset_v2.npz",
+    "output_dataset": "C:\\Users\\T10002\\Downloads\\cyber\\data\\temporal\\process_sequence_dataset_v3.npz",
+    "output_split_dataset": "C:\\Users\\T10002\\Downloads\\cyber\\data\\temporal\\process_sequence_splits_v2.npz",
+    "scaler": "C:\\Users\\T10002\\Downloads\\cyber\\models\\temporal\\process_temporal_scaler_v2.joblib",
+    "source_shape": [
+        160,
+        8,
+        27
+    ],
+    "corrected_shape": [
+        160,
+        8,
+        26
+    ],
+    "source_feature_count": 27,
+    "corrected_feature_count": 26,
+    "removed_feature": {
+        "name": "process_age_seconds",
+        "source_index": 5,
+        "reason": "Absolute process age showed severe live/training distribution shift and is non-stationary across endpoint uptime."
+    },
+    "feature_names": [
+        "cpu_percent",
+        "memory_percent",
+        "rss_mb",
+        "num_threads",
+        "num_handles",
+        "child_process_count",
+        "network_connection_count",
+        "unique_remote_ip_count",
+        "recent_event_count",
+        "command_line_length",
+        "command_arg_count",
+        "executable_path_depth",
+        "is_temp_path",
+        "is_user_profile_path",
+        "is_system_path",
+        "is_script_interpreter",
+        "parent_is_office_app",
+        "parent_is_script_interpreter",
+        "behavior_embedding_0",
+        "behavior_embedding_1",
+        "behavior_embedding_2",
+        "behavior_embedding_3",
+        "isolation_forest_score",
+        "autoencoder_score",
+        "dual_ai_consensus_score",
+        "delta_seconds"
+    ],
+    "split": {
+        "random_state": 42,
+        "train_ratio": 0.7,
+        "validation_ratio": 0.15,
+        "test_ratio": 0.15,
+        "train_windows": 110,
+        "validation_windows": 20,
+        "test_windows": 30,
+        "train_sessions": 11,
+        "validation_sessions": 2,
+        "test_sessions": 3
+    },
+    "leakage_policy": "Complete sessions are assigned to exactly one train/validation/test split.",
+    "scientific_note": "process_age_seconds remains available to snapshot behavioral models but is intentionally excluded from the Temporal Transformer because absolute process age is non-stationary and redundant with sequence timing information."
+}

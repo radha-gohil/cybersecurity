@@ -1,0 +1,109 @@
+{
+    "dataset_name": "sentinelx_process_temporal_sequence_dataset",
+    "dataset_version": "v1",
+    "created_at": "2026-09-29T04:02:22.361805+00:00",
+    "purpose": "Self-supervised temporal endpoint process sequence modeling",
+    "sequence_configuration": {
+        "sequence_length": 8,
+        "window_stride": 2,
+        "max_session_gap_seconds": 45.0
+    },
+    "model_sources": {
+        "isolation_forest_version": "v1",
+        "autoencoder_version": "v2",
+        "autoencoder_embedding_dimension": 4
+    },
+    "feature_schema": {
+        "base_behavior_features": [
+            "cpu_percent",
+            "memory_percent",
+            "rss_mb",
+            "num_threads",
+            "num_handles",
+            "process_age_seconds",
+            "child_process_count",
+            "network_connection_count",
+            "unique_remote_ip_count",
+            "recent_event_count",
+            "command_line_length",
+            "command_arg_count",
+            "executable_path_depth",
+            "is_temp_path",
+            "is_user_profile_path",
+            "is_system_path",
+            "is_script_interpreter",
+            "parent_is_office_app",
+            "parent_is_script_interpreter"
+        ],
+        "embedding_features": [
+            "behavior_embedding_0",
+            "behavior_embedding_1",
+            "behavior_embedding_2",
+            "behavior_embedding_3"
+        ],
+        "temporal_feature_names": [
+            "cpu_percent",
+            "memory_percent",
+            "rss_mb",
+            "num_threads",
+            "num_handles",
+            "process_age_seconds",
+            "child_process_count",
+            "network_connection_count",
+            "unique_remote_ip_count",
+            "recent_event_count",
+            "command_line_length",
+            "command_arg_count",
+            "executable_path_depth",
+            "is_temp_path",
+            "is_user_profile_path",
+            "is_system_path",
+            "is_script_interpreter",
+            "parent_is_office_app",
+            "parent_is_script_interpreter",
+            "behavior_embedding_0",
+            "behavior_embedding_1",
+            "behavior_embedding_2",
+            "behavior_embedding_3",
+            "isolation_forest_score",
+            "autoencoder_score",
+            "dual_ai_consensus_score",
+            "delta_seconds"
+        ],
+        "timestep_feature_count": 27
+    },
+    "dataset_statistics": {
+        "raw_paired_groups": 1554,
+        "valid_paired_samples": 1552,
+        "sessions": 1552,
+        "eligible_sessions": 0,
+        "short_sessions": 1552,
+        "windows": 0,
+        "unique_window_processes": 0,
+        "sequence_matrix_shape": [
+            0,
+            8,
+            27
+        ],
+        "session_length_min": 1,
+        "session_length_max": 1,
+        "session_length_mean": 1.0
+    },
+    "top_window_processes": [],
+    "rejections": {
+        "missing_autoencoder": 2
+    },
+    "readiness_checks": {
+        "enough_paired_samples": true,
+        "enough_sessions": false,
+        "enough_windows": false,
+        "enough_process_diversity": false,
+        "correct_sequence_length": false,
+        "correct_timestep_dimension": false
+    },
+    "ready_for_temporal_training": false,
+    "dataset_fingerprint_sha256": null,
+    "dataset_path": "C:\\Users\\T10002\\Downloads\\cyber\\data\\temporal\\process_sequence_dataset_v1.npz",
+    "metadata_path": "C:\\Users\\T10002\\Downloads\\cyber\\data\\temporal\\process_sequence_dataset_v1_metadata.json",
+    "important_note": "Windows are unlabeled behavioral sequences. They must not be treated as malicious/benign ground truth."
+}

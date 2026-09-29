@@ -1,0 +1,110 @@
+{
+    "calibration_name": "sentinelx_temporal_anomaly_calibration",
+    "calibration_version": "v2",
+    "schema_version": "process_temporal_schema_v2",
+    "created_at": "2026-09-29T06:07:31.084141+00:00",
+    "model_name": "sentinelx_process_temporal_transformer",
+    "model_version": "v2",
+    "model_path": "C:\\Users\\T10002\\Downloads\\cyber\\models\\temporal\\sentinelx_process_temporal_transformer_v2.pt",
+    "input_feature_count": 26,
+    "sequence_length": 8,
+    "calibration_source": "validation_split_only",
+    "validation_window_count": 20,
+    "reconstruction_error_method": "leave_one_complete_timestep_out_mse",
+    "validation_error_statistics": {
+        "count": 20,
+        "min": 0.020230436697602272,
+        "max": 1.2000831365585327,
+        "mean": 0.4015107486397028,
+        "std": 0.3842698718098095,
+        "p50": 0.3087606877088547,
+        "p75": 0.7967473417520523,
+        "p90": 0.8634883880615234,
+        "p95": 0.8847947269678118,
+        "p97": 1.0109100908041,
+        "p99": 1.137025454640388
+    },
+    "score_anchors": [
+        {
+            "name": "minimum",
+            "error": 0.020230436697602272,
+            "score": 0.0
+        },
+        {
+            "name": "median",
+            "error": 0.3087606877088547,
+            "score": 10.0
+        },
+        {
+            "name": "p90",
+            "error": 0.8634883880615234,
+            "score": 30.0
+        },
+        {
+            "name": "p95",
+            "error": 0.8847947269678118,
+            "score": 40.0
+        },
+        {
+            "name": "p97",
+            "error": 1.0109100908041,
+            "score": 60.0
+        },
+        {
+            "name": "p99",
+            "error": 1.137025454640388,
+            "score": 80.0
+        },
+        {
+            "name": "maximum",
+            "error": 1.2000831365585327,
+            "score": 95.0
+        }
+    ],
+    "tail_scale": 0.3842698718098095,
+    "labels": {
+        "NORMAL": {
+            "minimum_score": 0.0,
+            "maximum_score_exclusive": 40.0
+        },
+        "UNUSUAL": {
+            "minimum_score": 40.0,
+            "maximum_score_exclusive": 60.0
+        },
+        "SUSPICIOUS": {
+            "minimum_score": 60.0,
+            "maximum_score_exclusive": 80.0
+        },
+        "HIGH_ANOMALY": {
+            "minimum_score": 80.0,
+            "maximum_score": 100.0
+        }
+    },
+    "signal_policy": {
+        "active_threshold": 60.0,
+        "strong_threshold": 80.0,
+        "critical_from_temporal_alone": false
+    },
+    "representation_dimension": 64,
+    "representation_health": {
+        "healthy": true,
+        "sample_count": 20,
+        "dimension_count": 64,
+        "active_dimension_count": 64,
+        "active_dimension_percent": 100.0,
+        "unique_representation_count": 20,
+        "unique_representation_percent": 100.0,
+        "mean_dimension_std": 0.7095603942871094,
+        "minimum_dimension_std": 0.13357871770858765,
+        "maximum_dimension_std": 2.3469932079315186,
+        "matrix_rank": 19,
+        "checks": {
+            "active_dimensions": true,
+            "representation_diversity": true,
+            "nonzero_variance": true
+        }
+    },
+    "removed_feature": "process_age_seconds",
+    "test_split_used": false,
+    "scientific_note": "The temporal anomaly score is calibrated relative to validation reconstruction errors. It is not malware probability."
+}

@@ -1,0 +1,468 @@
+{
+    "preprocessor_name": "sentinelx_process_temporal_preprocessor",
+    "preprocessor_version": "v1",
+    "created_at": "2026-09-29T04:18:43.522945+00:00",
+    "source_dataset": "C:\\Users\\T10002\\Downloads\\cyber\\data\\temporal\\process_sequence_dataset_v2.npz",
+    "source_dataset_sha256": "be68d562e957c22f602af43d33075158059fa6673c5ed22bc44a71f28af14396",
+    "output_dataset": "C:\\Users\\T10002\\Downloads\\cyber\\data\\temporal\\process_sequence_splits_v1.npz",
+    "scaler_path": "C:\\Users\\T10002\\Downloads\\cyber\\models\\temporal\\process_temporal_scaler_v1.joblib",
+    "split_strategy": {
+        "type": "session_aware",
+        "random_state": 42,
+        "train_ratio": 0.7,
+        "validation_ratio": 0.15,
+        "test_ratio": 0.15,
+        "important": "All overlapping windows belonging to one session remain in the same split."
+    },
+    "dataset": {
+        "total_windows": 160,
+        "sequence_length": 8,
+        "feature_count": 27,
+        "total_sessions": 16,
+        "total_process_names": 9
+    },
+    "splits": {
+        "train": {
+            "name": "train",
+            "windows": 120,
+            "sessions": 12,
+            "unique_processes": 7,
+            "top_processes": [
+                {
+                    "process_name": "svchost.exe",
+                    "window_count": 60
+                },
+                {
+                    "process_name": "csrss.exe",
+                    "window_count": 10
+                },
+                {
+                    "process_name": "wininit.exe",
+                    "window_count": 10
+                },
+                {
+                    "process_name": "lsaiso.exe",
+                    "window_count": 10
+                },
+                {
+                    "process_name": "lsass.exe",
+                    "window_count": 10
+                },
+                {
+                    "process_name": "fontdrvhost.exe",
+                    "window_count": 10
+                },
+                {
+                    "process_name": "wudfhost.exe",
+                    "window_count": 10
+                }
+            ],
+            "window_percent": 75.0,
+            "session_ids": [
+                "1472::WUDFHost.exe::2026-09-29T04:00:30.566088+00:00",
+                "804::csrss.exe::2026-09-29T04:00:27.728720+00:00",
+                "1968::svchost.exe::2026-09-29T04:00:34.108282+00:00",
+                "1960::svchost.exe::2026-09-29T04:00:33.778200+00:00",
+                "1656::svchost.exe::2026-09-29T04:00:31.953498+00:00",
+                "1240::lsass.exe::2026-09-29T04:00:29.576021+00:00",
+                "1064::wininit.exe::2026-09-29T04:00:28.169315+00:00",
+                "1580::svchost.exe::2026-09-29T04:00:30.946035+00:00",
+                "2000::svchost.exe::2026-09-29T04:00:34.846356+00:00",
+                "1428::fontdrvhost.exe::2026-09-29T04:00:30.250995+00:00",
+                "1220::LsaIso.exe::2026-09-29T04:00:29.253293+00:00",
+                "1408::svchost.exe::2026-09-29T04:00:29.894716+00:00"
+            ]
+        },
+        "validation": {
+            "name": "validation",
+            "windows": 20,
+            "sessions": 2,
+            "unique_processes": 2,
+            "top_processes": [
+                {
+                    "process_name": "smss.exe",
+                    "window_count": 10
+                },
+                {
+                    "process_name": "services.exe",
+                    "window_count": 10
+                }
+            ],
+            "window_percent": 12.5,
+            "session_ids": [
+                "668::smss.exe::2026-09-29T04:00:27.360843+00:00",
+                "1200::services.exe::2026-09-29T04:00:28.546213+00:00"
+            ]
+        },
+        "test": {
+            "name": "test",
+            "windows": 20,
+            "sessions": 2,
+            "unique_processes": 2,
+            "top_processes": [
+                {
+                    "process_name": "wudfhost.exe",
+                    "window_count": 10
+                },
+                {
+                    "process_name": "svchost.exe",
+                    "window_count": 10
+                }
+            ],
+            "window_percent": 12.5,
+            "session_ids": [
+                "2016::svchost.exe::2026-09-29T04:00:35.271875+00:00",
+                "1640::WUDFHost.exe::2026-09-29T04:00:31.594553+00:00"
+            ]
+        }
+    },
+    "normalization": {
+        "type": "StandardScaler",
+        "fit_on": "training_split_only",
+        "training_timesteps_used": 960,
+        "feature_names": [
+            "cpu_percent",
+            "memory_percent",
+            "rss_mb",
+            "num_threads",
+            "num_handles",
+            "process_age_seconds",
+            "child_process_count",
+            "network_connection_count",
+            "unique_remote_ip_count",
+            "recent_event_count",
+            "command_line_length",
+            "command_arg_count",
+            "executable_path_depth",
+            "is_temp_path",
+            "is_user_profile_path",
+            "is_system_path",
+            "is_script_interpreter",
+            "parent_is_office_app",
+            "parent_is_script_interpreter",
+            "behavior_embedding_0",
+            "behavior_embedding_1",
+            "behavior_embedding_2",
+            "behavior_embedding_3",
+            "isolation_forest_score",
+            "autoencoder_score",
+            "dual_ai_consensus_score",
+            "delta_seconds"
+        ],
+        "mean": [
+            0.32041666912846267,
+            0.12069618815633779,
+            19.487569173177082,
+            8.14375,
+            700.1,
+            677506.5870442708,
+            2.434375,
+            0.0,
+            0.0,
+            10.684375,
+            0.0,
+            0.0,
+            4.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.5863469364858853,
+            0.26933635738678274,
+            -0.38231940123563013,
+            0.7965098459118356,
+            4.176947920264987,
+            22.216229199618102,
+            12.333187446681162,
+            16.918622362116974
+        ],
+        "scale": [
+            0.884130838051082,
+            0.12849696491736776,
+            20.74892463084424,
+            6.862500948694487,
+            819.339581868625,
+            107.49472122737913,
+            10.055774958999372,
+            1.0,
+            1.0,
+            12.079311067249472,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            0.110890544577312,
+            0.10084493487472337,
+            0.07455282100678357,
+            0.22304827907810595,
+            8.197975728246016,
+            22.070832240170855,
+            12.471071577929743,
+            26.24980739307736
+        ]
+    },
+    "training_feature_statistics_before_normalization": {
+        "cpu_percent": {
+            "mean": 0.32041666912846267,
+            "std": 0.8841308380510906,
+            "min": 0.0,
+            "max": 12.5,
+            "p50": 0.0,
+            "p95": 1.7000000476837158,
+            "p99": 4.400000095367432
+        },
+        "memory_percent": {
+            "mean": 0.12069618815633779,
+            "std": 0.12849696491736745,
+            "min": 0.02719547227025032,
+            "max": 0.4663636386394501,
+            "p50": 0.0614317636936903,
+            "p95": 0.46070194244384766,
+            "p99": 0.4632349449396133
+        },
+        "rss_mb": {
+            "mean": 19.487569173177082,
+            "std": 20.748924630844307,
+            "min": 4.390625,
+            "max": 75.29296875,
+            "p50": 9.91796875,
+            "p95": 74.37890625,
+            "p99": 74.7878515625
+        },
+        "num_threads": {
+            "mean": 8.14375,
+            "std": 6.862500948694531,
+            "min": 2.0,
+            "max": 32.0,
+            "p50": 6.0,
+            "p95": 26.0,
+            "p99": 31.0
+        },
+        "num_handles": {
+            "mean": 700.1,
+            "std": 819.3395818686331,
+            "min": 44.0,
+            "max": 2952.0,
+            "p50": 279.5,
+            "p95": 2821.0,
+            "p99": 2850.0
+        },
+        "process_age_seconds": {
+            "mean": 677506.5870442708,
+            "std": 107.4947212273791,
+            "min": 676999.0625,
+            "max": 677686.125,
+            "p50": 677517.15625,
+            "p95": 677642.178125,
+            "p99": 677683.69375
+        },
+        "child_process_count": {
+            "mean": 2.434375,
+            "std": 10.055774958999512,
+            "min": 0.0,
+            "max": 76.0,
+            "p50": 0.0,
+            "p95": 20.0,
+            "p99": 56.0
+        },
+        "network_connection_count": {
+            "mean": 0.0,
+            "std": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+        },
+        "unique_remote_ip_count": {
+            "mean": 0.0,
+            "std": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+        },
+        "recent_event_count": {
+            "mean": 10.684375,
+            "std": 12.079311067249447,
+            "min": 1.0,
+            "max": 96.0,
+            "p50": 8.0,
+            "p95": 26.0,
+            "p99": 71.0
+        },
+        "command_line_length": {
+            "mean": 0.0,
+            "std": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+        },
+        "command_arg_count": {
+            "mean": 0.0,
+            "std": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+        },
+        "executable_path_depth": {
+            "mean": 4.0,
+            "std": 0.0,
+            "min": 4.0,
+            "max": 4.0,
+            "p50": 4.0,
+            "p95": 4.0,
+            "p99": 4.0
+        },
+        "is_temp_path": {
+            "mean": 0.0,
+            "std": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+        },
+        "is_user_profile_path": {
+            "mean": 0.0,
+            "std": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+        },
+        "is_system_path": {
+            "mean": 1.0,
+            "std": 0.0,
+            "min": 1.0,
+            "max": 1.0,
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+        },
+        "is_script_interpreter": {
+            "mean": 0.0,
+            "std": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+        },
+        "parent_is_office_app": {
+            "mean": 0.0,
+            "std": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+        },
+        "parent_is_script_interpreter": {
+            "mean": 0.0,
+            "std": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+        },
+        "behavior_embedding_0": {
+            "mean": 0.5863469364858853,
+            "std": 0.11089054457731218,
+            "min": -0.31928545236587524,
+            "max": 0.647439181804657,
+            "p50": 0.6060810983181,
+            "p95": 0.6436484456062317,
+            "p99": 0.6453557085990905
+        },
+        "behavior_embedding_1": {
+            "mean": 0.26933635738678274,
+            "std": 0.1008449348747234,
+            "min": 0.17246955633163452,
+            "max": 0.7812658548355103,
+            "p50": 0.23108087480068207,
+            "p95": 0.45875871181488037,
+            "p99": 0.6333817839622498
+        },
+        "behavior_embedding_2": {
+            "mean": -0.38231940123563013,
+            "std": 0.07455282100678357,
+            "min": -0.6245410442352295,
+            "max": -0.24298858642578125,
+            "p50": -0.4017794132232666,
+            "p95": -0.27305880188941967,
+            "p99": -0.2566200792789459
+        },
+        "behavior_embedding_3": {
+            "mean": 0.7965098459118356,
+            "std": 0.22304827907810612,
+            "min": -0.6918573379516602,
+            "max": 0.9223238825798035,
+            "p50": 0.8492622971534729,
+            "p95": 0.9076876640319824,
+            "p99": 0.9169413447380066
+        },
+        "isolation_forest_score": {
+            "mean": 4.176947920264987,
+            "std": 8.197975728245925,
+            "min": 0.0,
+            "max": 38.040000915527344,
+            "p50": 0.0,
+            "p95": 25.420000076293945,
+            "p99": 32.959999084472656
+        },
+        "autoencoder_score": {
+            "mean": 22.216229199618102,
+            "std": 22.07083224017085,
+            "min": 0.44999998807907104,
+            "max": 93.18000030517578,
+            "p50": 20.579999923706055,
+            "p95": 75.82549781799293,
+            "p99": 93.0199966430664
+        },
+        "dual_ai_consensus_score": {
+            "mean": 12.333187446681162,
+            "std": 12.471071577929747,
+            "min": 0.23000000417232513,
+            "max": 49.540000915527344,
+            "p50": 10.539999961853027,
+            "p95": 41.33000183105469,
+            "p99": 48.45000076293945
+        },
+        "delta_seconds": {
+            "mean": 16.918622362116974,
+            "std": 26.249807393077322,
+            "min": 0.0,
+            "max": 145.40904235839844,
+            "p50": 14.348192691802979,
+            "p95": 23.931565093989988,
+            "p99": 144.67820083618162
+        }
+    },
+    "readiness_checks": {
+        "train_validation_disjoint": true,
+        "train_test_disjoint": true,
+        "validation_test_disjoint": true,
+        "train_not_empty": true,
+        "validation_not_empty": true,
+        "test_not_empty": true,
+        "all_windows_assigned": true,
+        "scaler_feature_count_correct": true
+    },
+    "ready_for_transformer_training": true,
+    "ground_truth_note": "These temporal sequences are unlabeled behavioral observations. Train/validation/test splits must not be interpreted as malicious versus benign ground-truth partitions."
+}

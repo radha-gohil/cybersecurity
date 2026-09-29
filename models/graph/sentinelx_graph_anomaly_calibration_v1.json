@@ -1,0 +1,65 @@
+{
+  "calibration_name": "sentinelx_graph_anomaly_calibration",
+  "calibration_version": "v1",
+  "model_name": "sentinelx_relation_aware_graph_encoder",
+  "model_version": "v1",
+  "created_at": "2026-09-29T15:17:20.787594+00:00",
+  "input_feature_count": 32,
+  "embedding_dimension": 64,
+  "calibration_graph_count": 15,
+  "calibration_source": "FULL_REFERENCE_GRAPH_SET_FALLBACK",
+  "held_out_calibration": false,
+  "calibration_quality": "LIMITED",
+  "type_aware_reconstruction": true,
+  "reference_error_mean": 0.022693878101805846,
+  "reference_error_std": 0.021269421060956303,
+  "reference_error_min": 0.009321356192231178,
+  "reference_error_max": 0.0751090720295906,
+  "center_error_mean": 0.08264832645654678,
+  "score_anchors": [
+    {
+      "percentile": 0,
+      "error": 0.009321356192231178,
+      "score": 0
+    },
+    {
+      "percentile": 50,
+      "error": 0.009321712888777256,
+      "score": 10
+    },
+    {
+      "percentile": 90,
+      "error": 0.0551885962486267,
+      "score": 30
+    },
+    {
+      "percentile": 95,
+      "error": 0.06702916100621223,
+      "score": 40
+    },
+    {
+      "percentile": 97,
+      "error": 0.07026112541556359,
+      "score": 60
+    },
+    {
+      "percentile": 99,
+      "error": 0.07349308982491493,
+      "score": 80
+    },
+    {
+      "percentile": 100,
+      "error": 0.0751090720295906,
+      "score": 95
+    }
+  ],
+  "thresholds": {
+    "normal_below": 40,
+    "unusual_from": 40,
+    "suspicious_from": 60,
+    "high_anomaly_from": 80,
+    "active_signal_from": 60,
+    "strong_signal_from": 80
+  },
+  "interpretation": "Score represents reconstruction-based graph anomaly relative to the reference provenance graph distribution. It is not a malware probability or attack probability."
+}

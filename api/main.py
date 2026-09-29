@@ -6,6 +6,10 @@ from fastapi import (
     HTTPException,
 )
 
+from api.security_runtime_router import (
+    router as security_runtime_router,
+)
+
 from fastapi.middleware.cors import (
     CORSMiddleware,
 )
@@ -63,7 +67,9 @@ app = FastAPI(
     ),
     version="1.4.0",
 )
-
+app.include_router(
+    security_runtime_router
+)
 
 # ================================================================
 # CORS

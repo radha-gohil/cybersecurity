@@ -1,0 +1,581 @@
+{
+    "model_name": "sentinelx_process_autoencoder",
+    "model_version": "v2",
+    "model_type": "SelfSupervisedMLPAutoencoder",
+    "trained_at": "2026-09-28T09:28:11.383518+00:00",
+    "feature_schema_version": "process_behavior_v1",
+    "feature_names": [
+        "cpu_percent",
+        "memory_percent",
+        "rss_mb",
+        "num_threads",
+        "num_handles",
+        "process_age_seconds",
+        "child_process_count",
+        "network_connection_count",
+        "unique_remote_ip_count",
+        "recent_event_count",
+        "command_line_length",
+        "command_arg_count",
+        "executable_path_depth",
+        "is_temp_path",
+        "is_user_profile_path",
+        "is_system_path",
+        "is_script_interpreter",
+        "parent_is_office_app",
+        "parent_is_script_interpreter"
+    ],
+    "feature_count": 19,
+    "architecture": {
+        "input_dimension": 19,
+        "hidden_layers": [
+            32,
+            16,
+            4,
+            16,
+            32
+        ],
+        "hidden_activation": "tanh",
+        "output_activation": "identity",
+        "bottleneck_hidden_layer_index": 2,
+        "bottleneck_dimension": 4,
+        "output_dimension": 19
+    },
+    "selected_candidate": {
+        "random_state": 42,
+        "iterations": 400,
+        "training_loss": 0.016696280823564308,
+        "validation_error_mean": 0.04720806742432654
+    },
+    "candidate_results": [
+        {
+            "random_state": 42,
+            "iterations": 400,
+            "training_loss": 0.016696280823564308,
+            "training_error_mean": 0.032438382600894475,
+            "validation_error_mean": 0.04720806742432654,
+            "validation_error_p95": 0.1278470974946212,
+            "embedding_health": {
+                "healthy": true,
+                "sample_count": 719,
+                "dimension_count": 4,
+                "all_near_zero_count": 0,
+                "all_near_zero_percent": 0.0,
+                "unique_embedding_count": 717,
+                "unique_embedding_percent": 99.7218,
+                "matrix_rank": 4,
+                "dead_dimensions": [],
+                "dimensions": [
+                    {
+                        "dimension": 0,
+                        "min": -0.9352597158885049,
+                        "max": 0.9796011580730255,
+                        "mean": 0.372406944593895,
+                        "std": 0.40128829045042086,
+                        "range": 1.9148608739615303,
+                        "near_zero_percent": 0.0,
+                        "saturated_percent": 0.0,
+                        "dead": false
+                    },
+                    {
+                        "dimension": 1,
+                        "min": -0.9740339976412219,
+                        "max": 0.9816330933094447,
+                        "mean": 0.028643034672615073,
+                        "std": 0.3437939817131488,
+                        "range": 1.9556670909506666,
+                        "near_zero_percent": 0.0,
+                        "saturated_percent": 0.2782,
+                        "dead": false
+                    },
+                    {
+                        "dimension": 2,
+                        "min": -0.9852933086028488,
+                        "max": 0.9711890176750734,
+                        "mean": -0.3058019397111866,
+                        "std": 0.28214484577376814,
+                        "range": 1.9564823262779223,
+                        "near_zero_percent": 0.0,
+                        "saturated_percent": 0.8345,
+                        "dead": false
+                    },
+                    {
+                        "dimension": 3,
+                        "min": -0.9785370386174166,
+                        "max": 0.9763631346260511,
+                        "mean": 0.6493625911039412,
+                        "std": 0.38738928503388737,
+                        "range": 1.9549001732434677,
+                        "near_zero_percent": 0.0,
+                        "saturated_percent": 0.0,
+                        "dead": false
+                    }
+                ],
+                "checks": {
+                    "all_near_zero_acceptable": true,
+                    "embedding_diversity": true,
+                    "no_dead_dimensions": true,
+                    "full_embedding_rank": true
+                }
+            }
+        },
+        {
+            "random_state": 17,
+            "iterations": 27,
+            "training_loss": 0.25344008508387245,
+            "training_error_mean": 0.9276901533241633,
+            "validation_error_mean": 0.8926424716782206,
+            "validation_error_p95": 2.5344662355076397,
+            "embedding_health": {
+                "healthy": true,
+                "sample_count": 719,
+                "dimension_count": 4,
+                "all_near_zero_count": 0,
+                "all_near_zero_percent": 0.0,
+                "unique_embedding_count": 719,
+                "unique_embedding_percent": 100.0,
+                "matrix_rank": 4,
+                "dead_dimensions": [],
+                "dimensions": [
+                    {
+                        "dimension": 0,
+                        "min": -0.958212753949341,
+                        "max": 0.7463778160499199,
+                        "mean": -0.510001440332354,
+                        "std": 0.4280694581282165,
+                        "range": 1.704590569999261,
+                        "near_zero_percent": 0.0,
+                        "saturated_percent": 0.0,
+                        "dead": false
+                    },
+                    {
+                        "dimension": 1,
+                        "min": -0.643748829121481,
+                        "max": 0.8058762547613894,
+                        "mean": 0.4094683376936173,
+                        "std": 0.24765155866741398,
+                        "range": 1.4496250838828704,
+                        "near_zero_percent": 0.0,
+                        "saturated_percent": 0.0,
+                        "dead": false
+                    },
+                    {
+                        "dimension": 2,
+                        "min": -0.8329956129071527,
+                        "max": 0.8845240861673931,
+                        "mean": 0.36664849576046704,
+                        "std": 0.3216504103884291,
+                        "range": 1.7175196990745458,
+                        "near_zero_percent": 0.0,
+                        "saturated_percent": 0.0,
+                        "dead": false
+                    },
+                    {
+                        "dimension": 3,
+                        "min": -0.8738770527080587,
+                        "max": 0.9595528497374333,
+                        "mean": 0.4188848203233861,
+                        "std": 0.33981327824835467,
+                        "range": 1.8334299024454919,
+                        "near_zero_percent": 0.0,
+                        "saturated_percent": 0.0,
+                        "dead": false
+                    }
+                ],
+                "checks": {
+                    "all_near_zero_acceptable": true,
+                    "embedding_diversity": true,
+                    "no_dead_dimensions": true,
+                    "full_embedding_rank": true
+                }
+            }
+        },
+        {
+            "random_state": 73,
+            "iterations": 45,
+            "training_loss": 0.19346480338441963,
+            "training_error_mean": 0.5528870594567318,
+            "validation_error_mean": 0.5319601417171868,
+            "validation_error_p95": 1.3113830171925995,
+            "embedding_health": {
+                "healthy": true,
+                "sample_count": 719,
+                "dimension_count": 4,
+                "all_near_zero_count": 0,
+                "all_near_zero_percent": 0.0,
+                "unique_embedding_count": 719,
+                "unique_embedding_percent": 100.0,
+                "matrix_rank": 4,
+                "dead_dimensions": [],
+                "dimensions": [
+                    {
+                        "dimension": 0,
+                        "min": -0.958232580530086,
+                        "max": 0.9589105242643259,
+                        "mean": -0.14828713277403074,
+                        "std": 0.45136399608920336,
+                        "range": 1.9171431047944119,
+                        "near_zero_percent": 0.0,
+                        "saturated_percent": 0.0,
+                        "dead": false
+                    },
+                    {
+                        "dimension": 1,
+                        "min": -0.9657597957985657,
+                        "max": 0.9600100211575825,
+                        "mean": -0.43434250717104517,
+                        "std": 0.4972895618149111,
+                        "range": 1.9257698169561484,
+                        "near_zero_percent": 0.0,
+                        "saturated_percent": 0.0,
+                        "dead": false
+                    },
+                    {
+                        "dimension": 2,
+                        "min": -0.9165597502020638,
+                        "max": 0.9630440678486801,
+                        "mean": 0.49327999505678444,
+                        "std": 0.35760544758826884,
+                        "range": 1.879603818050744,
+                        "near_zero_percent": 0.0,
+                        "saturated_percent": 0.0,
+                        "dead": false
+                    },
+                    {
+                        "dimension": 3,
+                        "min": -0.9562077095796001,
+                        "max": 0.9710852001696226,
+                        "mean": 0.4609680789113066,
+                        "std": 0.4489961632431213,
+                        "range": 1.9272929097492226,
+                        "near_zero_percent": 0.0,
+                        "saturated_percent": 0.0,
+                        "dead": false
+                    }
+                ],
+                "checks": {
+                    "all_near_zero_acceptable": true,
+                    "embedding_diversity": true,
+                    "no_dead_dimensions": true,
+                    "full_embedding_rank": true
+                }
+            }
+        }
+    ],
+    "dataset": {
+        "raw_records": 4450,
+        "initial_accepted_records": 4411,
+        "final_training_pool": 3594,
+        "training_samples": 2875,
+        "validation_samples": 719,
+        "dataset_fingerprint_sha256": "33349aa53eed29935629fce2ebf95d1f1cfe5bdf16d637d4d97b1fc407ff5e39",
+        "rejections": {
+            "existing_ai_anomaly": 13,
+            "sensitive:parent_is_office_app": 26,
+            "process_sample_cap": 817
+        }
+    },
+    "process_summary": {
+        "unique_processes": 140,
+        "top_processes": [
+            {
+                "process_name": "svchost.exe",
+                "sample_count": 500
+            },
+            {
+                "process_name": "code.exe",
+                "sample_count": 239
+            },
+            {
+                "process_name": "chrome.exe",
+                "sample_count": 185
+            },
+            {
+                "process_name": "msedgewebview2.exe",
+                "sample_count": 166
+            },
+            {
+                "process_name": "postgres.exe",
+                "sample_count": 130
+            },
+            {
+                "process_name": "conhost.exe",
+                "sample_count": 130
+            },
+            {
+                "process_name": "kvoop.exe",
+                "sample_count": 128
+            },
+            {
+                "process_name": "wmiprvse.exe",
+                "sample_count": 84
+            },
+            {
+                "process_name": "powershell.exe",
+                "sample_count": 82
+            },
+            {
+                "process_name": "runtimebroker.exe",
+                "sample_count": 71
+            },
+            {
+                "process_name": "openconsole.exe",
+                "sample_count": 64
+            },
+            {
+                "process_name": "crashpad_handler.exe",
+                "sample_count": 49
+            },
+            {
+                "process_name": "rtkauduservice64.exe",
+                "sample_count": 40
+            },
+            {
+                "process_name": "sensece.exe",
+                "sample_count": 37
+            },
+            {
+                "process_name": "wudfhost.exe",
+                "sample_count": 28
+            },
+            {
+                "process_name": "python.exe",
+                "sample_count": 28
+            },
+            {
+                "process_name": "fontdrvhost.exe",
+                "sample_count": 27
+            },
+            {
+                "process_name": "osqueryd.exe",
+                "sample_count": 27
+            },
+            {
+                "process_name": "dllhost.exe",
+                "sample_count": 27
+            },
+            {
+                "process_name": "csrss.exe",
+                "sample_count": 27
+            }
+        ]
+    },
+    "training_reconstruction_error": {
+        "min": 0.000419363621377294,
+        "max": 6.97837712907841,
+        "mean": 0.032438382600894475,
+        "std": 0.16927591459744945,
+        "p50": 0.013452262669070037,
+        "p75": 0.028949931477522527,
+        "p90": 0.07621620561301329,
+        "p95": 0.10226060829654901,
+        "p97": 0.12806665399219994,
+        "p99": 0.21097273445298712
+    },
+    "validation_reconstruction_error": {
+        "min": 0.0005091472449337717,
+        "max": 6.97838649365909,
+        "mean": 0.04720806742432654,
+        "std": 0.3104402944020487,
+        "p50": 0.01421417566516108,
+        "p75": 0.03341960575415549,
+        "p90": 0.08318183402218673,
+        "p95": 0.1278470974946212,
+        "p97": 0.16416013202775295,
+        "p99": 0.23687126271753484
+    },
+    "reconstruction_thresholds": {
+        "normal_reference": 0.08318183402218673,
+        "unusual_threshold": 0.1278470974946212,
+        "suspicious_threshold": 0.16416013202775295,
+        "high_anomaly_threshold": 0.23687126271753484
+    },
+    "feature_reconstruction_error": {
+        "cpu_percent": {
+            "mean_squared_error": 0.025261385573107448,
+            "median_squared_error": 0.0007269893450004851,
+            "p95_squared_error": 0.06677266748123087
+        },
+        "memory_percent": {
+            "mean_squared_error": 0.028826281310322936,
+            "median_squared_error": 0.0040789416194987205,
+            "p95_squared_error": 0.11372629506170658
+        },
+        "rss_mb": {
+            "mean_squared_error": 0.029928147287526227,
+            "median_squared_error": 0.004211503538415262,
+            "p95_squared_error": 0.13331691595050993
+        },
+        "num_threads": {
+            "mean_squared_error": 0.08221220419786436,
+            "median_squared_error": 0.013693788759635273,
+            "p95_squared_error": 0.3159991624113063
+        },
+        "num_handles": {
+            "mean_squared_error": 0.04981375164953441,
+            "median_squared_error": 0.008667477244573603,
+            "p95_squared_error": 0.21674645174706023
+        },
+        "process_age_seconds": {
+            "mean_squared_error": 0.18446212139730378,
+            "median_squared_error": 0.0009466410906177356,
+            "p95_squared_error": 0.04480444493722163
+        },
+        "child_process_count": {
+            "mean_squared_error": 0.04026227263595108,
+            "median_squared_error": 0.01348446254819639,
+            "p95_squared_error": 0.15025263938543953
+        },
+        "network_connection_count": {
+            "mean_squared_error": 0.022309169328217245,
+            "median_squared_error": 0.001107173924491244,
+            "p95_squared_error": 0.07313041345680779
+        },
+        "unique_remote_ip_count": {
+            "mean_squared_error": 0.15589890540540688,
+            "median_squared_error": 0.004207337977232566,
+            "p95_squared_error": 0.161610915296524
+        },
+        "recent_event_count": {
+            "mean_squared_error": 0.0953085351357916,
+            "median_squared_error": 0.045786455789529,
+            "p95_squared_error": 0.3386678771046713
+        },
+        "command_line_length": {
+            "mean_squared_error": 0.03151431259024695,
+            "median_squared_error": 0.005119408719121787,
+            "p95_squared_error": 0.14382337229375758
+        },
+        "command_arg_count": {
+            "mean_squared_error": 0.058826511627425984,
+            "median_squared_error": 0.017076492244836376,
+            "p95_squared_error": 0.24242571663101992
+        },
+        "executable_path_depth": {
+            "mean_squared_error": 0.044449406066353246,
+            "median_squared_error": 0.009299258769989195,
+            "p95_squared_error": 0.19250689334917348
+        },
+        "is_temp_path": {
+            "mean_squared_error": 0.005710450090705717,
+            "median_squared_error": 0.0011008898669224853,
+            "p95_squared_error": 0.028801258878146774
+        },
+        "is_user_profile_path": {
+            "mean_squared_error": 0.017209753983073527,
+            "median_squared_error": 0.00017287140342484201,
+            "p95_squared_error": 0.0530191054755233
+        },
+        "is_system_path": {
+            "mean_squared_error": 0.017616352941619225,
+            "median_squared_error": 0.0008037387563541605,
+            "p95_squared_error": 0.03542991983301598
+        },
+        "is_script_interpreter": {
+            "mean_squared_error": 0.003637424624297143,
+            "median_squared_error": 0.0003506747493531318,
+            "p95_squared_error": 0.019541758475639066
+        },
+        "parent_is_office_app": {
+            "mean_squared_error": 1.4905339847449944e-05,
+            "median_squared_error": 7.802705581068908e-07,
+            "p95_squared_error": 4.5635106459159196e-05
+        },
+        "parent_is_script_interpreter": {
+            "mean_squared_error": 0.003691389877609222,
+            "median_squared_error": 0.00036471376820357374,
+            "p95_squared_error": 0.013588232273585438
+        }
+    },
+    "embedding_health": {
+        "healthy": true,
+        "sample_count": 719,
+        "dimension_count": 4,
+        "all_near_zero_count": 0,
+        "all_near_zero_percent": 0.0,
+        "unique_embedding_count": 717,
+        "unique_embedding_percent": 99.7218,
+        "matrix_rank": 4,
+        "dead_dimensions": [],
+        "dimensions": [
+            {
+                "dimension": 0,
+                "min": -0.9352597158885049,
+                "max": 0.9796011580730255,
+                "mean": 0.372406944593895,
+                "std": 0.40128829045042086,
+                "range": 1.9148608739615303,
+                "near_zero_percent": 0.0,
+                "saturated_percent": 0.0,
+                "dead": false
+            },
+            {
+                "dimension": 1,
+                "min": -0.9740339976412219,
+                "max": 0.9816330933094447,
+                "mean": 0.028643034672615073,
+                "std": 0.3437939817131488,
+                "range": 1.9556670909506666,
+                "near_zero_percent": 0.0,
+                "saturated_percent": 0.2782,
+                "dead": false
+            },
+            {
+                "dimension": 2,
+                "min": -0.9852933086028488,
+                "max": 0.9711890176750734,
+                "mean": -0.3058019397111866,
+                "std": 0.28214484577376814,
+                "range": 1.9564823262779223,
+                "near_zero_percent": 0.0,
+                "saturated_percent": 0.8345,
+                "dead": false
+            },
+            {
+                "dimension": 3,
+                "min": -0.9785370386174166,
+                "max": 0.9763631346260511,
+                "mean": 0.6493625911039412,
+                "std": 0.38738928503388737,
+                "range": 1.9549001732434677,
+                "near_zero_percent": 0.0,
+                "saturated_percent": 0.0,
+                "dead": false
+            }
+        ],
+        "checks": {
+            "all_near_zero_acceptable": true,
+            "embedding_diversity": true,
+            "no_dead_dimensions": true,
+            "full_embedding_rank": true
+        }
+    },
+    "training_parameters": {
+        "learning_rate": 0.001,
+        "max_iterations": 400,
+        "validation_fraction_internal": 0.1,
+        "n_iter_no_change": 25,
+        "external_validation_fraction": 0.2,
+        "candidate_random_states": [
+            42,
+            17,
+            73
+        ]
+    },
+    "preprocessing": {
+        "scaler": "StandardScaler",
+        "scaler_required": true,
+        "scaler_fit": "training_split_only"
+    },
+    "runtime": {
+        "python_version": "3.14.4 (tags/v3.14.4:23116f9, Apr  7 2026, 14:10:54) [MSC v.1944 64 bit (AMD64)]",
+        "platform": "Windows-11-10.0.26200-SP0",
+        "numpy_version": "2.5.3",
+        "scikit_learn_version": "1.9.0",
+        "joblib_version": "1.6.0"
+    },
+    "artifact_security": {
+        "trusted_local_artifact_only": true,
+        "warning": "Do not load untrusted joblib/pickle model artifacts."
+    }
+}

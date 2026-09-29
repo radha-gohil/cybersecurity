@@ -1,0 +1,30 @@
+{
+  "model_name": "sentinelx_relation_aware_graph_encoder",
+  "model_version": "v1",
+  "trainer_version": "v1",
+  "created_at": "2026-09-29T15:08:26.323584+00:00",
+  "learning_mode": "SELF_SUPERVISED_MASKED_FEATURE_RECONSTRUCTION",
+  "input_feature_count": 32,
+  "hidden_dimension": 64,
+  "embedding_dimension": 64,
+  "graph_layers": 2,
+  "node_type_count": 5,
+  "edge_type_count": 8,
+  "mask_probability": 0.2,
+  "ground_truth_labels_used": false,
+  "classifier_trained": false,
+  "output_interpretation": "64-D learned graph representation. It is not a malware probability or calibrated threat probability.",
+  "training_graph_count": 12,
+  "training_node_count": 589,
+  "training_edge_count": 868,
+  "final_training_loss": 0.005369814112782478,
+  "full_reconstruction_loss": 0.005669854581356049,
+  "embedding_health": {
+    "count": 12,
+    "dimension": 64,
+    "finite": true,
+    "all_zero_fraction": 0.0,
+    "unique_fraction": 0.6666666666666666,
+    "mean_norm": 8.490763664245605
+  }
+}
