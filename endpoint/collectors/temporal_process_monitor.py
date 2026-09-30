@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 import time
+import zlib
 
 from pathlib import Path
 
@@ -90,9 +91,7 @@ DEFAULT_DATABASE_PATH = (
 
 TEMPORAL_SEQUENCE_LENGTH = 8
 
-
 TEMPORAL_ALERT_COOLDOWN_SECONDS = 300.0
-
 
 TEMPORAL_STALE_CLEANUP_INTERVAL_SECONDS = 120.0
 
@@ -100,36 +99,56 @@ TEMPORAL_STALE_CLEANUP_INTERVAL_SECONDS = 120.0
 # ================================================================
 # SENTINEL-X TEMPORAL PROCESS MONITOR
 #
-# Extends the already-working ProcessMonitor.
+# Existing Phase-2 flow:
 #
-# Existing Phase-2 behavior is preserved by:
+# Process
+#     ↓
+# Feature Collection
+#     ↓
+# Isolation Forest
+#     ↓
+# Autoencoder
+#     ↓
+# Dual-AI Agreement
+#     ↓
+# Temporal Observation
+#     ↓
+# Rolling Temporal Buffer
+#     ↓
+# Transformer
+#     ↓
+# Temporal Result Store
 #
-#       result = super().collect_ai_behavior_features(...)
 #
-# Only AFTER Phase-2 completes successfully do we:
+# PROCESS IDENTITY
 #
-#       IF + AE
-#           ↓
-#       Dual-AI agreement
-#           ↓
-#       build 27D temporal observation
-#           ↓
-#       rolling 8-step buffer
-#           ↓
-#       Transformer
-#           ↓
-#       persistence
+# Preferred:
+#
+#       PID + real create_time
 #
 #
-# This class does NOT modify Fusion v2 yet.
+# Fallback:
 #
-# Fusion v3 comes after temporal live inference is verified.
+#       PID + deterministic process-name fingerprint
+#
+#
+# IMPORTANT:
+#
+# time.time() must NEVER be used as process create_time fallback.
+#
+# Otherwise the same process receives a different identity during
+# every polling cycle and its temporal buffer will never reach the
+# required sequence depth.
 # ================================================================
 
 
 class TemporalProcessMonitor(
     ProcessMonitor,
 ):
+
+    # ============================================================
+    # INITIALIZATION
+    # ============================================================
 
     def __init__(
         self,
@@ -141,7 +160,7 @@ class TemporalProcessMonitor(
     ):
 
         # ========================================================
-        # EXISTING PHASE-2 MONITOR
+        # BASE PROCESS MONITOR
         # ========================================================
 
         super().__init__(
@@ -149,78 +168,91 @@ class TemporalProcessMonitor(
             **kwargs,
         )
 
-
         # ========================================================
-        # TEMPORAL AI COMPONENTS
+        # TEMPORAL OBSERVATION BUILDER
         # ========================================================
 
         self.temporal_observation_builder = (
             ProcessTemporalObservationBuilder()
         )
 
+        # ========================================================
+        # TEMPORAL BUFFER
+        # ========================================================
 
         self.temporal_buffer = (
             ProcessTemporalBuffer()
         )
 
+        # ========================================================
+        # TEMPORAL TRANSFORMER
+        # ========================================================
 
         self.temporal_predictor = (
             ProcessTemporalPredictor(
-                auto_load=True
+                auto_load=True,
             )
         )
 
+        # ========================================================
+        # TEMPORAL RESULT STORE
+        # ========================================================
+
+        database_path = (
+            Path(
+                temporal_database_path
+            )
+            if temporal_database_path
+            is not None
+            else DEFAULT_DATABASE_PATH
+        )
 
         self.temporal_result_store = (
             ProcessTemporalResultStore(
-
-                database_path=(
-                    temporal_database_path
-
-                    if temporal_database_path
-                    is not None
-
-                    else DEFAULT_DATABASE_PATH
-                )
+                database_path=
+                    database_path,
             )
         )
 
+        # ========================================================
+        # DUAL AI AGREEMENT
+        # ========================================================
 
         self.temporal_ai_agreement = (
             DualAIAgreementEngine()
         )
 
-
         # ========================================================
-        # TEMPORAL ALERT COOLDOWN
+        # ALERT COOLDOWN
         # ========================================================
 
-        self.temporal_alert_last_emitted = {}
-
+        self.temporal_alert_last_emitted: Dict[
+            tuple[int, float],
+            float,
+        ] = {}
 
         self.temporal_alert_cooldown_seconds = (
             TEMPORAL_ALERT_COOLDOWN_SECONDS
         )
 
-
         # ========================================================
         # CLEANUP
         # ========================================================
 
-        self.last_temporal_cleanup_time = 0.0
-
+        self.last_temporal_cleanup_time = (
+            0.0
+        )
 
         # ========================================================
-        # STATUS
+        # TEMPORAL STATUS
         # ========================================================
 
         temporal_status = (
-            self.temporal_predictor.get_status()
+            self.temporal_predictor
+            .get_status()
         )
 
-
         logger.info(
-
             "Temporal Transformer | "
             "Available=%s | "
             "Version=%s | "
@@ -254,7 +286,6 @@ class TemporalProcessMonitor(
             ),
         )
 
-
     # ============================================================
     # TEMPORAL STATUS
     # ============================================================
@@ -264,27 +295,26 @@ class TemporalProcessMonitor(
     ) -> Dict[str, Any]:
 
         return {
+
             "predictor":
-                self.temporal_predictor.get_status(),
+                self.temporal_predictor
+                .get_status(),
 
             "buffer":
-                self.temporal_buffer.get_status(),
+                self.temporal_buffer
+                .get_status(),
 
             "stored_results":
-                self.temporal_result_store.count(),
+                self.temporal_result_store
+                .count(),
 
             "stored_alert_candidates":
                 self.temporal_result_store
                 .count_alert_candidates(),
         }
 
-
     # ============================================================
-    # LOAD FEATURE RECORD FROM SQLITE
-    #
-    # This fallback makes the wrapper robust even if the existing
-    # ProcessMonitor returns only record_id instead of the complete
-    # feature record.
+    # LOAD FEATURE RECORD FROM DATABASE
     # ============================================================
 
     def load_feature_record_from_database(
@@ -294,18 +324,16 @@ class TemporalProcessMonitor(
         Dict[str, Any]
     ]:
 
-        connection = sqlite3.connect(
-
-            DEFAULT_DATABASE_PATH,
-
-            timeout=30.0,
+        connection = (
+            sqlite3.connect(
+                DEFAULT_DATABASE_PATH,
+                timeout=30.0,
+            )
         )
-
 
         connection.row_factory = (
             sqlite3.Row
         )
-
 
         try:
 
@@ -327,21 +355,16 @@ class TemporalProcessMonitor(
                 .fetchone()
             )
 
-
             if row is None:
-
                 return None
-
 
             return dict(
                 row
             )
 
-
         finally:
 
             connection.close()
-
 
     # ============================================================
     # RESOLVE FEATURE RECORD
@@ -349,12 +372,21 @@ class TemporalProcessMonitor(
 
     def resolve_feature_record(
         self,
-        phase2_result: Dict[str, Any],
+        phase2_result: Dict[
+            str,
+            Any,
+        ],
     ) -> Optional[Any]:
 
+        if not isinstance(
+            phase2_result,
+            dict,
+        ):
+
+            return None
+
         # --------------------------------------------------------
-        # Support several possible result names without changing
-        # the working Phase-2 monitor.
+        # POSSIBLE DIRECT FEATURE RECORD KEYS
         # --------------------------------------------------------
 
         for key in [
@@ -373,18 +405,18 @@ class TemporalProcessMonitor(
                 )
             )
 
-
             if value is not None:
-
                 return value
 
+        # --------------------------------------------------------
+        # OTHERWISE LOAD USING RECORD ID
+        # --------------------------------------------------------
 
         record_id = (
             phase2_result.get(
                 "record_id"
             )
         )
-
 
         if record_id is None:
 
@@ -394,47 +426,52 @@ class TemporalProcessMonitor(
                 )
             )
 
-
         if record_id is None:
-
             return None
-
 
         try:
 
             return (
-                self.load_feature_record_from_database(
+                self
+                .load_feature_record_from_database(
                     int(
                         record_id
                     )
                 )
             )
 
-
         except Exception as error:
 
             logger.warning(
-
                 "Temporal feature-record reload failed | "
-                "Record=%s | Error=%s",
+                "Record=%s | "
+                "Error=%s",
 
                 record_id,
 
                 error,
             )
 
-
             return None
 
-
     # ============================================================
-    # RESOLVE RECORD ID
+    # RESOLVE FEATURE RECORD ID
     # ============================================================
 
     def resolve_feature_record_id(
         self,
-        phase2_result: Dict[str, Any],
+        phase2_result: Dict[
+            str,
+            Any,
+        ],
     ) -> Optional[int]:
+
+        if not isinstance(
+            phase2_result,
+            dict,
+        ):
+
+            return None
 
         for key in [
 
@@ -450,18 +487,14 @@ class TemporalProcessMonitor(
                 )
             )
 
-
             if value is None:
-
                 continue
-
 
             try:
 
                 return int(
                     value
                 )
-
 
             except (
                 TypeError,
@@ -470,9 +503,266 @@ class TemporalProcessMonitor(
 
                 continue
 
-
         return None
 
+    # ============================================================
+    # NORMALIZE TEMPORAL PROCESS IDENTITY
+    # ============================================================
+
+    def normalize_temporal_identity(
+        self,
+        identity: Any,
+        process_info: Optional[
+            Dict[str, Any]
+        ] = None,
+    ) -> Optional[
+        Dict[str, Any]
+    ]:
+        """
+        Normalize identity before it reaches the Temporal buffer.
+
+        Preferred identity:
+
+            PID + real process creation time
+
+        Fallback:
+
+            PID + deterministic process-name fingerprint
+
+        This function guarantees a numeric create_time whenever PID
+        itself is valid.
+
+        IMPORTANT:
+
+        Never use time.time() here.
+
+        Doing that would generate a different identity on each poll,
+        destroying Temporal sequence continuity.
+        """
+
+        # --------------------------------------------------------
+        # INPUT SAFETY
+        # --------------------------------------------------------
+
+        if not isinstance(
+            identity,
+            dict,
+        ):
+
+            identity = {}
+
+        if not isinstance(
+            process_info,
+            dict,
+        ):
+
+            process_info = {}
+
+        # --------------------------------------------------------
+        # PID
+        # --------------------------------------------------------
+
+        pid = (
+            identity.get(
+                "pid"
+            )
+        )
+
+        if pid is None:
+
+            pid = (
+                process_info.get(
+                    "pid"
+                )
+            )
+
+        try:
+
+            pid = int(
+                pid
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+
+            return None
+
+        # --------------------------------------------------------
+        # PROCESS NAME
+        # --------------------------------------------------------
+
+        process_name = (
+
+            identity.get(
+                "process_name"
+            )
+
+            or identity.get(
+                "name"
+            )
+
+            or process_info.get(
+                "process_name"
+            )
+
+            or process_info.get(
+                "name"
+            )
+
+            or "UNKNOWN"
+        )
+
+        process_name = (
+            str(
+                process_name
+            )
+            .strip()
+        )
+
+        if not process_name:
+
+            process_name = (
+                "UNKNOWN"
+            )
+
+        # --------------------------------------------------------
+        # CREATE TIME
+        #
+        # Try all known keys.
+        # --------------------------------------------------------
+
+        create_time = (
+            identity.get(
+                "create_time"
+            )
+        )
+
+        if create_time is None:
+
+            create_time = (
+                identity.get(
+                    "process_create_time"
+                )
+            )
+
+        if create_time is None:
+
+            create_time = (
+                process_info.get(
+                    "create_time"
+                )
+            )
+
+        if create_time is None:
+
+            create_time = (
+                process_info.get(
+                    "process_create_time"
+                )
+            )
+
+        identity_source = (
+            "PID_CREATE_TIME"
+        )
+
+        # --------------------------------------------------------
+        # VALID REAL CREATE TIME
+        # --------------------------------------------------------
+
+        try:
+
+            normalized_create_time = (
+                float(
+                    create_time
+                )
+            )
+
+            # Reject NaN
+            if (
+                normalized_create_time
+                != normalized_create_time
+            ):
+
+                raise ValueError(
+                    "NaN create_time"
+                )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+
+            # ====================================================
+            # FALLBACK:
+            #
+            # PID + PROCESS NAME
+            #
+            # ProcessTemporalBuffer currently expects create_time
+            # to be numeric.
+            #
+            # Therefore create a deterministic numeric token from
+            # the process name.
+            # ====================================================
+
+            normalized_name = (
+                process_name
+                .strip()
+                .casefold()
+            )
+
+            if not normalized_name:
+
+                normalized_name = (
+                    "unknown"
+                )
+
+            name_fingerprint = (
+                zlib.crc32(
+                    normalized_name.encode(
+                        "utf-8",
+                        errors="replace",
+                    )
+                )
+                & 0xFFFFFFFF
+            )
+
+            # ----------------------------------------------------
+            # Real Unix timestamps are positive.
+            #
+            # Negative values clearly indicate a fallback identity.
+            # ----------------------------------------------------
+
+            normalized_create_time = (
+                -float(
+                    name_fingerprint
+                    + 1
+                )
+            )
+
+            identity_source = (
+                "PID_PROCESS_NAME_FALLBACK"
+            )
+
+        # --------------------------------------------------------
+        # ALWAYS RETURN REQUIRED KEYS
+        # --------------------------------------------------------
+
+        return {
+
+            "pid":
+                pid,
+
+            "create_time":
+                normalized_create_time,
+
+            "process_name":
+                process_name,
+
+            "identity_source":
+                identity_source,
+        }
 
     # ============================================================
     # RESOLVE PROCESS IDENTITY
@@ -480,22 +770,26 @@ class TemporalProcessMonitor(
 
     def resolve_process_identity(
         self,
-        process_info: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        process_info: Dict[
+            str,
+            Any,
+        ],
+    ) -> Optional[
+        Dict[str, Any]
+    ]:
+
+        if not isinstance(
+            process_info,
+            dict,
+        ):
+
+            return None
 
         pid = (
             process_info.get(
                 "pid"
             )
         )
-
-
-        create_time = (
-            process_info.get(
-                "create_time"
-            )
-        )
-
 
         process_name = (
 
@@ -510,6 +804,152 @@ class TemporalProcessMonitor(
             or "UNKNOWN"
         )
 
+        create_time = (
+            process_info.get(
+                "create_time"
+            )
+        )
+
+        if create_time is None:
+
+            create_time = (
+                process_info.get(
+                    "process_create_time"
+                )
+            )
+
+        raw_identity = {
+
+            "pid":
+                pid,
+
+            "process_name":
+                process_name,
+
+            "create_time":
+                create_time,
+        }
+
+        normalized = (
+            self
+            .normalize_temporal_identity(
+                identity=
+                    raw_identity,
+
+                process_info=
+                    process_info,
+            )
+        )
+
+        if normalized is None:
+
+            return None
+
+        # --------------------------------------------------------
+        # FINAL INVARIANT CHECK
+        # --------------------------------------------------------
+
+        if normalized.get(
+            "pid"
+        ) is None:
+
+            return None
+
+        if normalized.get(
+            "create_time"
+        ) is None:
+
+            logger.error(
+                "Temporal identity normalization failed | "
+                "PID=%s | "
+                "Process=%s",
+
+                pid,
+
+                process_name,
+            )
+
+            return None
+
+        return normalized
+
+    # ============================================================
+    # GET TEMPORAL PROCESS KEY
+    #
+    # IMPORTANT:
+    #
+    # This method is intentionally defensive.
+    #
+    # Even if a future subclass or caller passes an incomplete
+    # identity, this method will normalize it again instead of
+    # directly calling identity["create_time"].
+    # ============================================================
+
+    def get_temporal_process_key(
+        self,
+        identity: Dict[
+            str,
+            Any,
+        ],
+    ) -> tuple[
+        int,
+        float,
+    ]:
+
+        if not isinstance(
+            identity,
+            dict,
+        ):
+
+            raise ValueError(
+                "Temporal process identity "
+                "must be a dictionary."
+            )
+
+        # --------------------------------------------------------
+        # FINAL NORMALIZATION BOUNDARY
+        # --------------------------------------------------------
+
+        normalized = (
+            self
+            .normalize_temporal_identity(
+                identity=
+                    identity,
+
+                process_info=
+                    identity,
+            )
+        )
+
+        if normalized is None:
+
+            raise ValueError(
+                "Unable to construct "
+                "Temporal process identity."
+            )
+
+        pid = (
+            normalized.get(
+                "pid"
+            )
+        )
+
+        create_time = (
+            normalized.get(
+                "create_time"
+            )
+        )
+
+        process_name = (
+            normalized.get(
+                "process_name",
+                "UNKNOWN",
+            )
+        )
+
+        # --------------------------------------------------------
+        # PID VALIDATION
+        # --------------------------------------------------------
 
         try:
 
@@ -517,25 +957,73 @@ class TemporalProcessMonitor(
                 pid
             )
 
-
         except (
             TypeError,
             ValueError,
         ) as error:
 
             raise ValueError(
-
-                "Temporal integration requires "
-                "a valid process PID."
+                "Temporal identity "
+                "contains invalid PID."
             ) from error
 
+        # --------------------------------------------------------
+        # CREATE TIME EMERGENCY FALLBACK
+        #
+        # normalize_temporal_identity normally guarantees this,
+        # but keeping another guard here makes KeyError impossible.
+        # --------------------------------------------------------
+
+        if create_time is None:
+
+            normalized_name = (
+                str(
+                    process_name
+                )
+                .strip()
+                .casefold()
+            )
+
+            if not normalized_name:
+
+                normalized_name = (
+                    "unknown"
+                )
+
+            name_fingerprint = (
+                zlib.crc32(
+                    normalized_name.encode(
+                        "utf-8",
+                        errors="replace",
+                    )
+                )
+                & 0xFFFFFFFF
+            )
+
+            create_time = (
+                -float(
+                    name_fingerprint
+                    + 1
+                )
+            )
+
+            logger.warning(
+                "Temporal identity emergency fallback | "
+                "PID=%s | "
+                "Process=%s",
+
+                pid,
+
+                process_name,
+            )
 
         try:
 
-            create_time = float(
-                create_time
+            create_time = (
+                float(
+                    create_time
+                )
             )
-
 
         except (
             TypeError,
@@ -543,28 +1031,17 @@ class TemporalProcessMonitor(
         ) as error:
 
             raise ValueError(
-
-                "Temporal integration requires "
-                "process create_time."
+                "Temporal identity contains "
+                "invalid create_time."
             ) from error
 
-
-        return {
-            "pid":
-                pid,
-
-            "create_time":
-                create_time,
-
-            "process_name":
-                str(
-                    process_name
-                ),
-        }
-
+        return (
+            pid,
+            create_time,
+        )
 
     # ============================================================
-    # PREVIOUS OBSERVATION TIMESTAMP
+    # GET PREVIOUS TEMPORAL TIMESTAMP
     # ============================================================
 
     def get_previous_temporal_timestamp(
@@ -577,7 +1054,6 @@ class TemporalProcessMonitor(
         observations = (
             self.temporal_buffer
             .get_observation_metadata(
-
                 pid=
                     pid,
 
@@ -586,21 +1062,36 @@ class TemporalProcessMonitor(
             )
         )
 
-
         if not observations:
-
             return None
 
-
-        return float(
-
+        last_observation = (
             observations[
                 -1
-            ][
-                "timestamp"
             ]
         )
 
+        timestamp = (
+            last_observation.get(
+                "timestamp"
+            )
+        )
+
+        if timestamp is None:
+            return None
+
+        try:
+
+            return float(
+                timestamp
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+
+            return None
 
     # ============================================================
     # CALCULATE DUAL-AI CONSENSUS
@@ -608,14 +1099,22 @@ class TemporalProcessMonitor(
 
     def calculate_temporal_ai_consensus(
         self,
-        isolation_result: Dict[str, Any],
-        autoencoder_result: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        isolation_result: Dict[
+            str,
+            Any,
+        ],
+        autoencoder_result: Dict[
+            str,
+            Any,
+        ],
+    ) -> Dict[
+        str,
+        Any,
+    ]:
 
         return (
             self.temporal_ai_agreement
             .calculate(
-
                 isolation_result=
                     isolation_result,
 
@@ -623,7 +1122,6 @@ class TemporalProcessMonitor(
                     autoencoder_result,
             )
         )
-
 
     # ============================================================
     # TEMPORAL ALERT COOLDOWN
@@ -638,7 +1136,6 @@ class TemporalProcessMonitor(
     ) -> bool:
 
         key = (
-
             int(
                 pid
             ),
@@ -648,27 +1145,27 @@ class TemporalProcessMonitor(
             ),
         )
 
-
         previous = (
-            self.temporal_alert_last_emitted.get(
+            self
+            .temporal_alert_last_emitted
+            .get(
                 key
             )
         )
 
-
         if previous is None:
-
             return True
 
-
-        return (
-
+        elapsed = (
             current_time
             - previous
-
-            >= self.temporal_alert_cooldown_seconds
         )
 
+        return (
+            elapsed
+            >=
+            self.temporal_alert_cooldown_seconds
+        )
 
     # ============================================================
     # MARK TEMPORAL ALERT
@@ -683,7 +1180,6 @@ class TemporalProcessMonitor(
     ) -> None:
 
         key = (
-
             int(
                 pid
             ),
@@ -693,16 +1189,14 @@ class TemporalProcessMonitor(
             ),
         )
 
-
         self.temporal_alert_last_emitted[
             key
         ] = float(
             current_time
         )
 
-
     # ============================================================
-    # CLEAN STALE TEMPORAL STATE
+    # CLEAN TEMPORAL STATE
     # ============================================================
 
     def cleanup_temporal_state_if_needed(
@@ -710,77 +1204,109 @@ class TemporalProcessMonitor(
         current_time: float,
     ) -> None:
 
-        if (
-
+        elapsed = (
             current_time
             - self.last_temporal_cleanup_time
+        )
 
-            < TEMPORAL_STALE_CLEANUP_INTERVAL_SECONDS
-
+        if (
+            elapsed
+            <
+            TEMPORAL_STALE_CLEANUP_INTERVAL_SECONDS
         ):
 
             return
 
+        try:
 
-        removed = (
-            self.temporal_buffer.cleanup_stale(
-                now=current_time
+            removed = (
+                self.temporal_buffer
+                .cleanup_stale(
+                    now=
+                        current_time
+                )
             )
-        )
 
+        except Exception:
+
+            logger.exception(
+                "Temporal stale-buffer cleanup failed."
+            )
+
+            self.last_temporal_cleanup_time = (
+                current_time
+            )
+
+            return
 
         self.last_temporal_cleanup_time = (
             current_time
         )
 
-
         if removed > 0:
 
             logger.info(
-
                 "Temporal buffer cleanup | "
                 "Removed=%s",
 
                 removed,
             )
 
-
     # ============================================================
     # PROCESS TEMPORAL SAMPLE
-    #
-    # This can also be called directly by E2E tests.
     # ============================================================
 
     def process_temporal_sample(
         self,
         *,
-        process_info: Dict[str, Any],
+        process_info: Dict[
+            str,
+            Any,
+        ],
         feature_record: Any,
         feature_record_id: int,
-        isolation_result: Dict[str, Any],
-        autoencoder_result: Dict[str, Any],
-        timestamp: Optional[float] = None,
-    ) -> Dict[str, Any]:
+        isolation_result: Dict[
+            str,
+            Any,
+        ],
+        autoencoder_result: Dict[
+            str,
+            Any,
+        ],
+        timestamp: Optional[
+            float
+        ] = None,
+    ) -> Dict[
+        str,
+        Any,
+    ]:
+
+        # ========================================================
+        # CURRENT TIMESTAMP
+        # ========================================================
 
         current_time = (
-
             float(
                 timestamp
             )
 
-            if timestamp is not None
+            if timestamp
+            is not None
 
             else time.time()
         )
 
-
         # ========================================================
-        # PREDICTOR AVAILABILITY
+        # TEMPORAL MODEL AVAILABILITY
         # ========================================================
 
-        if not self.temporal_predictor.available:
+        if not (
+            self.temporal_predictor
+            .available
+        ):
 
             return {
+
                 "available":
                     False,
 
@@ -788,49 +1314,184 @@ class TemporalProcessMonitor(
                     "TEMPORAL_MODEL_UNAVAILABLE",
 
                 "error":
-                    self.temporal_predictor.load_error,
+                    self.temporal_predictor
+                    .load_error,
             }
 
-
         # ========================================================
-        # PROCESS IDENTITY
+        # RESOLVE PROCESS IDENTITY
         # ========================================================
 
         identity = (
-            self.resolve_process_identity(
+            self
+            .resolve_process_identity(
                 process_info
             )
         )
 
+        if identity is None:
 
-        pid = (
-            identity[
-                "pid"
-            ]
-        )
+            logger.warning(
+                "Temporal sample skipped | "
+                "Reason=INVALID_PROCESS_IDENTITY | "
+                "PID=%s | "
+                "Process=%s",
 
+                process_info.get(
+                    "pid"
+                )
+                if isinstance(
+                    process_info,
+                    dict,
+                )
+                else None,
 
-        create_time = (
-            identity[
-                "create_time"
-            ]
-        )
+                process_info.get(
+                    "name"
+                )
+                if isinstance(
+                    process_info,
+                    dict,
+                )
+                else None,
+            )
 
+            return {
 
-        process_name = (
-            identity[
-                "process_name"
-            ]
-        )
+                "available":
+                    False,
 
+                "state":
+                    "INVALID_PROCESS_IDENTITY",
+
+                "error":
+                    "Temporal sample requires "
+                    "a valid process PID.",
+            }
 
         # ========================================================
-        # PREVIOUS TIMESTAMP
+        # SECOND NORMALIZATION BOUNDARY
+        #
+        # Do this intentionally.
+        #
+        # This guarantees create_time exists immediately before
+        # using it as a Temporal buffer key.
+        # ========================================================
+
+        identity = (
+            self
+            .normalize_temporal_identity(
+                identity=
+                    identity,
+
+                process_info=
+                    process_info,
+            )
+        )
+
+        if identity is None:
+
+            return {
+
+                "available":
+                    False,
+
+                "state":
+                    "INVALID_PROCESS_IDENTITY",
+
+                "error":
+                    "Unable to normalize "
+                    "Temporal process identity.",
+            }
+
+        # ========================================================
+        # SAFE TEMPORAL PROCESS KEY
+        # ========================================================
+
+        try:
+
+            pid, create_time = (
+                self
+                .get_temporal_process_key(
+                    identity
+                )
+            )
+
+        except Exception as error:
+
+            logger.warning(
+                "Temporal identity key failure | "
+                "PID=%s | "
+                "Process=%s | "
+                "Error=%s",
+
+                process_info.get(
+                    "pid"
+                ),
+
+                process_info.get(
+                    "name"
+                ),
+
+                error,
+            )
+
+            return {
+
+                "available":
+                    False,
+
+                "state":
+                    "TEMPORAL_IDENTITY_KEY_FAILED",
+
+                "error":
+                    str(
+                        error
+                    ),
+            }
+
+        process_name = (
+            identity.get(
+                "process_name",
+                "UNKNOWN",
+            )
+        )
+
+        identity_source = (
+            identity.get(
+                "identity_source",
+                "UNKNOWN",
+            )
+        )
+
+        # --------------------------------------------------------
+        # LOG FALLBACK IDENTITY AT DEBUG LEVEL
+        # --------------------------------------------------------
+
+        if (
+            identity_source
+            ==
+            "PID_PROCESS_NAME_FALLBACK"
+        ):
+
+            logger.debug(
+                "Temporal identity fallback | "
+                "PID=%s | "
+                "Process=%s | "
+                "Mode=PID_PROCESS_NAME",
+
+                pid,
+
+                process_name,
+            )
+
+        # ========================================================
+        # PREVIOUS TEMPORAL TIMESTAMP
         # ========================================================
 
         previous_timestamp = (
-            self.get_previous_temporal_timestamp(
-
+            self
+            .get_previous_temporal_timestamp(
                 pid=
                     pid,
 
@@ -839,14 +1500,13 @@ class TemporalProcessMonitor(
             )
         )
 
-
         # ========================================================
         # DUAL-AI CONSENSUS
         # ========================================================
 
         consensus_result = (
-            self.calculate_temporal_ai_consensus(
-
+            self
+            .calculate_temporal_ai_consensus(
                 isolation_result=
                     isolation_result,
 
@@ -855,15 +1515,16 @@ class TemporalProcessMonitor(
             )
         )
 
-
         # ========================================================
-        # BUILD EXACT 27D TRAINING-COMPATIBLE VECTOR
+        # BUILD TEMPORAL OBSERVATION
+        #
+        # Temporal v1 expects exact training-compatible vector.
         # ========================================================
 
         observation = (
-            self.temporal_observation_builder
+            self
+            .temporal_observation_builder
             .build(
-
                 feature_record=
                     feature_record,
 
@@ -884,15 +1545,52 @@ class TemporalProcessMonitor(
             )
         )
 
+        if not isinstance(
+            observation,
+            dict,
+        ):
+
+            return {
+
+                "available":
+                    False,
+
+                "state":
+                    "TEMPORAL_OBSERVATION_FAILED",
+
+                "error":
+                    "Observation builder "
+                    "did not return a dictionary.",
+            }
+
+        vector = (
+            observation.get(
+                "vector"
+            )
+        )
+
+        if vector is None:
+
+            return {
+
+                "available":
+                    False,
+
+                "state":
+                    "TEMPORAL_VECTOR_MISSING",
+
+                "error":
+                    "Temporal observation "
+                    "contains no vector.",
+            }
 
         # ========================================================
-        # ADD TO ROLLING BUFFER
+        # ADD TO TEMPORAL BUFFER
         # ========================================================
 
         buffer_result = (
             self.temporal_buffer
             .add_observation(
-
                 pid=
                     pid,
 
@@ -900,9 +1598,7 @@ class TemporalProcessMonitor(
                     create_time,
 
                 vector=
-                    observation[
-                        "vector"
-                    ],
+                    vector,
 
                 timestamp=
                     current_time,
@@ -916,49 +1612,80 @@ class TemporalProcessMonitor(
                     process_name,
 
                 metadata={
+
                     "isolation_forest_score":
-                        observation[
+                        observation.get(
                             "isolation_forest_score"
-                        ],
+                        ),
 
                     "autoencoder_score":
-                        observation[
+                        observation.get(
                             "autoencoder_score"
-                        ],
+                        ),
 
                     "dual_ai_consensus_score":
-                        observation[
+                        observation.get(
                             "dual_ai_consensus_score"
-                        ],
+                        ),
 
                     "delta_seconds":
-                        observation[
+                        observation.get(
                             "delta_seconds"
-                        ],
+                        ),
+
+                    "identity_source":
+                        identity_source,
                 },
             )
         )
 
-
         # ========================================================
-        # CLEANUP
+        # PERIODIC CLEANUP
         # ========================================================
 
         self.cleanup_temporal_state_if_needed(
             current_time
         )
 
+        # ========================================================
+        # VALIDATE BUFFER RESPONSE
+        # ========================================================
+
+        if not isinstance(
+            buffer_result,
+            dict,
+        ):
+
+            return {
+
+                "available":
+                    False,
+
+                "state":
+                    "TEMPORAL_BUFFER_ERROR",
+
+                "error":
+                    "Temporal buffer returned "
+                    "an invalid result.",
+            }
 
         # ========================================================
-        # NOT ENOUGH HISTORY YET
+        # COLLECTING HISTORY
         # ========================================================
 
-        if not buffer_result[
-            "ready"
-        ]:
+        if not buffer_result.get(
+            "ready",
+            False,
+        ):
+
+            depth = (
+                buffer_result.get(
+                    "depth",
+                    0,
+                )
+            )
 
             logger.debug(
-
                 "TEMPORAL BUFFER | "
                 "PID=%s | "
                 "Process=%s | "
@@ -968,15 +1695,13 @@ class TemporalProcessMonitor(
 
                 process_name,
 
-                buffer_result[
-                    "depth"
-                ],
+                depth,
 
                 TEMPORAL_SEQUENCE_LENGTH,
             )
 
-
             return {
+
                 "available":
                     True,
 
@@ -989,13 +1714,17 @@ class TemporalProcessMonitor(
                 "process_name":
                     process_name,
 
+                "create_time":
+                    create_time,
+
+                "identity_source":
+                    identity_source,
+
                 "feature_record_id":
                     feature_record_id,
 
                 "depth":
-                    buffer_result[
-                        "depth"
-                    ],
+                    depth,
 
                 "required_depth":
                     TEMPORAL_SEQUENCE_LENGTH,
@@ -1013,15 +1742,13 @@ class TemporalProcessMonitor(
                     consensus_result,
             }
 
-
         # ========================================================
-        # GET 8 × 27 SEQUENCE
+        # GET TEMPORAL SEQUENCE
         # ========================================================
 
         sequence = (
             self.temporal_buffer
             .get_sequence(
-
                 pid=
                     pid,
 
@@ -1030,10 +1757,10 @@ class TemporalProcessMonitor(
             )
         )
 
-
         if sequence is None:
 
             return {
+
                 "available":
                     False,
 
@@ -1045,22 +1772,46 @@ class TemporalProcessMonitor(
 
                 "process_name":
                     process_name,
+
+                "create_time":
+                    create_time,
             }
 
-
         # ========================================================
-        # TEMPORAL TRANSFORMER
+        # TEMPORAL TRANSFORMER INFERENCE
         # ========================================================
 
         temporal_result = (
-            self.temporal_predictor.predict(
-
+            self.temporal_predictor
+            .predict(
                 sequence,
-
                 input_is_normalized=False,
             )
         )
 
+        if not isinstance(
+            temporal_result,
+            dict,
+        ):
+
+            return {
+
+                "available":
+                    False,
+
+                "state":
+                    "TEMPORAL_INFERENCE_FAILED",
+
+                "pid":
+                    pid,
+
+                "process_name":
+                    process_name,
+
+                "error":
+                    "Predictor returned "
+                    "invalid result.",
+            }
 
         if not temporal_result.get(
             "available",
@@ -1068,7 +1819,6 @@ class TemporalProcessMonitor(
         ):
 
             logger.warning(
-
                 "Temporal Transformer inference failed | "
                 "PID=%s | "
                 "Process=%s | "
@@ -1083,8 +1833,8 @@ class TemporalProcessMonitor(
                 ),
             )
 
-
             return {
+
                 "available":
                     False,
 
@@ -1097,6 +1847,9 @@ class TemporalProcessMonitor(
                 "process_name":
                     process_name,
 
+                "create_time":
+                    create_time,
+
                 "error":
                     temporal_result.get(
                         "error"
@@ -1106,7 +1859,6 @@ class TemporalProcessMonitor(
                     buffer_result,
             }
 
-
         # ========================================================
         # SEQUENCE METADATA
         # ========================================================
@@ -1114,7 +1866,6 @@ class TemporalProcessMonitor(
         observation_metadata = (
             self.temporal_buffer
             .get_observation_metadata(
-
                 pid=
                     pid,
 
@@ -1122,12 +1873,10 @@ class TemporalProcessMonitor(
                     create_time,
             )
         )
-
 
         feature_record_ids = (
             self.temporal_buffer
             .get_feature_record_ids(
-
                 pid=
                     pid,
 
@@ -1136,51 +1885,73 @@ class TemporalProcessMonitor(
             )
         )
 
-
         if not observation_metadata:
 
             raise RuntimeError(
-
-                "Temporal sequence metadata is unavailable."
+                "Temporal sequence metadata "
+                "is unavailable."
             )
-
 
         if not feature_record_ids:
 
             raise RuntimeError(
-
-                "Temporal feature-record IDs are unavailable."
+                "Temporal feature-record IDs "
+                "are unavailable."
             )
 
-
-        sequence_start_timestamp = float(
-
-            observation_metadata[
-                0
-            ][
-                "timestamp"
-            ]
+        sequence_start_timestamp = (
+            float(
+                observation_metadata[
+                    0
+                ][
+                    "timestamp"
+                ]
+            )
         )
 
-
-        sequence_end_timestamp = float(
-
-            observation_metadata[
-                -1
-            ][
-                "timestamp"
-            ]
+        sequence_end_timestamp = (
+            float(
+                observation_metadata[
+                    -1
+                ][
+                    "timestamp"
+                ]
+            )
         )
-
 
         # ========================================================
-        # PERSIST RESULT
+        # SEQUENCE GENERATION
+        # ========================================================
+
+        sequence_generation = (
+            buffer_result.get(
+                "sequence_generation",
+                0,
+            )
+        )
+
+        try:
+
+            sequence_generation = (
+                int(
+                    sequence_generation
+                )
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+
+            sequence_generation = 0
+
+        # ========================================================
+        # PERSIST TEMPORAL RESULT
         # ========================================================
 
         temporal_result_id = (
             self.temporal_result_store
             .save_result(
-
                 feature_record_id=
                     int(
                         feature_record_id
@@ -1196,11 +1967,7 @@ class TemporalProcessMonitor(
                     create_time,
 
                 sequence_generation=
-                    int(
-                        buffer_result[
-                            "sequence_generation"
-                        ]
-                    ),
+                    sequence_generation,
 
                 sequence_feature_record_ids=
                     feature_record_ids,
@@ -1216,18 +1983,17 @@ class TemporalProcessMonitor(
             )
         )
 
-
         # ========================================================
-        # TEMPORAL ALERT COOLDOWN
+        # TEMPORAL ALERT
         #
-        # We only log the temporal alert here.
+        # Temporal does NOT directly create another SOC incident.
         #
-        # We do NOT yet create another SOC incident because Fusion
-        # v3 will combine temporal evidence with the other engines.
+        # Fusion-v3 consumes temporal evidence later.
         # ========================================================
 
-        temporal_alert_emitted = False
-
+        temporal_alert_emitted = (
+            False
+        )
 
         if temporal_result.get(
             "should_alert",
@@ -1235,7 +2001,6 @@ class TemporalProcessMonitor(
         ):
 
             if self.temporal_alert_allowed(
-
                 pid=
                     pid,
 
@@ -1247,7 +2012,6 @@ class TemporalProcessMonitor(
             ):
 
                 self.mark_temporal_alert(
-
                     pid=
                         pid,
 
@@ -1258,12 +2022,51 @@ class TemporalProcessMonitor(
                         current_time,
                 )
 
+                temporal_alert_emitted = (
+                    True
+                )
 
-                temporal_alert_emitted = True
+                anomaly_score = (
+                    temporal_result.get(
+                        "anomaly_score",
+                        0.0,
+                    )
+                )
 
+                raw_error = (
+                    temporal_result.get(
+                        "raw_temporal_reconstruction_error",
+                        0.0,
+                    )
+                )
+
+                try:
+
+                    anomaly_score = float(
+                        anomaly_score
+                    )
+
+                except (
+                    TypeError,
+                    ValueError,
+                ):
+
+                    anomaly_score = 0.0
+
+                try:
+
+                    raw_error = float(
+                        raw_error
+                    )
+
+                except (
+                    TypeError,
+                    ValueError,
+                ):
+
+                    raw_error = 0.0
 
                 logger.warning(
-
                     "TEMPORAL AI SIGNAL | "
                     "PID=%s | "
                     "Process=%s | "
@@ -1277,38 +2080,48 @@ class TemporalProcessMonitor(
 
                     process_name,
 
-                    float(
-                        temporal_result[
-                            "anomaly_score"
-                        ]
-                    ),
+                    anomaly_score,
 
-                    temporal_result[
+                    temporal_result.get(
                         "anomaly_label"
-                    ],
-
-                    temporal_result[
-                        "severity"
-                    ],
-
-                    float(
-                        temporal_result[
-                            "raw_temporal_reconstruction_error"
-                        ]
                     ),
 
-                    temporal_result[
+                    temporal_result.get(
+                        "severity"
+                    ),
+
+                    raw_error,
+
+                    temporal_result.get(
                         "most_unusual_timestep"
-                    ],
+                    ),
                 )
 
+        # ========================================================
+        # NORMAL TEMPORAL INFERENCE LOG
+        # ========================================================
 
-        # ========================================================
-        # NORMAL TEMPORAL LOG
-        # ========================================================
+        anomaly_score = (
+            temporal_result.get(
+                "anomaly_score",
+                0.0,
+            )
+        )
+
+        try:
+
+            anomaly_score = float(
+                anomaly_score
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+
+            anomaly_score = 0.0
 
         logger.info(
-
             "TEMPORAL AI | "
             "PID=%s | "
             "Process=%s | "
@@ -1322,29 +2135,29 @@ class TemporalProcessMonitor(
 
             process_name,
 
-            buffer_result[
+            buffer_result.get(
                 "depth"
-            ],
-
-            float(
-                temporal_result[
-                    "anomaly_score"
-                ]
             ),
 
-            temporal_result[
-                "anomaly_label"
-            ],
+            anomaly_score,
 
-            temporal_result[
+            temporal_result.get(
+                "anomaly_label"
+            ),
+
+            temporal_result.get(
                 "temporal_embedding_dimension"
-            ],
+            ),
 
             temporal_result_id,
         )
 
+        # ========================================================
+        # COMPLETE RESULT
+        # ========================================================
 
         return {
+
             "available":
                 True,
 
@@ -1357,13 +2170,19 @@ class TemporalProcessMonitor(
             "process_name":
                 process_name,
 
+            "create_time":
+                create_time,
+
+            "identity_source":
+                identity_source,
+
             "feature_record_id":
                 feature_record_id,
 
             "depth":
-                buffer_result[
+                buffer_result.get(
                     "depth"
-                ],
+                ),
 
             "ready":
                 True,
@@ -1387,27 +2206,38 @@ class TemporalProcessMonitor(
                 temporal_alert_emitted,
         }
 
-
     # ============================================================
-    # OVERRIDE EXISTING PHASE-2 FEATURE COLLECTION
+    # OVERRIDE PHASE-2 AI FEATURE COLLECTION
     #
-    # Existing code executes FIRST.
+    # Existing ProcessMonitor pipeline executes FIRST.
+    #
+    # Temporal AI runs only after the existing Phase-2 logic.
+    #
+    # Temporal failures must NOT break ProcessMonitor.
     # ============================================================
 
     def collect_ai_behavior_features(
         self,
-        process_info: Dict[str, Any],
-        context: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        process_info: Dict[
+            str,
+            Any,
+        ],
+        context: Dict[
+            str,
+            Any,
+        ],
+    ) -> Dict[
+        str,
+        Any,
+    ]:
 
         # ========================================================
-        # EXISTING WORKING PHASE-2 PIPELINE
+        # EXISTING PHASE-2 PIPELINE
         # ========================================================
 
         phase2_result = (
             super()
             .collect_ai_behavior_features(
-
                 process_info=
                     process_info,
 
@@ -1416,8 +2246,9 @@ class TemporalProcessMonitor(
             )
         )
 
-
-        # Always preserve original result.
+        # ========================================================
+        # PRESERVE ORIGINAL RESULT
+        # ========================================================
 
         if not isinstance(
             phase2_result,
@@ -1426,17 +2257,20 @@ class TemporalProcessMonitor(
 
             return phase2_result
 
-
         # ========================================================
-        # RESOLVE REQUIRED PHASE-2 OUTPUT
+        # FEATURE RECORD ID
         # ========================================================
 
         record_id = (
-            self.resolve_feature_record_id(
+            self
+            .resolve_feature_record_id(
                 phase2_result
             )
         )
 
+        # ========================================================
+        # ISOLATION FOREST RESULT
+        # ========================================================
 
         isolation_result = (
             phase2_result.get(
@@ -1444,6 +2278,9 @@ class TemporalProcessMonitor(
             )
         )
 
+        # ========================================================
+        # AUTOENCODER RESULT
+        # ========================================================
 
         autoencoder_result = (
             phase2_result.get(
@@ -1451,16 +2288,16 @@ class TemporalProcessMonitor(
             )
         )
 
-
-        # --------------------------------------------------------
-        # Do not let temporal integration break Phase-2 execution.
-        # --------------------------------------------------------
+        # ========================================================
+        # RECORD ID VALIDATION
+        # ========================================================
 
         if record_id is None:
 
             phase2_result[
                 "temporal"
             ] = {
+
                 "available":
                     False,
 
@@ -1468,9 +2305,11 @@ class TemporalProcessMonitor(
                     "MISSING_FEATURE_RECORD_ID",
             }
 
-
             return phase2_result
 
+        # ========================================================
+        # ISOLATION RESULT VALIDATION
+        # ========================================================
 
         if not isinstance(
             isolation_result,
@@ -1480,6 +2319,7 @@ class TemporalProcessMonitor(
             phase2_result[
                 "temporal"
             ] = {
+
                 "available":
                     False,
 
@@ -1487,9 +2327,11 @@ class TemporalProcessMonitor(
                     "MISSING_ISOLATION_RESULT",
             }
 
-
             return phase2_result
 
+        # ========================================================
+        # AUTOENCODER RESULT VALIDATION
+        # ========================================================
 
         if not isinstance(
             autoencoder_result,
@@ -1499,6 +2341,7 @@ class TemporalProcessMonitor(
             phase2_result[
                 "temporal"
             ] = {
+
                 "available":
                     False,
 
@@ -1506,9 +2349,11 @@ class TemporalProcessMonitor(
                     "MISSING_AUTOENCODER_RESULT",
             }
 
-
             return phase2_result
 
+        # ========================================================
+        # ISOLATION MODEL AVAILABILITY
+        # ========================================================
 
         if isolation_result.get(
             "available"
@@ -1517,6 +2362,7 @@ class TemporalProcessMonitor(
             phase2_result[
                 "temporal"
             ] = {
+
                 "available":
                     False,
 
@@ -1524,9 +2370,11 @@ class TemporalProcessMonitor(
                     "ISOLATION_MODEL_UNAVAILABLE",
             }
 
-
             return phase2_result
 
+        # ========================================================
+        # AUTOENCODER AVAILABILITY
+        # ========================================================
 
         if autoencoder_result.get(
             "available"
@@ -1535,6 +2383,7 @@ class TemporalProcessMonitor(
             phase2_result[
                 "temporal"
             ] = {
+
                 "available":
                     False,
 
@@ -1542,22 +2391,25 @@ class TemporalProcessMonitor(
                     "AUTOENCODER_UNAVAILABLE",
             }
 
-
             return phase2_result
 
+        # ========================================================
+        # FEATURE RECORD
+        # ========================================================
 
         feature_record = (
-            self.resolve_feature_record(
+            self
+            .resolve_feature_record(
                 phase2_result
             )
         )
-
 
         if feature_record is None:
 
             phase2_result[
                 "temporal"
             ] = {
+
                 "available":
                     False,
 
@@ -1565,9 +2417,7 @@ class TemporalProcessMonitor(
                     "FEATURE_RECORD_UNAVAILABLE",
             }
 
-
             return phase2_result
-
 
         # ========================================================
         # TEMPORAL PIPELINE
@@ -1576,8 +2426,8 @@ class TemporalProcessMonitor(
         try:
 
             temporal_output = (
-                self.process_temporal_sample(
-
+                self
+                .process_temporal_sample(
                     process_info=
                         process_info,
 
@@ -1595,11 +2445,9 @@ class TemporalProcessMonitor(
                 )
             )
 
-
         except Exception as error:
 
             logger.exception(
-
                 "Temporal integration failure | "
                 "PID=%s | "
                 "Process=%s",
@@ -1613,8 +2461,8 @@ class TemporalProcessMonitor(
                 ),
             )
 
-
             temporal_output = {
+
                 "available":
                     False,
 
@@ -1627,14 +2475,12 @@ class TemporalProcessMonitor(
                     ),
             }
 
-
         # ========================================================
-        # EXPOSE TEMPORAL RESULT TO CALLER
+        # EXPOSE TEMPORAL OUTPUT
         # ========================================================
 
         phase2_result[
             "temporal"
         ] = temporal_output
-
 
         return phase2_result

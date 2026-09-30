@@ -1,119 +1,92 @@
-from fastapi.testclient import (
-    TestClient,
-)
+import uuid
 
-from api.main import (
-    app,
-)
+from fastapi.testclient import TestClient
+
+from api.main import app
 
 
-client = TestClient(
-    app
-)
+client = TestClient(app)
 
+
+# ================================================================
+# BUILD SYNTHETIC INCIDENT INTELLIGENCE
+# ================================================================
 
 def build_intelligence():
 
     return {
 
-        "risk_score":
-            96,
+        "risk_score": 96,
 
-        "risk_level":
-            "CRITICAL",
+        "risk_level": "CRITICAL",
 
         "risk": {
-
-            "risk_score":
-                96,
-
-            "risk_level":
-                "CRITICAL",
+            "risk_score": 96,
+            "risk_level": "CRITICAL",
         },
 
         "coordinated_analysis": {
 
             "evidence": {
 
+                # ------------------------------------------------
+                # PROCESS EVIDENCE
+                # ------------------------------------------------
                 "processes": [
-
                     {
-                        "pid":
-                            7000,
-
-                        "name":
-                            "demo.exe",
-
-                        "exe":
-                            r"C:\Temp\demo.exe",
-
-                        "behavior_score":
-                            85,
-
-                        "anomaly_score":
-                            75,
-
-                        "combined_threat_score":
-                            95,
+                        "pid": 7000,
+                        "name": "demo.exe",
+                        "exe": r"C:\Temp\demo.exe",
+                        "behavior_score": 85,
+                        "anomaly_score": 75,
+                        "combined_threat_score": 95,
                     }
                 ],
 
+                # ------------------------------------------------
+                # FILE EVIDENCE
+                # ------------------------------------------------
                 "files": [
-
                     {
-                        "name":
-                            "demo.exe",
-
-                        "path":
-                            r"C:\Temp\demo.exe",
-
-                        "sha256":
-                            "FASTAPI_TEST_SHA256",
-
-                        "malware_probability":
-                            0.96,
-
-                        "static_risk_score":
-                            80,
+                        "name": "demo.exe",
+                        "path": r"C:\Temp\demo.exe",
+                        "sha256": "FASTAPI_TEST_SHA256",
+                        "malware_probability": 0.96,
+                        "static_risk_score": 80,
                     }
                 ],
 
+                # ------------------------------------------------
+                # NETWORK EVIDENCE
+                # ------------------------------------------------
                 "network_connections": [
-
                     {
-                        "pid":
-                            7000,
-
-                        "process_name":
-                            "demo.exe",
-
-                        "remote_ip":
-                            "203.0.113.220",
-
-                        "remote_port":
-                            443,
+                        "pid": 7000,
+                        "process_name": "demo.exe",
+                        "remote_ip": "203.0.113.220",
+                        "remote_port": 443,
                     }
                 ],
 
+                # ------------------------------------------------
+                # REGISTRY EVIDENCE
+                # ------------------------------------------------
                 "registry_artifacts": [
-
                     {
-                        "key":
-                            (
-                                r"HKCU\Software\Microsoft"
-                                r"\Windows\CurrentVersion\Run"
-                            ),
-
-                        "value_name":
-                            "DemoApp",
-
-                        "value_data":
-                            r"C:\Temp\demo.exe",
+                        "key": (
+                            r"HKCU\Software\Microsoft"
+                            r"\Windows\CurrentVersion\Run"
+                        ),
+                        "value_name": "DemoApp",
+                        "value_data": r"C:\Temp\demo.exe",
                     }
                 ],
             },
         },
 
+        # ========================================================
+        # RESPONSE RECOMMENDATIONS
+        # ========================================================
         "response": {
 
             "recommendations": [
@@ -147,6 +120,10 @@ def build_intelligence():
     }
 
 
+# ================================================================
+# MAIN TEST
+# ================================================================
+
 def main():
 
     print()
@@ -155,7 +132,6 @@ def main():
         "SENTINEL-X FASTAPI SOC BACKEND TEST"
     )
     print("=" * 80)
-
 
     # ============================================================
     # HEALTH
@@ -167,20 +143,38 @@ def main():
         )
     )
 
-
     health_data = (
         health_response.json()
     )
 
+    # ============================================================
+    # CREATE UNIQUE INCIDENT ID
+    #
+    # IMPORTANT:
+    # Old version used:
+    #
+    #     INC-FASTAPI-001
+    #
+    # That caused HTTP 409 on repeated test runs because the SOC
+    # case already existed in persistent storage.
+    #
+    # A unique ID now makes this integration test rerunnable.
+    # ============================================================
+
+    incident_id = (
+        f"INC-FASTAPI-"
+        f"{uuid.uuid4().hex[:8].upper()}"
+    )
+
+    print()
+    print(
+        "Generated Incident ID:",
+        incident_id,
+    )
 
     # ============================================================
     # CREATE CASE
     # ============================================================
-
-    incident_id = (
-        "INC-FASTAPI-001"
-    )
-
 
     create_response = (
         client.post(
@@ -188,7 +182,6 @@ def main():
             "/api/v1/cases",
 
             json={
-
                 "incident_id":
                     incident_id,
 
@@ -198,11 +191,9 @@ def main():
         )
     )
 
-
     create_data = (
         create_response.json()
     )
-
 
     print()
     print(
@@ -210,6 +201,9 @@ def main():
         create_response.status_code,
     )
 
+    # ------------------------------------------------------------
+    # Stop cleanly when case creation fails.
+    # ------------------------------------------------------------
 
     if (
         create_response.status_code
@@ -217,11 +211,15 @@ def main():
     ):
 
         print(
-            create_data
+            "Create Response:",
+            create_data,
         )
 
         return
 
+    # ============================================================
+    # CREATED TICKET
+    # ============================================================
 
     ticket = (
         create_data[
@@ -229,7 +227,7 @@ def main():
         ]
     )
 
-
+    print()
     print(
         "Incident:",
         create_data[
@@ -265,7 +263,6 @@ def main():
         ],
     )
 
-
     # ============================================================
     # GET CASE
     # ============================================================
@@ -276,11 +273,9 @@ def main():
         )
     )
 
-
     case_data = (
         case_response.json()
     )
-
 
     # ============================================================
     # DIGITAL TWIN
@@ -295,11 +290,9 @@ def main():
         )
     )
 
-
     twin_data = (
         twin_response.json()
     )
-
 
     # ============================================================
     # RESPONSE ACTIONS
@@ -314,11 +307,9 @@ def main():
         )
     )
 
-
     response_actions_data = (
         response_actions_response.json()
     )
-
 
     # ============================================================
     # APPROVE
@@ -333,7 +324,6 @@ def main():
             ),
 
             json={
-
                 "analyst":
                     "SOCAnalystAPI",
 
@@ -346,18 +336,15 @@ def main():
         )
     )
 
-
     approval_data = (
         approval_response.json()
     )
-
 
     print()
     print(
         "Approval HTTP Status:",
         approval_response.status_code,
     )
-
 
     print(
         "Approval Workflow Status:",
@@ -366,7 +353,6 @@ def main():
         ),
     )
 
-
     print(
         "Routed Actions:",
         approval_data.get(
@@ -374,14 +360,12 @@ def main():
         ),
     )
 
-
     print(
         "Real Response Executed:",
         approval_data.get(
             "real_response_executed"
         ),
     )
-
 
     # ============================================================
     # TICKET ENDPOINT
@@ -398,11 +382,9 @@ def main():
         )
     )
 
-
     stored_ticket = (
         ticket_response.json()
     )
-
 
     # ============================================================
     # DASHBOARD
@@ -414,15 +396,17 @@ def main():
         )
     )
 
-
     dashboard_data = (
         dashboard_response.json()
     )
 
-
     # ============================================================
     # VALIDATION
     # ============================================================
+
+    # ------------------------------------------------------------
+    # HEALTH
+    # ------------------------------------------------------------
 
     health_pass = (
 
@@ -437,6 +421,9 @@ def main():
         == "HEALTHY"
     )
 
+    # ------------------------------------------------------------
+    # CASE CREATION
+    # ------------------------------------------------------------
 
     create_pass = (
 
@@ -451,6 +438,9 @@ def main():
         is True
     )
 
+    # ------------------------------------------------------------
+    # AUTOMATIC TICKET
+    # ------------------------------------------------------------
 
     ticket_pass = (
         ticket[
@@ -460,6 +450,9 @@ def main():
         )
     )
 
+    # ------------------------------------------------------------
+    # TICKET PRIORITY
+    # ------------------------------------------------------------
 
     priority_pass = (
         ticket[
@@ -468,6 +461,9 @@ def main():
         == "P1"
     )
 
+    # ------------------------------------------------------------
+    # DIGITAL TWIN SELECTED PLAN
+    # ------------------------------------------------------------
 
     plan_pass = (
         ticket[
@@ -476,6 +472,9 @@ def main():
         == "Targeted Full Remediation"
     )
 
+    # ------------------------------------------------------------
+    # CASE RETRIEVAL
+    # ------------------------------------------------------------
 
     case_pass = (
 
@@ -490,6 +489,9 @@ def main():
         == incident_id
     )
 
+    # ------------------------------------------------------------
+    # DIGITAL TWIN ENDPOINT
+    # ------------------------------------------------------------
 
     twin_pass = (
 
@@ -506,6 +508,9 @@ def main():
         is not None
     )
 
+    # ------------------------------------------------------------
+    # RESPONSE ACTIONS ENDPOINT
+    # ------------------------------------------------------------
 
     responses_pass = (
 
@@ -520,6 +525,9 @@ def main():
         == 4
     )
 
+    # ------------------------------------------------------------
+    # ANALYST APPROVAL
+    # ------------------------------------------------------------
 
     approval_pass = (
 
@@ -534,6 +542,9 @@ def main():
         is True
     )
 
+    # ------------------------------------------------------------
+    # RESPONSE MUST REMAIN SIMULATED
+    # ------------------------------------------------------------
 
     simulated_pass = (
         approval_data.get(
@@ -542,6 +553,9 @@ def main():
         is False
     )
 
+    # ------------------------------------------------------------
+    # APPROVED TICKET MUST PERSIST
+    # ------------------------------------------------------------
 
     persisted_pass = (
 
@@ -556,6 +570,9 @@ def main():
         == "APPROVED"
     )
 
+    # ------------------------------------------------------------
+    # DASHBOARD
+    # ------------------------------------------------------------
 
     dashboard_pass = (
 
@@ -570,9 +587,8 @@ def main():
         >= 1
     )
 
-
     # ============================================================
-    # FINAL
+    # FINAL VALIDATION OUTPUT
     # ============================================================
 
     print()
@@ -582,14 +598,12 @@ def main():
     )
     print("=" * 80)
 
-
     print(
         "Health endpoint:",
         "PASS"
         if health_pass
         else "FAIL",
     )
-
 
     print(
         "SOC case API:",
@@ -598,14 +612,12 @@ def main():
         else "FAIL",
     )
 
-
     print(
         "Automatic ticket returned:",
         "PASS"
         if ticket_pass
         else "FAIL",
     )
-
 
     print(
         "P1 priority returned:",
@@ -614,14 +626,12 @@ def main():
         else "FAIL",
     )
 
-
     print(
         "Digital Twin plan returned:",
         "PASS"
         if plan_pass
         else "FAIL",
     )
-
 
     print(
         "Case retrieval endpoint:",
@@ -630,14 +640,12 @@ def main():
         else "FAIL",
     )
 
-
     print(
         "Digital Twin endpoint:",
         "PASS"
         if twin_pass
         else "FAIL",
     )
-
 
     print(
         "Response actions endpoint:",
@@ -646,14 +654,12 @@ def main():
         else "FAIL",
     )
 
-
     print(
         "Analyst approval endpoint:",
         "PASS"
         if approval_pass
         else "FAIL",
     )
-
 
     print(
         "Response remained simulated:",
@@ -662,14 +668,12 @@ def main():
         else "FAIL",
     )
 
-
     print(
         "Approved ticket persisted:",
         "PASS"
         if persisted_pass
         else "FAIL",
     )
-
 
     print(
         "Dashboard summary endpoint:",
@@ -678,6 +682,9 @@ def main():
         else "FAIL",
     )
 
+    # ============================================================
+    # OVERALL
+    # ============================================================
 
     overall = all(
         [
@@ -696,7 +703,6 @@ def main():
         ]
     )
 
-
     print()
 
     print(
@@ -708,6 +714,10 @@ def main():
 
     print("=" * 80)
 
+
+# ================================================================
+# ENTRY POINT
+# ================================================================
 
 if __name__ == "__main__":
 
