@@ -86,13 +86,6 @@ function App() {
 
 
                 <Route
-                    path="/scan"
-                    element={
-                        <ScanCenter />
-                    }
-                />
-
-                <Route
                     path="/live-monitor"
                     element={
                         <LiveMonitor />

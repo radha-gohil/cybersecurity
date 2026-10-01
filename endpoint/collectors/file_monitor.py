@@ -19,7 +19,7 @@ from detection.behavior.ransomware_behavior_detector import (
 )
 
 from endpoint.agent.telemetry_manager import (
-    TelemetryManager,
+    shared_telemetry_manager,
 )
 
 from endpoint.storage.database import (
@@ -49,7 +49,7 @@ class SentinelFileEventHandler(
         # ========================================================
 
         self.telemetry = (
-            TelemetryManager()
+            shared_telemetry_manager
         )
 
         # ========================================================

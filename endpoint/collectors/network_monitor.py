@@ -9,7 +9,7 @@ import psutil
 
 
 from endpoint.agent.telemetry_manager import (
-    TelemetryManager,
+    shared_telemetry_manager,
 )
 
 from endpoint.utils.logger import (
@@ -44,7 +44,7 @@ class NetworkMonitor:
         ] = {}
 
         self.telemetry = (
-            TelemetryManager()
+            shared_telemetry_manager
         )
 
 

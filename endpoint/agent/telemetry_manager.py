@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import threading
+import time
+from datetime import datetime, timezone
+
 
 from endpoint.models.security_event import (
     SecurityEvent,
@@ -48,18 +52,15 @@ logger = get_logger(
 
 shared_correlation_manager = (
     CorrelationManager(
-
-        correlation_window_seconds=
-            120,
-
-        incident_threshold=
-            35,
+        correlation_window_seconds=120,
+        incident_threshold=35,
     )
 )
 
 
 # ================================================================
 # SHARED PROVENANCE GRAPH BUILDER
+# ================================================================
 #
 # Lazy initialization is intentional.
 #
@@ -75,26 +76,34 @@ shared_correlation_manager = (
 
 _shared_provenance_graph_builder = None
 
+_shared_provenance_graph_lock = (
+    threading.RLock()
+)
+
 
 def get_shared_provenance_graph_builder():
 
     global _shared_provenance_graph_builder
-
 
     if (
         _shared_provenance_graph_builder
         is None
     ):
 
-        _shared_provenance_graph_builder = (
-            ProvenanceGraphBuilder()
-        )
+        with _shared_provenance_graph_lock:
 
+            if (
+                _shared_provenance_graph_builder
+                is None
+            ):
 
-        logger.info(
-            "SENTINEL-X Provenance Graph initialized."
-        )
+                _shared_provenance_graph_builder = (
+                    ProvenanceGraphBuilder()
+                )
 
+                logger.info(
+                    "SENTINEL-X Provenance Graph initialized."
+                )
 
     return (
         _shared_provenance_graph_builder
@@ -104,7 +113,6 @@ def get_shared_provenance_graph_builder():
 # ================================================================
 # TELEMETRY MANAGER
 # ================================================================
-
 
 class TelemetryManager:
 
@@ -141,6 +149,7 @@ class TelemetryManager:
             is not None
 
             else
+
             get_shared_provenance_graph_builder()
         )
 
@@ -162,8 +171,91 @@ class TelemetryManager:
             is not None
 
             else
+
             shared_correlation_manager
         )
+
+
+        # ========================================================
+        # LIVE TELEMETRY RUNTIME
+        #
+        # These values represent telemetry observed by THIS
+        # running Sentinel-X process.
+        #
+        # They are different from the historical SQLite totals.
+        # ========================================================
+
+        self.runtime_lock = (
+            threading.RLock()
+        )
+
+        self.runtime_started_at = (
+            time.time()
+        )
+
+        self.runtime_event_count = 0
+
+
+        # Total telemetry received since this runtime started.
+
+        self.runtime_category_counts = {
+
+            "PROCESS": 0,
+
+            "FILE": 0,
+
+            "NETWORK": 0,
+
+            "REGISTRY": 0,
+
+            "STARTUP": 0,
+
+            "SECURITY": 0,
+
+            "RESPONSE": 0,
+
+            "SYSTEM": 0,
+        }
+
+
+        # Number of events received since the frontend/API
+        # last consumed an interval snapshot.
+
+        self.interval_category_counts = {
+
+            "PROCESS": 0,
+
+            "FILE": 0,
+
+            "NETWORK": 0,
+
+            "REGISTRY": 0,
+
+            "STARTUP": 0,
+
+            "SECURITY": 0,
+
+            "RESPONSE": 0,
+
+            "SYSTEM": 0,
+        }
+
+
+        # ========================================================
+        # LATEST EVENT
+        # ========================================================
+
+        self.latest_event_timestamp = None
+
+        self.latest_event_type = None
+
+        self.latest_event_category = None
+
+        self.latest_event_severity = None
+
+        self.latest_event_id = None
+
+        self.latest_event_source = None
 
 
     # ============================================================
@@ -262,6 +354,465 @@ class TelemetryManager:
 
 
     # ============================================================
+    # RECORD LIVE TELEMETRY EVENT
+    # ============================================================
+
+    def record_runtime_event(
+        self,
+        *,
+        event,
+        category: str,
+    ):
+
+        category = (
+            str(
+                category
+                or "SYSTEM"
+            )
+            .upper()
+        )
+
+
+        with self.runtime_lock:
+
+            # ====================================================
+            # TOTAL RUNTIME EVENTS
+            # ====================================================
+
+            self.runtime_event_count += 1
+
+
+            # ====================================================
+            # ENSURE CATEGORY EXISTS
+            # ====================================================
+
+            if (
+                category
+                not in self.runtime_category_counts
+            ):
+
+                self.runtime_category_counts[
+                    category
+                ] = 0
+
+
+            if (
+                category
+                not in self.interval_category_counts
+            ):
+
+                self.interval_category_counts[
+                    category
+                ] = 0
+
+
+            # ====================================================
+            # RUNTIME TOTAL
+            # ====================================================
+
+            self.runtime_category_counts[
+                category
+            ] += 1
+
+
+            # ====================================================
+            # CURRENT FRONTEND INTERVAL
+            # ====================================================
+
+            self.interval_category_counts[
+                category
+            ] += 1
+
+
+            # ====================================================
+            # LATEST EVENT
+            # ====================================================
+
+            self.latest_event_timestamp = (
+                getattr(
+                    event,
+                    "timestamp",
+                    None,
+                )
+            )
+
+            self.latest_event_type = (
+                getattr(
+                    event,
+                    "event_type",
+                    None,
+                )
+            )
+
+            self.latest_event_category = (
+                category
+            )
+
+            self.latest_event_severity = (
+                getattr(
+                    event,
+                    "severity",
+                    None,
+                )
+            )
+
+            self.latest_event_id = (
+                getattr(
+                    event,
+                    "event_id",
+                    None,
+                )
+            )
+
+            self.latest_event_source = (
+                getattr(
+                    event,
+                    "source",
+                    None,
+                )
+            )
+
+
+    # ============================================================
+    # LIVE TELEMETRY SNAPSHOT
+    #
+    # reset_interval=True:
+    #
+    #   return all events collected since previous API request,
+    #   then reset only the interval counters.
+    #
+    # Runtime totals are NOT reset.
+    # ============================================================
+
+    def get_live_snapshot(
+        self,
+        reset_interval: bool = True,
+    ) -> dict:
+
+        with self.runtime_lock:
+
+            runtime_counts = dict(
+                self.runtime_category_counts
+            )
+
+            interval_counts = dict(
+                self.interval_category_counts
+            )
+
+
+            runtime_event_count = (
+                self.runtime_event_count
+            )
+
+
+            latest_event = {
+
+                "event_id":
+                    self.latest_event_id,
+
+                "timestamp":
+                    self.latest_event_timestamp,
+
+                "event_type":
+                    self.latest_event_type,
+
+                "category":
+                    self.latest_event_category,
+
+                "severity":
+                    self.latest_event_severity,
+
+                "source":
+                    self.latest_event_source,
+            }
+
+
+            if reset_interval:
+
+                for category in (
+                    self.interval_category_counts
+                ):
+
+                    self.interval_category_counts[
+                        category
+                    ] = 0
+
+
+        uptime_seconds = max(
+            0.0,
+            time.time()
+            -
+            self.runtime_started_at,
+        )
+
+
+        return {
+
+            "status":
+                "ACTIVE",
+
+            "running":
+                True,
+
+            "device_id":
+                self.device_id,
+
+            "timestamp":
+                datetime.now(
+                    timezone.utc
+                ).isoformat(),
+
+            "uptime_seconds":
+                round(
+                    uptime_seconds,
+                    2,
+                ),
+
+            "runtime_event_count":
+                runtime_event_count,
+
+
+            # ====================================================
+            # ALL EVENTS SEEN SINCE THIS BACKEND STARTED
+            # ====================================================
+
+            "runtime_counts": {
+
+                "process":
+                    runtime_counts.get(
+                        "PROCESS",
+                        0,
+                    ),
+
+                "file":
+                    runtime_counts.get(
+                        "FILE",
+                        0,
+                    ),
+
+                "network":
+                    runtime_counts.get(
+                        "NETWORK",
+                        0,
+                    ),
+
+                "registry":
+                    runtime_counts.get(
+                        "REGISTRY",
+                        0,
+                    ),
+
+                "startup":
+                    runtime_counts.get(
+                        "STARTUP",
+                        0,
+                    ),
+
+                "security":
+                    runtime_counts.get(
+                        "SECURITY",
+                        0,
+                    ),
+
+                "response":
+                    runtime_counts.get(
+                        "RESPONSE",
+                        0,
+                    ),
+
+                "system":
+                    runtime_counts.get(
+                        "SYSTEM",
+                        0,
+                    ),
+            },
+
+
+            # ====================================================
+            # EVENTS SINCE PREVIOUS SNAPSHOT
+            #
+            # These values are intended for the Live Monitor graph.
+            # ====================================================
+
+            "recent": {
+
+                "process":
+                    interval_counts.get(
+                        "PROCESS",
+                        0,
+                    ),
+
+                "file":
+                    interval_counts.get(
+                        "FILE",
+                        0,
+                    ),
+
+                "network":
+                    interval_counts.get(
+                        "NETWORK",
+                        0,
+                    ),
+
+                "registry":
+                    interval_counts.get(
+                        "REGISTRY",
+                        0,
+                    ),
+
+                "startup":
+                    interval_counts.get(
+                        "STARTUP",
+                        0,
+                    ),
+
+                "security":
+                    interval_counts.get(
+                        "SECURITY",
+                        0,
+                    ),
+
+                "response":
+                    interval_counts.get(
+                        "RESPONSE",
+                        0,
+                    ),
+
+                "system":
+                    interval_counts.get(
+                        "SYSTEM",
+                        0,
+                    ),
+            },
+
+
+            # ====================================================
+            # FRONTEND FRIENDLY VIEW
+            # ====================================================
+
+            "live_monitor": {
+
+                "process_events":
+                    interval_counts.get(
+                        "PROCESS",
+                        0,
+                    ),
+
+                "file_events":
+                    interval_counts.get(
+                        "FILE",
+                        0,
+                    ),
+
+                "network_events":
+                    interval_counts.get(
+                        "NETWORK",
+                        0,
+                    ),
+
+                "system_events":
+                    (
+                        interval_counts.get(
+                            "REGISTRY",
+                            0,
+                        )
+                        +
+                        interval_counts.get(
+                            "SYSTEM",
+                            0,
+                        )
+                        +
+                        interval_counts.get(
+                            "STARTUP",
+                            0,
+                        )
+                    ),
+            },
+
+
+            "latest_event":
+                latest_event,
+        }
+
+
+    # ============================================================
+    # NON-DESTRUCTIVE LIVE SNAPSHOT
+    #
+    # Useful for:
+    #
+    #   dashboard
+    #   status endpoint
+    #   debugging
+    #
+    # It does NOT clear recent counters.
+    # ============================================================
+
+    def peek_live_snapshot(
+        self,
+    ) -> dict:
+
+        return self.get_live_snapshot(
+            reset_interval=False
+        )
+
+
+    # ============================================================
+    # RESET RUNTIME COUNTERS
+    #
+    # Intended primarily for controlled tests.
+    # Do not normally call this from the frontend.
+    # ============================================================
+
+    def reset_runtime_counters(
+        self,
+    ):
+
+        with self.runtime_lock:
+
+            self.runtime_started_at = (
+                time.time()
+            )
+
+            self.runtime_event_count = 0
+
+
+            for category in (
+                self.runtime_category_counts
+            ):
+
+                self.runtime_category_counts[
+                    category
+                ] = 0
+
+
+            for category in (
+                self.interval_category_counts
+            ):
+
+                self.interval_category_counts[
+                    category
+                ] = 0
+
+
+            self.latest_event_timestamp = None
+
+            self.latest_event_type = None
+
+            self.latest_event_category = None
+
+            self.latest_event_severity = None
+
+            self.latest_event_id = None
+
+            self.latest_event_source = None
+
+
+        logger.info(
+            "Telemetry runtime counters reset."
+        )
+
+
+    # ============================================================
     # WRITE EVENT TO PROVENANCE GRAPH
     #
     # IMPORTANT:
@@ -292,6 +843,7 @@ class TelemetryManager:
         try:
 
             # SecurityEvent already provides to_dict().
+
             event_dict = (
                 event.to_dict()
             )
@@ -591,6 +1143,8 @@ class TelemetryManager:
     #     ↓
     # Raw event persistence
     #     ↓
+    # Live telemetry runtime counters
+    #     ↓
     # Provenance graph
     #     ↓
     # Correlation
@@ -666,11 +1220,13 @@ class TelemetryManager:
 
         metadata.update(
             {
+
                 "event_category":
                     category,
 
                 "device_id":
                     self.device_id,
+
             }
         )
 
@@ -714,10 +1270,37 @@ class TelemetryManager:
 
         # ========================================================
         # 1. SAVE RAW TELEMETRY
+        #
+        # Preserve your existing behaviour:
+        #
+        # only count an event as live telemetry after the event
+        # has successfully reached central persistence.
         # ========================================================
 
         save_event(
             event
+        )
+
+
+        # ========================================================
+        # 2. RECORD LIVE RUNTIME EVENT
+        #
+        # Every successfully persisted telemetry event is recorded
+        # exactly once here.
+        #
+        # This is what powers:
+        #
+        #     Process Events
+        #     File Events
+        #     Network Events
+        #     System Events
+        #
+        # and the real-time line chart.
+        # ========================================================
+
+        self.record_runtime_event(
+            event=event,
+            category=category,
         )
 
 
@@ -736,9 +1319,9 @@ class TelemetryManager:
 
 
         # ========================================================
-        # 2. PROVENANCE GRAPH
+        # 3. PROVENANCE GRAPH
         #
-        # Every SecurityEvent now automatically updates the graph.
+        # Every SecurityEvent automatically updates the graph.
         # ========================================================
 
         provenance_result = (
@@ -749,7 +1332,7 @@ class TelemetryManager:
 
 
         # ========================================================
-        # 3. CORRELATION
+        # 4. CORRELATION
         # ========================================================
 
         correlation_result = (
@@ -763,6 +1346,7 @@ class TelemetryManager:
         # OPTIONAL RUNTIME METADATA
         #
         # This modifies only the returned in-memory SecurityEvent.
+        #
         # Raw event persistence already happened above.
         # ========================================================
 
@@ -774,6 +1358,7 @@ class TelemetryManager:
             event.metadata[
                 "provenance_graph"
             ] = {
+
                 "processed":
                     provenance_result
                     is not None,
@@ -825,3 +1410,25 @@ class TelemetryManager:
         # ========================================================
 
         return event
+
+
+# ================================================================
+# SHARED PRODUCTION TELEMETRY MANAGER
+#
+# IMPORTANT:
+#
+# All production collectors should use THIS SAME instance.
+#
+# Do NOT create:
+#
+#     TelemetryManager()
+#
+# separately inside every collector if you want the frontend
+# runtime counters to represent all collector activity together.
+# ================================================================
+
+shared_telemetry_manager = (
+    TelemetryManager(
+        device_id="local-device"
+    )
+)

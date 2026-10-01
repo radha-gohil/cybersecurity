@@ -6,22 +6,29 @@ import {
     Chip,
     Stack,
     Button,
+    Alert,
+    CircularProgress,
 } from "@mui/material";
 
 import {
-    MonitorHeartRounded,
     MemoryRounded,
     FolderRounded,
     LanguageRounded,
     SettingsRounded,
     RefreshRounded,
     CheckCircleRounded,
+    ErrorRounded,
 } from "@mui/icons-material";
 
 import {
+    useCallback,
     useEffect,
+    useRef,
     useState,
 } from "react";
+
+import SecurityDetectionFeed from
+    "../components/SecurityDetectionFeed";
 
 import {
     ResponsiveContainer,
@@ -34,121 +41,639 @@ import {
     Legend,
 } from "recharts";
 
+import {
+    getEndpointOverview,
+    getSecurityRuntime,
+    getLiveTelemetry,
+} from "../api/sentinelApi";
+
+
+/* ============================================================ */
+/* CONFIGURATION */
+/* ============================================================ */
+
+const LIVE_POLL_INTERVAL = 2000;
+
+const SUMMARY_REFRESH_INTERVAL = 10000;
+
+const MAX_CHART_POINTS = 20;
+
+
+/* ============================================================ */
+/* HELPERS */
+/* ============================================================ */
+
+function asCount(value) {
+    const number = Number(value ?? 0);
+
+    return Number.isFinite(number)
+        ? Math.max(0, number)
+        : 0;
+}
+
+
+function getCategoryCount(counts, category) {
+    return asCount(
+        counts?.[category] ??
+        counts?.[category.toLowerCase()] ??
+        0
+    );
+}
+
+
+function normalizeCounts(counts = {}) {
+    return {
+        process: getCategoryCount(counts, "PROCESS"),
+        file: getCategoryCount(counts, "FILE"),
+        network: getCategoryCount(counts, "NETWORK"),
+        system:
+            getCategoryCount(counts, "REGISTRY") +
+            getCategoryCount(counts, "SYSTEM") +
+            getCategoryCount(counts, "STARTUP") +
+            getCategoryCount(counts, "SECURITY") +
+            getCategoryCount(counts, "RESPONSE"),
+    };
+}
+
+
+function calculateDelta(current, previous) {
+    // A counter can decrease when the backend restarts.
+    // Never display negative event activity.
+
+    if (current < previous) {
+        return 0;
+    }
+
+    return current - previous;
+}
+
+
+function getShortTime() {
+    return new Date().toLocaleTimeString(
+        [],
+        {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+        }
+    );
+}
+
+
+function getCollectorStatus(collector) {
+    if (collector === true) {
+        return "ACTIVE";
+    }
+
+    if (collector === false) {
+        return "OFFLINE";
+    }
+
+    if (
+        typeof collector === "string"
+    ) {
+        return collector.toUpperCase();
+    }
+
+    if (
+        collector &&
+        typeof collector === "object"
+    ) {
+        if (collector.status) {
+            return String(
+                collector.status
+            ).toUpperCase();
+        }
+
+        if (collector.healthy === true) {
+            return "ACTIVE";
+        }
+
+        if (collector.healthy === false) {
+            return "OFFLINE";
+        }
+    }
+
+    return "UNKNOWN";
+}
+
+
+function getHighestActivityCategory(eventCounts) {
+    const categories = [
+        {
+            name: "Process",
+            value: eventCounts.process,
+        },
+        {
+            name: "File",
+            value: eventCounts.file,
+        },
+        {
+            name: "Network",
+            value: eventCounts.network,
+        },
+        {
+            name: "System",
+            value: eventCounts.system,
+        },
+    ];
+
+    categories.sort(
+        (a, b) => b.value - a.value
+    );
+
+    if (
+        categories.every(
+            (item) => item.value === 0
+        )
+    ) {
+        return "None";
+    }
+
+    return categories[0].name;
+}
+
+
+/* ============================================================ */
+/* LIVE MONITOR */
+/* ============================================================ */
 
 function LiveMonitor() {
 
+    /* ======================================================== */
+    /* STATE */
+    /* ======================================================== */
+
+    const [overview, setOverview] =
+        useState(null);
+
+    const [runtime, setRuntime] =
+        useState(null);
+
+    const [live, setLive] =
+        useState(null);
+
     const [chartData, setChartData] =
-        useState(
-            generateInitialData()
-        );
+        useState([]);
+
+    const [loading, setLoading] =
+        useState(true);
+
+    const [refreshing, setRefreshing] =
+        useState(false);
+
+    const [error, setError] =
+        useState(null);
 
     const [lastUpdated, setLastUpdated] =
-        useState(
-            new Date()
-                .toLocaleTimeString()
-        );
+        useState(null);
 
-    const [eventCounts, setEventCounts] =
-        useState({
-            process: 146,
-            file: 88,
-            network: 121,
-            system: 54,
-        });
 
+    /* ======================================================== */
+    /* REFS */
+    /* ======================================================== */
+
+    const previousCounts = useRef(null);
+
+    const previousTimestamp = useRef(null);
+
+    const pollingInProgress = useRef(false);
+
+    const lastSummaryFetch = useRef(0);
+
+    const mountedRef = useRef(false);
+
+
+    /* ======================================================== */
+    /* UPDATE CHART FROM LIVE RUNTIME COUNTERS */
+    /* ======================================================== */
+
+    const updateChart = useCallback(
+        (liveData) => {
+
+            const currentCounts = normalizeCounts(
+                liveData?.runtime_counts || {}
+            );
+
+            const timestamp =
+                liveData?.timestamp || null;
+
+            const previous =
+                previousCounts.current;
+
+            const previousTime =
+                previousTimestamp.current;
+
+            // First snapshot establishes the baseline.
+            // Historical events are not mistaken for new activity.
+
+            if (previous === null) {
+
+                previousCounts.current = currentCounts;
+                previousTimestamp.current = timestamp;
+
+                setChartData([
+                    {
+                        time: getShortTime(),
+                        process: 0,
+                        file: 0,
+                        network: 0,
+                        system: 0,
+                    },
+                ]);
+
+                return;
+            }
+
+            // Detect backend/session restart using its timestamp
+            // and cumulative counters where possible.
+
+            const countersReset = [
+                "process",
+                "file",
+                "network",
+                "system",
+            ].some(
+                (key) =>
+                    currentCounts[key] < previous[key]
+            );
+
+            const timeWentBackwards =
+                Boolean(
+                    timestamp &&
+                    previousTime &&
+                    Date.parse(timestamp) <
+                    Date.parse(previousTime)
+                );
+
+            if (
+                countersReset ||
+                timeWentBackwards
+            ) {
+
+                previousCounts.current = currentCounts;
+                previousTimestamp.current = timestamp;
+
+                setChartData([
+                    {
+                        time: getShortTime(),
+                        process: 0,
+                        file: 0,
+                        network: 0,
+                        system: 0,
+                    },
+                ]);
+
+                return;
+            }
+
+            const newPoint = {
+                time: getShortTime(),
+
+                process: calculateDelta(
+                    currentCounts.process,
+                    previous.process
+                ),
+
+                file: calculateDelta(
+                    currentCounts.file,
+                    previous.file
+                ),
+
+                network: calculateDelta(
+                    currentCounts.network,
+                    previous.network
+                ),
+
+                system: calculateDelta(
+                    currentCounts.system,
+                    previous.system
+                ),
+            };
+
+            previousCounts.current = currentCounts;
+            previousTimestamp.current = timestamp;
+
+            setChartData(
+                (previousChart) => [
+                    ...previousChart,
+                    newPoint,
+                ].slice(-MAX_CHART_POINTS)
+            );
+        },
+        []
+    );
+
+
+    /* ======================================================== */
+    /* LOAD REAL BACKEND DATA */
+    /* ======================================================== */
+
+    const loadLiveData = useCallback(
+        async (
+            initialLoad = false,
+            forceSummary = false
+        ) => {
+
+            if (pollingInProgress.current) {
+                return;
+            }
+
+            pollingInProgress.current = true;
+
+            try {
+
+                if (
+                    mountedRef.current &&
+                    initialLoad
+                ) {
+                    setLoading(true);
+                }
+
+                if (
+                    mountedRef.current &&
+                    forceSummary
+                ) {
+                    setRefreshing(true);
+                }
+
+                const now = Date.now();
+
+                const shouldRefreshSummary =
+                    initialLoad ||
+                    forceSummary ||
+                    now - lastSummaryFetch.current >=
+                        SUMMARY_REFRESH_INTERVAL;
+
+                // Live telemetry is always polled.
+                // Historical queries are less frequent.
+
+                const livePromise =
+                    getLiveTelemetry();
+
+                let overviewPromise = null;
+                let runtimePromise = null;
+
+                if (shouldRefreshSummary) {
+                    overviewPromise =
+                        getEndpointOverview();
+
+                    runtimePromise =
+                        getSecurityRuntime();
+                }
+
+                const liveResponse =
+                    await livePromise;
+
+                if (!mountedRef.current) {
+                    return;
+                }
+
+                setLive(liveResponse);
+
+                updateChart(liveResponse);
+
+                setLastUpdated(new Date());
+
+                setError(null);
+
+                // Supplemental summary failures do not
+                // invalidate successfully fetched live data.
+
+                if (shouldRefreshSummary) {
+
+                    const results =
+                        await Promise.allSettled([
+                            overviewPromise,
+                            runtimePromise,
+                        ]);
+
+                    if (!mountedRef.current) {
+                        return;
+                    }
+
+                    if (
+                        results[0].status === "fulfilled"
+                    ) {
+                        setOverview(
+                            results[0].value
+                        );
+                    }
+
+                    if (
+                        results[1].status === "fulfilled"
+                    ) {
+                        setRuntime(
+                            results[1].value
+                        );
+                    }
+
+                    lastSummaryFetch.current =
+                        Date.now();
+                }
+
+            } catch (err) {
+
+                console.error(
+                    "Live Monitor backend error:",
+                    err
+                );
+
+                if (mountedRef.current) {
+
+                    setError(
+                        err?.response?.data?.detail ||
+                        err?.response?.data?.message ||
+                        err?.message ||
+                        "Unable to load Sentinel-X telemetry."
+                    );
+
+                    // Prevent a stale ACTIVE indicator when
+                    // the live endpoint becomes unavailable.
+
+                    setLive(null);
+                    previousCounts.current = null;
+                    previousTimestamp.current = null;
+                }
+
+            } finally {
+
+                pollingInProgress.current = false;
+
+                if (mountedRef.current) {
+                    setLoading(false);
+                    setRefreshing(false);
+                }
+            }
+        },
+        [updateChart]
+    );
+
+
+    /* ======================================================== */
+    /* INITIAL LOAD AND CONTINUOUS POLLING */
+    /* ======================================================== */
 
     useEffect(() => {
 
-        const interval =
-            setInterval(() => {
+        mountedRef.current = true;
 
-                setChartData(
-                    (previous) => {
+        loadLiveData(true, true);
 
-                        const nextPoint = {
-                            time: getShortTime(),
-                            process:
-                                randomBetween(
-                                    40,
-                                    95
-                                ),
-                            file:
-                                randomBetween(
-                                    20,
-                                    75
-                                ),
-                            network:
-                                randomBetween(
-                                    35,
-                                    90
-                                ),
-                            system:
-                                randomBetween(
-                                    15,
-                                    60
-                                ),
-                        };
+        const interval = setInterval(
+            () => {
+                loadLiveData(false, false);
+            },
+            LIVE_POLL_INTERVAL
+        );
 
-                        const updated =
-                            [
-                                ...previous,
-                                nextPoint,
-                            ];
+        return () => {
 
-                        return updated.slice(-20);
+            mountedRef.current = false;
 
-                    }
-                );
-
-
-                setEventCounts(
-                    (previous) => ({
-                        process:
-                            previous.process
-                            + randomBetween(1, 4),
-
-                        file:
-                            previous.file
-                            + randomBetween(0, 3),
-
-                        network:
-                            previous.network
-                            + randomBetween(1, 5),
-
-                        system:
-                            previous.system
-                            + randomBetween(0, 2),
-                    })
-                );
-
-
-                setLastUpdated(
-                    new Date()
-                        .toLocaleTimeString()
-                );
-
-            }, 2000);
-
-        return () =>
             clearInterval(interval);
+        };
 
-    }, []);
+    }, [loadLiveData]);
 
+
+    /* ======================================================== */
+    /* LOADING */
+    /* ======================================================== */
+
+    if (
+        loading &&
+        !live &&
+        !overview
+    ) {
+
+        return (
+            <Box
+                sx={{
+                    minHeight: "65vh",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 2,
+                }}
+            >
+                <CircularProgress
+                    sx={{
+                        color: "#22c55e",
+                    }}
+                />
+
+                <Typography
+                    sx={{
+                        color: "#94a3b8",
+                    }}
+                >
+                    Loading live Sentinel-X telemetry...
+                </Typography>
+            </Box>
+        );
+    }
+
+
+    /* ======================================================== */
+    /* REAL HISTORICAL COUNTS */
+    /* ======================================================== */
+
+    const categoryCounts =
+        overview?.event_category_counts || {};
+
+    const eventCounts =
+        normalizeCounts(categoryCounts);
 
     const totalEvents =
-        eventCounts.process
-        + eventCounts.file
-        + eventCounts.network
-        + eventCounts.system;
+        asCount(overview?.event_count);
 
+    const detectionCount =
+        asCount(overview?.detection_count);
+
+    const incidentCount =
+        asCount(overview?.incident_count);
+
+
+    /* ======================================================== */
+    /* ACTUAL COLLECTOR STATUS */
+    /* ======================================================== */
+
+    const collectorInfo =
+        live?.collectors || {};
+
+    const processStatus =
+        getCollectorStatus(
+            collectorInfo.process
+        );
+
+    const fileStatus =
+        getCollectorStatus(
+            collectorInfo.file
+        );
+
+    const networkStatus =
+        getCollectorStatus(
+            collectorInfo.network
+        );
+
+    const registryStatus =
+        getCollectorStatus(
+            collectorInfo.registry
+        );
+
+    const collectorsHealthy =
+        Boolean(
+            live?.agent_running &&
+            live?.all_collectors_healthy
+        );
+
+    const runtimeStatus =
+        runtime?.status ||
+        "UNKNOWN";
+
+    const runtimeHealthy =
+        runtimeStatus === "HEALTHY";
+
+    const highActivitySource =
+        getHighestActivityCategory(
+            normalizeCounts(
+                live?.runtime_counts || {}
+            )
+        );
+
+
+    /* ======================================================== */
+    /* UI */
+    /* ======================================================== */
 
     return (
 
         <Box>
 
-            {/* ============================================= */}
+            {/* ================================================= */}
+            {/* ERROR */}
+            {/* ================================================= */}
+
+            {
+                error && (
+
+                    <Alert
+                        severity="error"
+                        sx={{
+                            mb: 2,
+                        }}
+                    >
+                        {error}
+                    </Alert>
+                )
+            }
+
+
+            {/* ================================================= */}
             {/* HEADER */}
-            {/* ============================================= */}
+            {/* ================================================= */}
 
             <Box
                 sx={{
@@ -181,15 +706,33 @@ function LiveMonitor() {
 
                 <Chip
                     icon={
-                        <CheckCircleRounded />
+                        collectorsHealthy
+                            ? <CheckCircleRounded />
+                            : <ErrorRounded />
                     }
-                    label="LIVE MONITORING ACTIVE"
+
+                    label={
+                        collectorsHealthy
+                            ? "LIVE MONITORING ACTIVE"
+                            : "COLLECTORS OFFLINE"
+                    }
+
                     sx={{
-                        color: "#22c55e",
+                        color:
+                            collectorsHealthy
+                                ? "#22c55e"
+                                : "#ef4444",
+
                         background:
-                            "rgba(34,197,94,0.10)",
+                            collectorsHealthy
+                                ? "rgba(34,197,94,0.10)"
+                                : "rgba(239,68,68,0.10)",
+
                         border:
-                            "1px solid rgba(34,197,94,0.25)",
+                            collectorsHealthy
+                                ? "1px solid rgba(34,197,94,0.25)"
+                                : "1px solid rgba(239,68,68,0.25)",
+
                         fontWeight: 700,
                     }}
                 />
@@ -197,18 +740,20 @@ function LiveMonitor() {
             </Box>
 
 
-            {/* ============================================= */}
+            {/* ================================================= */}
             {/* STATUS CARDS */}
-            {/* ============================================= */}
+            {/* ================================================= */}
 
             <Box
                 sx={{
                     display: "grid",
+
                     gridTemplateColumns: {
                         xs: "1fr",
                         sm: "repeat(2, 1fr)",
                         lg: "repeat(4, 1fr)",
                     },
+
                     gap: 2,
                     mb: 3,
                 }}
@@ -245,9 +790,9 @@ function LiveMonitor() {
             </Box>
 
 
-            {/* ============================================= */}
+            {/* ================================================= */}
             {/* LIVE LINE CHART */}
-            {/* ============================================= */}
+            {/* ================================================= */}
 
             <Card
                 sx={{
@@ -274,9 +819,7 @@ function LiveMonitor() {
 
                         <Box>
 
-                            <Typography
-                                variant="h6"
-                            >
+                            <Typography variant="h6">
                                 Continuous Activity Monitoring
                             </Typography>
 
@@ -287,7 +830,8 @@ function LiveMonitor() {
                                     mt: 0.4,
                                 }}
                             >
-                                Activity updates automatically every 2 seconds.
+                                Real telemetry activity updates
+                                automatically every 2 seconds.
                             </Typography>
 
                         </Box>
@@ -295,8 +839,26 @@ function LiveMonitor() {
 
                         <Button
                             startIcon={
-                                <RefreshRounded />
+                                refreshing
+                                    ? (
+                                        <CircularProgress
+                                            size={16}
+                                        />
+                                    )
+                                    : (
+                                        <RefreshRounded />
+                                    )
                             }
+
+                            disabled={refreshing}
+
+                            onClick={() =>
+                                loadLiveData(
+                                    false,
+                                    true
+                                )
+                            }
+
                             variant="outlined"
                         >
                             Live
@@ -315,9 +877,7 @@ function LiveMonitor() {
                         <ResponsiveContainer>
 
                             <LineChart
-                                data={
-                                    chartData
-                                }
+                                data={chartData}
                             >
 
                                 <CartesianGrid
@@ -332,7 +892,7 @@ function LiveMonitor() {
 
                                 <YAxis
                                     stroke="#64748b"
-                                    domain={[0, 100]}
+                                    allowDecimals={false}
                                 />
 
                                 <Tooltip
@@ -352,6 +912,7 @@ function LiveMonitor() {
                                     strokeWidth={2}
                                     dot={false}
                                     name="Process"
+                                    isAnimationActive={false}
                                 />
 
                                 <Line
@@ -361,6 +922,7 @@ function LiveMonitor() {
                                     strokeWidth={2}
                                     dot={false}
                                     name="File"
+                                    isAnimationActive={false}
                                 />
 
                                 <Line
@@ -370,6 +932,7 @@ function LiveMonitor() {
                                     strokeWidth={2}
                                     dot={false}
                                     name="Network"
+                                    isAnimationActive={false}
                                 />
 
                                 <Line
@@ -379,6 +942,7 @@ function LiveMonitor() {
                                     strokeWidth={2}
                                     dot={false}
                                     name="System"
+                                    isAnimationActive={false}
                                 />
 
                             </LineChart>
@@ -388,35 +952,50 @@ function LiveMonitor() {
                     </Box>
 
 
-                    <Typography
-                        sx={{
-                            color: "#64748b",
-                            fontSize: 12,
-                            mt: 1.5,
-                        }}
-                    >
-                        Last updated: {lastUpdated}
-                    </Typography>
+                    {
+                        lastUpdated && (
+
+                            <Typography
+                                sx={{
+                                    color: "#64748b",
+                                    fontSize: 12,
+                                    mt: 1.5,
+                                }}
+                            >
+                                Last updated:{" "}
+                                {
+                                    lastUpdated
+                                        .toLocaleTimeString()
+                                }
+                            </Typography>
+                        )
+                    }
 
                 </CardContent>
 
             </Card>
 
 
-            {/* ============================================= */}
+            {/* ================================================= */}
             {/* MODULE STATUS + SUMMARY */}
-            {/* ============================================= */}
+            {/* ================================================= */}
 
             <Box
                 sx={{
                     display: "grid",
+
                     gridTemplateColumns: {
                         xs: "1fr",
                         lg: "1.1fr 1fr",
                     },
+
                     gap: 2,
                 }}
             >
+
+                {/* ============================================= */}
+                {/* MONITORING MODULES */}
+                {/* ============================================= */}
 
                 <Card>
 
@@ -435,34 +1014,35 @@ function LiveMonitor() {
                             Monitoring Modules
                         </Typography>
 
+
                         <Stack spacing={1.5}>
 
                             <MonitorRow
                                 icon={<MemoryRounded />}
                                 title="Process Monitoring"
                                 description="Watching running applications for suspicious behavior."
-                                status="Active"
+                                status={processStatus}
                             />
 
                             <MonitorRow
                                 icon={<FolderRounded />}
                                 title="File Monitoring"
                                 description="Watching suspicious file changes and file actions."
-                                status="Active"
+                                status={fileStatus}
                             />
 
                             <MonitorRow
                                 icon={<LanguageRounded />}
                                 title="Network Monitoring"
                                 description="Watching live communication and suspicious connections."
-                                status="Active"
+                                status={networkStatus}
                             />
 
                             <MonitorRow
                                 icon={<SettingsRounded />}
                                 title="System Monitoring"
                                 description="Watching important configuration and startup changes."
-                                status="Active"
+                                status={registryStatus}
                             />
 
                         </Stack>
@@ -471,6 +1051,10 @@ function LiveMonitor() {
 
                 </Card>
 
+
+                {/* ============================================= */}
+                {/* LIVE SUMMARY */}
+                {/* ============================================= */}
 
                 <Card>
 
@@ -489,20 +1073,31 @@ function LiveMonitor() {
                             Live Summary
                         </Typography>
 
+
                         <SummaryRow
                             label="Total monitored events"
-                            value={totalEvents}
+                            value={totalEvents.toLocaleString()}
+                        />
+
+                        <SummaryRow
+                            label="Security detections"
+                            value={detectionCount.toLocaleString()}
+                        />
+
+                        <SummaryRow
+                            label="Security incidents"
+                            value={incidentCount.toLocaleString()}
                         />
 
                         <SummaryRow
                             label="High activity source"
-                            value="Network"
+                            value={highActivitySource}
                         />
 
                         <SummaryRow
-                            label="Monitoring status"
-                            value="Running"
-                            safe
+                            label="Runtime status"
+                            value={runtimeStatus}
+                            safe={runtimeHealthy}
                         />
 
                         <SummaryRow
@@ -522,15 +1117,13 @@ function LiveMonitor() {
             </Box>
 
         </Box>
-
     );
-
 }
 
 
-/* ============================================================ */
+/* ================================================================ */
 /* METRIC CARD */
-/* ============================================================ */
+/* ================================================================ */
 
 function MetricCard({
     title,
@@ -576,7 +1169,11 @@ function MetricCard({
                                 fontWeight: 800,
                             }}
                         >
-                            {value}
+                            {
+                                Number(
+                                    value ?? 0
+                                ).toLocaleString()
+                            }
                         </Typography>
 
                     </Box>
@@ -591,8 +1188,7 @@ function MetricCard({
                             alignItems: "center",
                             justifyContent: "center",
                             color: color,
-                            background:
-                                `${color}15`,
+                            background: `${color}15`,
                         }}
                     >
                         {icon}
@@ -603,15 +1199,13 @@ function MetricCard({
             </CardContent>
 
         </Card>
-
     );
-
 }
 
 
-/* ============================================================ */
+/* ================================================================ */
 /* MONITOR ROW */
-/* ============================================================ */
+/* ================================================================ */
 
 function MonitorRow({
     icon,
@@ -619,6 +1213,21 @@ function MonitorRow({
     description,
     status,
 }) {
+
+    const active = [
+        "ACTIVE",
+        "RUNNING",
+        "HEALTHY",
+    ].includes(
+        String(status).toUpperCase()
+    );
+
+
+    const statusColor =
+        active
+            ? "#22c55e"
+            : "#ef4444";
+
 
     return (
 
@@ -628,7 +1237,6 @@ function MonitorRow({
                 borderRadius: "12px",
                 background: "#0f172a",
                 border: "1px solid #1e293b",
-
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
@@ -654,8 +1262,7 @@ function MonitorRow({
                         alignItems: "center",
                         justifyContent: "center",
                         color: "#3b82f6",
-                        background:
-                            "rgba(59,130,246,0.10)",
+                        background: "rgba(59,130,246,0.10)",
                     }}
                 >
                     {icon}
@@ -691,23 +1298,20 @@ function MonitorRow({
                 label={status}
                 size="small"
                 sx={{
-                    color: "#22c55e",
-                    background:
-                        "rgba(34,197,94,0.10)",
+                    color: statusColor,
+                    background: `${statusColor}15`,
                     fontWeight: 700,
                 }}
             />
 
         </Box>
-
     );
-
 }
 
 
-/* ============================================================ */
+/* ================================================================ */
 /* SUMMARY ROW */
-/* ============================================================ */
+/* ================================================================ */
 
 function SummaryRow({
     label,
@@ -737,82 +1341,21 @@ function SummaryRow({
                 {label}
             </Typography>
 
+
             <Typography
                 sx={{
                     fontWeight: 700,
-                    color: safe
-                        ? "#22c55e"
-                        : "#f8fafc",
+                    color:
+                        safe
+                            ? "#22c55e"
+                            : "#f8fafc",
                 }}
             >
                 {value}
             </Typography>
 
         </Box>
-
     );
-
-}
-
-
-/* ============================================================ */
-/* HELPERS */
-/* ============================================================ */
-
-function generateInitialData() {
-
-    const data = [];
-
-    for (let i = 0; i < 12; i++) {
-
-        data.push({
-            time: `T${i + 1}`,
-            process: randomBetween(40, 95),
-            file: randomBetween(20, 75),
-            network: randomBetween(35, 90),
-            system: randomBetween(15, 60),
-        });
-
-    }
-
-    return data;
-
-}
-
-
-function randomBetween(
-    min,
-    max
-) {
-
-    return Math.floor(
-        Math.random() * (max - min + 1)
-    ) + min;
-
-}
-
-
-function getShortTime() {
-
-    const now = new Date();
-
-    const hours =
-        String(
-            now.getHours()
-        ).padStart(2, "0");
-
-    const minutes =
-        String(
-            now.getMinutes()
-        ).padStart(2, "0");
-
-    const seconds =
-        String(
-            now.getSeconds()
-        ).padStart(2, "0");
-
-    return `${hours}:${minutes}:${seconds}`;
-
 }
 
 

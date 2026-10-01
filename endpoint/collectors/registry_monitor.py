@@ -2,7 +2,7 @@ import time
 import winreg
 from typing import Dict
 
-from endpoint.agent.telemetry_manager import TelemetryManager
+from endpoint.agent.telemetry_manager import shared_telemetry_manager
 from endpoint.utils.logger import get_logger
 
 
@@ -22,7 +22,7 @@ class RegistryMonitor:
 
         self.known_values: Dict[str, Dict] = {}
 
-        self.telemetry = TelemetryManager()
+        self.telemetry = shared_telemetry_manager
 
         # --------------------------------------------------------
         # READ-ONLY STARTUP REGISTRY LOCATIONS

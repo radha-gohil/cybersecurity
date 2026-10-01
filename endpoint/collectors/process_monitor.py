@@ -7,14 +7,16 @@ from detection.behavior.process_behavior_detector import (
     ProcessBehaviorDetector,
 )
 
+from endpoint.agent.telemetry_manager import (
+    shared_telemetry_manager,
+)
+
 from detection.anomaly.process_anomaly_detector import (
     ProcessAnomalyDetector,
 )
 
 
-from endpoint.agent.telemetry_manager import (
-    TelemetryManager,
-)
+
 
 from endpoint.storage.database import (
     save_detection,
@@ -80,7 +82,7 @@ class ProcessMonitor:
         # ========================================================
 
         self.telemetry = (
-            TelemetryManager()
+            shared_telemetry_manager
         )
 
 

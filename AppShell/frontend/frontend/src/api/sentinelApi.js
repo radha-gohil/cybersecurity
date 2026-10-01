@@ -2,11 +2,11 @@ import axios from "axios";
 
 
 const API_BASE_URL =
-    import.meta.env.VITE_SENTINEL_API_URL
-    || "http://127.0.0.1:8003/api/v1";
+    "http://127.0.0.1:8003/api/v1";
 
 
 const api = axios.create({
+
     baseURL: API_BASE_URL,
 
     timeout: 15000,
@@ -14,38 +14,19 @@ const api = axios.create({
     headers: {
         "Content-Type": "application/json",
     },
+
 });
 
 
-api.interceptors.response.use(
-    (response) => response,
-
-    (error) => {
-
-        console.error(
-            "Sentinel-X API Error:",
-            error?.response?.status,
-            error?.response?.data
-            || error.message
-        );
-
-        return Promise.reject(
-            error
-        );
-    }
-);
-
-
 /* ============================================================ */
-/* SYSTEM */
+/* HEALTH */
 /* ============================================================ */
 
 export async function getHealth() {
 
-    const response =
-        await api.get(
-            "/health"
-        );
+    const response = await api.get(
+        "/health"
+    );
 
     return response.data;
 
@@ -58,10 +39,9 @@ export async function getHealth() {
 
 export async function getDashboardSummary() {
 
-    const response =
-        await api.get(
-            "/dashboard/summary"
-        );
+    const response = await api.get(
+        "/dashboard/summary"
+    );
 
     return response.data;
 
@@ -69,34 +49,19 @@ export async function getDashboardSummary() {
 
 
 /* ============================================================ */
-/* THREATS / INCIDENTS */
+/* INCIDENT SEARCH */
 /* ============================================================ */
 
 export async function searchIncidents(
     params = {}
 ) {
 
-    const response =
-        await api.get(
-            "/search/incidents",
-            {
-                params,
-            }
-        );
-
-    return response.data;
-
-}
-
-
-export async function getIncidentCase(
-    incidentId
-) {
-
-    const response =
-        await api.get(
-            `/cases/${incidentId}`
-        );
+    const response = await api.get(
+        "/search/incidents",
+        {
+            params,
+        }
+    );
 
     return response.data;
 
@@ -104,31 +69,50 @@ export async function getIncidentCase(
 
 
 /* ============================================================ */
-/* RESPONSE / DIGITAL TWIN */
+/* INCIDENT DETAIL */
+/* ============================================================ */
+
+export async function getIncidentCase(
+    incidentId
+) {
+
+    const response = await api.get(
+        `/cases/${encodeURIComponent(incidentId)}`
+    );
+
+    return response.data;
+
+}
+
+
+/* ============================================================ */
+/* DIGITAL TWIN */
 /* ============================================================ */
 
 export async function getDigitalTwin(
     incidentId
 ) {
 
-    const response =
-        await api.get(
-            `/cases/${incidentId}/digital-twin`
-        );
+    const response = await api.get(
+        `/cases/${encodeURIComponent(incidentId)}/digital-twin`
+    );
 
     return response.data;
 
 }
 
 
+/* ============================================================ */
+/* RESPONSE ACTIONS FOR INCIDENT */
+/* ============================================================ */
+
 export async function getIncidentResponses(
     incidentId
 ) {
 
-    const response =
-        await api.get(
-            `/cases/${incidentId}/responses`
-        );
+    const response = await api.get(
+        `/cases/${encodeURIComponent(incidentId)}/responses`
+    );
 
     return response.data;
 
@@ -139,16 +123,15 @@ export async function getIncidentResponses(
 /* APPROVAL */
 /* ============================================================ */
 
-export async function approveIncidentAction(
+export async function approveIncident(
     incidentId,
     payload
 ) {
 
-    const response =
-        await api.post(
-            `/cases/${incidentId}/approve`,
-            payload
-        );
+    const response = await api.post(
+        `/cases/${encodeURIComponent(incidentId)}/approve`,
+        payload
+    );
 
     return response.data;
 
@@ -163,13 +146,12 @@ export async function searchTickets(
     params = {}
 ) {
 
-    const response =
-        await api.get(
-            "/search/tickets",
-            {
-                params,
-            }
-        );
+    const response = await api.get(
+        "/search/tickets",
+        {
+            params,
+        }
+    );
 
     return response.data;
 
@@ -177,24 +159,89 @@ export async function searchTickets(
 
 
 /* ============================================================ */
-/* RESPONSE ACTIONS */
+/* RESPONSE ACTION SEARCH */
 /* ============================================================ */
 
 export async function searchResponseActions(
     params = {}
 ) {
 
-    const response =
-        await api.get(
-            "/search/response-actions",
-            {
-                params,
-            }
-        );
+    const response = await api.get(
+        "/search/actions",
+        {
+            params,
+        }
+    );
 
     return response.data;
 
 }
 
+
+/* ============================================================ */
+/* ENDPOINT OVERVIEW */
+/* ============================================================ */
+
+export async function getEndpointOverview() {
+
+    const response = await api.get(
+        "/endpoint/overview"
+    );
+
+    return response.data;
+
+}
+
+
+/* ============================================================ */
+/* SECURITY RUNTIME */
+/* ============================================================ */
+
+export async function getSecurityRuntime() {
+
+    const response = await api.get(
+        "/security/runtime"
+    );
+
+    return response.data;
+
+}
+
+
+/* ============================================================ */
+/* LIVE TELEMETRY */
+/* ============================================================ */
+
+export async function getLiveTelemetry() {
+
+    const response = await api.get(
+        "/telemetry/live"
+    );
+
+    return response.data;
+
+}
+/* ============================================================ */
+/* RECENT SECURITY DETECTIONS */
+/* ============================================================ */
+
+export async function getLiveDetections(
+    limit = 50
+) {
+    const response = await api.get(
+        "/telemetry/detections",
+        {
+            params: {
+                limit,
+            },
+        }
+    );
+
+    return response.data;
+}
+
+/* ============================================================ */
+/* EXPORT AXIOS INSTANCE */
+/* ============================================================ */
 
 export default api;

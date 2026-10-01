@@ -4,76 +4,678 @@ import {
     Card,
     CardContent,
     Button,
-    Grid,
-    LinearProgress,
-    Stack,
+    Chip,
+    CircularProgress,
+    Alert,
 } from "@mui/material";
 
-import BackendTest from "../components/BackendTest";
-
 import {
-    SecurityRounded,
+    ShieldRounded,
     SearchRounded,
     WarningAmberRounded,
     PsychologyRounded,
     ApprovalRounded,
     CheckCircleRounded,
+    RefreshRounded,
+    SecurityRounded,
 } from "@mui/icons-material";
+
+import {
+    useCallback,
+    useEffect,
+    useState,
+} from "react";
+
+import {
+    useNavigate,
+} from "react-router-dom";
+
+import {
+    getDashboardSummary,
+    getHealth,
+} from "../api/sentinelApi";
 
 
 function Dashboard() {
 
-    return (
+    const navigate =
+        useNavigate();
 
-        <Box>
 
-            {/* ================================================= */}
-            {/* PAGE TITLE */}
-            {/* ================================================= */}
+    /* ============================================================ */
+    /* STATE */
+    /* ============================================================ */
+
+    const [summary, setSummary] =
+        useState(null);
+
+    const [health, setHealth] =
+        useState(null);
+
+    const [loading, setLoading] =
+        useState(true);
+
+    const [refreshing, setRefreshing] =
+        useState(false);
+
+    const [error, setError] =
+        useState(null);
+
+    const [lastUpdated, setLastUpdated] =
+        useState(null);
+
+
+    /* ============================================================ */
+    /* LOAD REAL BACKEND DATA */
+    /* ============================================================ */
+
+    const loadDashboard =
+        useCallback(
+            async (
+                initialLoad = false
+            ) => {
+
+                try {
+
+                    if (
+                        initialLoad
+                    ) {
+
+                        setLoading(
+                            true
+                        );
+
+                    }
+                    else {
+
+                        setRefreshing(
+                            true
+                        );
+
+                    }
+
+
+                    setError(
+                        null
+                    );
+
+
+                    const [
+                        healthResponse,
+                        dashboardResponse,
+                    ] =
+                        await Promise.all([
+                            getHealth(),
+                            getDashboardSummary(),
+                        ]);
+
+
+                    console.log(
+                        "SENTINEL-X HEALTH:",
+                        healthResponse
+                    );
+
+
+                    console.log(
+                        "SENTINEL-X DASHBOARD:",
+                        dashboardResponse
+                    );
+
+
+                    setHealth(
+                        healthResponse
+                    );
+
+
+                    setSummary(
+                        dashboardResponse
+                    );
+
+
+                    setLastUpdated(
+                        new Date()
+                    );
+
+                }
+                catch (err) {
+
+                    console.error(
+                        "Dashboard backend error:",
+                        err
+                    );
+
+
+                    const message =
+                        err?.response?.data?.detail
+                        ||
+                        err?.response?.data?.message
+                        ||
+                        err?.message
+                        ||
+                        "Unable to connect to Sentinel-X backend.";
+
+
+                    setError(
+                        message
+                    );
+
+                }
+                finally {
+
+                    setLoading(
+                        false
+                    );
+
+
+                    setRefreshing(
+                        false
+                    );
+
+                }
+
+            },
+            []
+        );
+
+
+    /* ============================================================ */
+    /* INITIAL LOAD */
+    /* ============================================================ */
+
+    useEffect(
+        () => {
+
+            loadDashboard(
+                true
+            );
+
+        },
+        [
+            loadDashboard,
+        ]
+    );
+
+
+    /* ============================================================ */
+    /* AUTOMATIC REFRESH EVERY 5 SECONDS */
+    /* ============================================================ */
+
+    useEffect(
+        () => {
+
+            const interval =
+                setInterval(
+                    () => {
+
+                        loadDashboard(
+                            false
+                        );
+
+                    },
+                    5000
+                );
+
+
+            return () => {
+
+                clearInterval(
+                    interval
+                );
+
+            };
+
+        },
+        [
+            loadDashboard,
+        ]
+    );
+
+
+    /* ============================================================ */
+    /* INITIAL LOADING */
+    /* ============================================================ */
+
+    if (
+        loading
+        &&
+        !summary
+    ) {
+
+        return (
 
             <Box
                 sx={{
-                    mb: 3,
+                    minHeight:
+                        "65vh",
+
+                    display:
+                        "flex",
+
+                    flexDirection:
+                        "column",
+
+                    alignItems:
+                        "center",
+
+                    justifyContent:
+                        "center",
+
+                    gap:
+                        2,
                 }}
             >
 
-                <Typography
-                    variant="h4"
-                >
-                    Dashboard
-                </Typography>
+                <CircularProgress
+                    sx={{
+                        color:
+                            "#22c55e",
+                    }}
+                />
 
 
                 <Typography
                     sx={{
                         color:
                             "#94a3b8",
-
-                        mt: 0.5,
                     }}
                 >
-                    Your Sentinel-X security overview.
+                    Loading Sentinel-X security status...
                 </Typography>
+
+            </Box>
+
+        );
+
+    }
+
+
+    /* ============================================================ */
+    /* REAL BACKEND VALUES */
+    /* ============================================================ */
+
+    const totalDetected =
+        readNumber(
+            summary,
+            [
+                ["total_detected"],
+                ["total_detected_incidents"],
+                ["detected_incidents"],
+                ["total_incidents"],
+                ["incident_count"],
+            ]
+        );
+
+
+    const awaitingInvestigation =
+        readNumber(
+            summary,
+            [
+                ["awaiting_investigation"],
+                ["awaiting_investigation_count"],
+                ["pending_investigation"],
+            ]
+        );
+
+
+    const promoted =
+        readNumber(
+            summary,
+            [
+                ["promoted"],
+                ["promoted_to_soc"],
+                ["promoted_count"],
+                ["soc_incidents"],
+                ["soc_cases"],
+            ]
+        );
+
+
+    const criticalThreats =
+        readNumber(
+            summary,
+            [
+                [
+                    "severity_counts",
+                    "CRITICAL",
+                ],
+
+                [
+                    "severity_counts",
+                    "critical",
+                ],
+
+                ["critical"],
+
+                ["critical_count"],
+
+                ["critical_incidents"],
+            ]
+        );
+
+
+    const highThreats =
+        readNumber(
+            summary,
+            [
+                [
+                    "severity_counts",
+                    "HIGH",
+                ],
+
+                [
+                    "severity_counts",
+                    "high",
+                ],
+
+                ["high"],
+
+                ["high_count"],
+
+                ["high_incidents"],
+            ]
+        );
+
+
+    const pendingApprovals =
+        readNumber(
+            summary,
+            [
+                ["pending_approvals"],
+                ["pending_approval_count"],
+                ["approvals_pending"],
+            ]
+        );
+
+
+    const openTickets =
+        readNumber(
+            summary,
+            [
+                ["open_tickets"],
+                ["open_ticket_count"],
+                ["tickets_open"],
+            ]
+        );
+
+
+    const responseActions =
+        readNumber(
+            summary,
+            [
+                ["response_actions"],
+                ["response_action_count"],
+                ["total_response_actions"],
+            ]
+        );
+
+
+    /* ============================================================ */
+    /* CURRENT RISK SCORE */
+    /* ============================================================ */
+
+    const riskScore =
+        readNumber(
+            summary,
+            [
+                ["risk_score"],
+                ["current_risk_score"],
+                ["overall_risk_score"],
+                ["latest_risk_score"],
+
+                [
+                    "risk",
+                    "score",
+                ],
+
+                [
+                    "risk_assessment",
+                    "risk_score",
+                ],
+
+                [
+                    "latest_incident",
+                    "risk_score",
+                ],
+
+                [
+                    "security_state",
+                    "risk_score",
+                ],
+            ]
+        );
+
+
+    const mitigationStatus =
+        readValue(
+            summary,
+            [
+                ["mitigation_status"],
+                ["latest_mitigation_status"],
+                ["verification_status"],
+            ],
+            "Monitoring"
+        );
+
+
+    /* ============================================================ */
+    /* HEALTH STATUS */
+    /* ============================================================ */
+
+    const backendHealthy =
+        isHealthy(
+            health
+        );
+
+
+    const riskColor =
+        getRiskColor(
+            riskScore
+        );
+
+
+    const riskLevel =
+        getRiskLevel(
+            riskScore
+        );
+
+
+    return (
+
+        <Box>
+
+            {/* ================================================= */}
+            {/* CONNECTION ERROR */}
+            {/* ================================================= */}
+
+            {
+                error
+                && (
+
+                    <Alert
+                        severity="error"
+
+                        action={
+
+                            <Button
+                                color="inherit"
+
+                                size="small"
+
+                                onClick={
+                                    () =>
+                                        loadDashboard(
+                                            false
+                                        )
+                                }
+                            >
+                                Retry
+                            </Button>
+
+                        }
+
+                        sx={{
+                            mb:
+                                2,
+                        }}
+                    >
+                        Backend connection issue:
+                        {" "}
+                        {error}
+                    </Alert>
+
+                )
+            }
+
+
+            {/* ================================================= */}
+            {/* HEADER */}
+            {/* ================================================= */}
+
+            <Box
+                sx={{
+                    display:
+                        "flex",
+
+                    justifyContent:
+                        "space-between",
+
+                    alignItems:
+                        "center",
+
+                    gap:
+                        2,
+
+                    flexWrap:
+                        "wrap",
+
+                    mb:
+                        3,
+                }}
+            >
+
+                <Box>
+
+                    <Typography
+                        variant="h4"
+                    >
+                        Dashboard
+                    </Typography>
+
+
+                    <Typography
+                        sx={{
+                            color:
+                                "#94a3b8",
+
+                            mt:
+                                0.5,
+                        }}
+                    >
+                        Sentinel-X protection overview for this PC.
+                    </Typography>
+
+                </Box>
+
+
+                <Box
+                    sx={{
+                        display:
+                            "flex",
+
+                        alignItems:
+                            "center",
+
+                        gap:
+                            1.5,
+                    }}
+                >
+
+                    {
+                        lastUpdated
+                        && (
+
+                            <Typography
+                                sx={{
+                                    color:
+                                        "#64748b",
+
+                                    fontSize:
+                                        12,
+                                }}
+                            >
+                                Updated
+                                {" "}
+                                {
+                                    lastUpdated
+                                        .toLocaleTimeString()
+                                }
+                            </Typography>
+
+                        )
+                    }
+
+
+                    <Button
+                        variant="outlined"
+
+                        startIcon={
+
+                            refreshing
+                                ? (
+                                    <CircularProgress
+                                        size={16}
+                                    />
+                                )
+                                : (
+                                    <RefreshRounded />
+                                )
+
+                        }
+
+                        disabled={
+                            refreshing
+                        }
+
+                        onClick={
+                            () =>
+                                loadDashboard(
+                                    false
+                                )
+                        }
+                    >
+                        Refresh
+                    </Button>
+
+                </Box>
 
             </Box>
 
 
             {/* ================================================= */}
-            {/* MAIN PROTECTION CARD */}
+            {/* MAIN PROTECTION STATUS */}
             {/* ================================================= */}
 
             <Card
                 sx={{
-                    mb: 3,
+                    mb:
+                        3,
 
                     background:
-                        "linear-gradient(135deg, #10251b, #111827)",
+                        backendHealthy
+                            ? "linear-gradient(135deg, #10251b, #111827)"
+                            : "linear-gradient(135deg, #2a1518, #111827)",
+
+                    borderColor:
+                        backendHealthy
+                            ? "rgba(34,197,94,0.30)"
+                            : "rgba(239,68,68,0.30)",
                 }}
             >
 
                 <CardContent
                     sx={{
-                        p: 4,
+                        p:
+                            4,
                     }}
                 >
 
@@ -82,149 +684,287 @@ function Dashboard() {
                             display:
                                 "flex",
 
-                            alignItems:
-                                "center",
-
                             justifyContent:
                                 "space-between",
 
-                            gap: 4,
+                            alignItems:
+                                "center",
+
+                            gap:
+                                3,
+
+                            flexWrap:
+                                "wrap",
                         }}
                     >
 
-                        <Box>
+                        {/* ===================================== */}
+                        {/* LEFT */}
+                        {/* ===================================== */}
+
+                        <Box
+                            sx={{
+                                display:
+                                    "flex",
+
+                                alignItems:
+                                    "center",
+
+                                gap:
+                                    2,
+                            }}
+                        >
 
                             <Box
                                 sx={{
+                                    width:
+                                        68,
+
+                                    height:
+                                        68,
+
+                                    borderRadius:
+                                        "18px",
+
                                     display:
                                         "flex",
 
                                     alignItems:
                                         "center",
 
-                                    gap: 1.5,
+                                    justifyContent:
+                                        "center",
 
-                                    mb: 1,
+                                    color:
+                                        backendHealthy
+                                            ? "#22c55e"
+                                            : "#ef4444",
+
+                                    background:
+                                        backendHealthy
+                                            ? "rgba(34,197,94,0.12)"
+                                            : "rgba(239,68,68,0.12)",
                                 }}
                             >
 
-                                <SecurityRounded
+                                <ShieldRounded
                                     sx={{
                                         fontSize:
-                                            36,
-
-                                        color:
-                                            "#22c55e",
+                                            40,
                                     }}
                                 />
 
+                            </Box>
+
+
+                            <Box>
 
                                 <Typography
-                                    variant="h4"
+                                    variant="h5"
                                 >
-                                    Your PC is protected
+                                    {
+                                        backendHealthy
+                                            ? "Your PC is protected"
+                                            : "Protection service needs attention"
+                                    }
+                                </Typography>
+
+
+                                <Typography
+                                    sx={{
+                                        color:
+                                            "#94a3b8",
+
+                                        mt:
+                                            0.5,
+                                    }}
+                                >
+                                    {
+                                        backendHealthy
+                                            ? "Sentinel-X continuous security monitoring is active."
+                                            : "Sentinel-X cannot currently confirm backend protection status."
+                                    }
+                                </Typography>
+
+                            </Box>
+
+                        </Box>
+
+
+                        {/* ===================================== */}
+                        {/* RIGHT */}
+                        {/* RISK SCORE + STATUS */}
+                        {/* ===================================== */}
+
+                        <Box
+                            sx={{
+                                display:
+                                    "flex",
+
+                                alignItems:
+                                    "center",
+
+                                gap:
+                                    2,
+
+                                flexWrap:
+                                    "wrap",
+
+                                justifyContent:
+                                    "flex-end",
+                            }}
+                        >
+
+                            {/* CURRENT RISK SCORE */}
+
+                            <Box
+                                sx={{
+                                    px:
+                                        2.5,
+
+                                    py:
+                                        1.4,
+
+                                    borderRadius:
+                                        "12px",
+
+                                    background:
+                                        `${riskColor}10`,
+
+                                    border:
+                                        `1px solid ${riskColor}30`,
+
+                                    minWidth:
+                                        145,
+                                }}
+                            >
+
+                                <Typography
+                                    sx={{
+                                        color:
+                                            "#94a3b8",
+
+                                        fontSize:
+                                            11,
+
+                                        fontWeight:
+                                            600,
+                                    }}
+                                >
+                                    CURRENT RISK SCORE
+                                </Typography>
+
+
+                                <Box
+                                    sx={{
+                                        display:
+                                            "flex",
+
+                                        alignItems:
+                                            "baseline",
+
+                                        gap:
+                                            0.7,
+
+                                        mt:
+                                            0.3,
+                                    }}
+                                >
+
+                                    <Typography
+                                        sx={{
+                                            fontSize:
+                                                28,
+
+                                            fontWeight:
+                                                800,
+
+                                            color:
+                                                riskColor,
+
+                                            lineHeight:
+                                                1,
+                                        }}
+                                    >
+                                        {riskScore}
+                                    </Typography>
+
+
+                                    <Typography
+                                        sx={{
+                                            color:
+                                                "#64748b",
+
+                                            fontSize:
+                                                12,
+                                        }}
+                                    >
+                                        /100
+                                    </Typography>
+
+                                </Box>
+
+
+                                <Typography
+                                    sx={{
+                                        mt:
+                                            0.5,
+
+                                        fontSize:
+                                            11,
+
+                                        fontWeight:
+                                            700,
+
+                                        color:
+                                            riskColor,
+                                    }}
+                                >
+                                    {riskLevel} RISK
                                 </Typography>
 
                             </Box>
 
 
-                            <Typography
-                                sx={{
-                                    color:
-                                        "#94a3b8",
+                            {/* PROTECTION CHIP */}
 
-                                    maxWidth:
-                                        600,
+                            <Chip
+                                icon={
 
-                                    mb: 3,
-                                }}
-                            >
-                                Sentinel-X protection is active.
-                                Your device is continuously monitored
-                                for suspicious process, file, network,
-                                and system activity.
-                            </Typography>
+                                    backendHealthy
+                                        ? (
+                                            <CheckCircleRounded />
+                                        )
+                                        : (
+                                            <WarningAmberRounded />
+                                        )
 
+                                }
 
-                            
-
-                        </Box>
-
-
-                        {/* Protection Score */}
-
-                        <Box
-                            sx={{
-                                minWidth:
-                                    220,
-
-                                textAlign:
-                                    "center",
-                            }}
-                        >
-
-                            <Typography
-                                sx={{
-                                    color:
-                                        "#94a3b8",
-
-                                    mb: 1,
-                                }}
-                            >
-                                Protection Score
-                            </Typography>
-
-
-                            <Typography
-                                sx={{
-                                    fontSize:
-                                        54,
-
-                                    fontWeight:
-                                        800,
-
-                                    color:
-                                        "#22c55e",
-                                }}
-                            >
-                                94
-                            </Typography>
-
-
-                            <Typography
-                                sx={{
-                                    color:
-                                        "#64748b",
-
-                                    mb: 1.5,
-                                }}
-                            >
-                                out of 100
-                            </Typography>
-
-
-                            <LinearProgress
-                                variant="determinate"
-
-                                value={
-                                    94
+                                label={
+                                    backendHealthy
+                                        ? "PROTECTION ACTIVE"
+                                        : "NEEDS ATTENTION"
                                 }
 
                                 sx={{
-                                    height:
-                                        8,
+                                    color:
+                                        backendHealthy
+                                            ? "#22c55e"
+                                            : "#ef4444",
 
-                                    borderRadius:
-                                        5,
+                                    background:
+                                        backendHealthy
+                                            ? "rgba(34,197,94,0.10)"
+                                            : "rgba(239,68,68,0.10)",
 
-                                    backgroundColor:
-                                        "#1e293b",
+                                    border:
+                                        backendHealthy
+                                            ? "1px solid rgba(34,197,94,0.25)"
+                                            : "1px solid rgba(239,68,68,0.25)",
 
-                                    "& .MuiLinearProgress-bar":
-                                    {
-                                        backgroundColor:
-                                            "#22c55e",
-                                    },
+                                    fontWeight:
+                                        700,
                                 }}
                             />
 
@@ -238,176 +978,443 @@ function Dashboard() {
 
 
             {/* ================================================= */}
-            {/* KPI CARDS */}
+            {/* PRIMARY DASHBOARD CARDS */}
             {/* ================================================= */}
 
-            <Grid
-                container
-                spacing={
-                    2
-                }
+            <Box
                 sx={{
-                    mb: 3,
+                    display:
+                        "grid",
+
+                    gridTemplateColumns:
+                        {
+                            xs:
+                                "1fr",
+
+                            sm:
+                                "repeat(2, 1fr)",
+
+                            lg:
+                                "repeat(4, 1fr)",
+                        },
+
+                    gap:
+                        2,
+
+                    mb:
+                        3,
                 }}
             >
 
-                <Grid
-                    item
-                    xs={12}
-                    sm={6}
-                    lg={3}
-                >
-
-                    <MetricCard
-                        title="Active Threats"
-                        value="1"
-                        subtitle="Requires review"
-                        icon={
-                            <WarningAmberRounded />
-                        }
-                        status="warning"
-                    />
-
-                </Grid>
+                <MetricCard
+                    title="Threats Detected"
+                    value={
+                        totalDetected
+                    }
+                    color="#ef4444"
+                    icon={
+                        <WarningAmberRounded />
+                    }
+                />
 
 
-                <Grid
-                    item
-                    xs={12}
-                    sm={6}
-                    lg={3}
-                >
-
-                    <MetricCard
-                        title="AI Investigations"
-                        value="3"
-                        subtitle="Completed today"
-                        icon={
-                            <PsychologyRounded />
-                        }
-                        status="info"
-                    />
-
-                </Grid>
+                <MetricCard
+                    title="AI Investigations"
+                    value={
+                        awaitingInvestigation
+                    }
+                    color="#8b5cf6"
+                    icon={
+                        <PsychologyRounded />
+                    }
+                />
 
 
-                <Grid
-                    item
-                    xs={12}
-                    sm={6}
-                    lg={3}
-                >
-
-                    <MetricCard
-                        title="Needs Approval"
-                        value="2"
-                        subtitle="Actions pending"
-                        icon={
-                            <ApprovalRounded />
-                        }
-                        status="warning"
-                    />
-
-                </Grid>
+                <MetricCard
+                    title="Needs Approval"
+                    value={
+                        pendingApprovals
+                    }
+                    color="#f59e0b"
+                    icon={
+                        <ApprovalRounded />
+                    }
+                />
 
 
-                <Grid
-                    item
-                    xs={12}
-                    sm={6}
-                    lg={3}
-                >
+                <MetricCard
+                    title="Security Cases"
+                    value={
+                        promoted
+                    }
+                    color="#22c55e"
+                    icon={
+                        <SecurityRounded />
+                    }
+                />
 
-                    <MetricCard
-                        title="Protection"
-                        value="Active"
-                        subtitle="All monitors running"
-                        icon={
-                            <CheckCircleRounded />
-                        }
-                        status="success"
-                    />
-
-                </Grid>
-
-            </Grid>
+            </Box>
 
 
             {/* ================================================= */}
-            {/* RECENT ACTIVITY */}
+            {/* SECURITY STATUS */}
+            {/* ================================================= */}
+
+            <Box
+                sx={{
+                    display:
+                        "grid",
+
+                    gridTemplateColumns:
+                        {
+                            xs:
+                                "1fr",
+
+                            lg:
+                                "1.3fr 1fr",
+                        },
+
+                    gap:
+                        2,
+
+                    mb:
+                        3,
+                }}
+            >
+
+                {/* ================================================= */}
+                {/* THREAT OVERVIEW */}
+                {/* ================================================= */}
+
+                <Card>
+
+                    <CardContent
+                        sx={{
+                            p:
+                                3,
+                        }}
+                    >
+
+                        <Typography
+                            variant="h6"
+                            sx={{
+                                mb:
+                                    2,
+                            }}
+                        >
+                            Security Overview
+                        </Typography>
+
+
+                        <StatusRow
+                            label="Current Risk Score"
+                            value={
+                                `${riskScore}/100`
+                            }
+                            color={
+                                riskColor
+                            }
+                            raw
+                        />
+
+
+                        <StatusRow
+                            label="Critical Threats"
+                            value={
+                                criticalThreats
+                            }
+                            color="#ef4444"
+                        />
+
+
+                        <StatusRow
+                            label="High Risk Threats"
+                            value={
+                                highThreats
+                            }
+                            color="#f97316"
+                        />
+
+
+                        <StatusRow
+                            label="Awaiting Investigation"
+                            value={
+                                awaitingInvestigation
+                            }
+                            color="#f59e0b"
+                        />
+
+
+                        <StatusRow
+                            label="Open Tickets"
+                            value={
+                                openTickets
+                            }
+                            color="#3b82f6"
+                        />
+
+
+                        <StatusRow
+                            label="Response Actions"
+                            value={
+                                responseActions
+                            }
+                            color="#22c55e"
+                        />
+
+
+                        <Button
+                            variant="outlined"
+
+                            fullWidth
+
+                            sx={{
+                                mt:
+                                    2,
+                            }}
+
+                            onClick={
+                                () =>
+                                    navigate(
+                                        "/threats"
+                                    )
+                            }
+                        >
+                            Review Threats
+                        </Button>
+
+                    </CardContent>
+
+                </Card>
+
+
+                {/* ================================================= */}
+                {/* QUICK ACTIONS */}
+                {/* ================================================= */}
+
+                <Card>
+
+                    <CardContent
+                        sx={{
+                            p:
+                                3,
+                        }}
+                    >
+
+                        <Typography
+                            variant="h6"
+                            sx={{
+                                mb:
+                                    2,
+                            }}
+                        >
+                            Quick Actions
+                        </Typography>
+
+
+                        <Button
+                            variant="contained"
+
+                            fullWidth
+
+                            startIcon={
+                                <SearchRounded />
+                            }
+
+                            onClick={
+                                () =>
+                                    navigate(
+                                        "/live-monitor"
+                                    )
+                            }
+
+                            sx={{
+                                mb:
+                                    1.5,
+
+                                background:
+                                    "#22c55e",
+
+                                color:
+                                    "#04120a",
+
+                                "&:hover":
+                                {
+                                    background:
+                                        "#16a34a",
+                                },
+                            }}
+                        >
+                            Open Live Monitor
+                        </Button>
+
+
+                        <Button
+                            variant="outlined"
+
+                            fullWidth
+
+                            startIcon={
+                                <WarningAmberRounded />
+                            }
+
+                            onClick={
+                                () =>
+                                    navigate(
+                                        "/threats"
+                                    )
+                            }
+
+                            sx={{
+                                mb:
+                                    1.5,
+                            }}
+                        >
+                            Review Threats
+                        </Button>
+
+
+                        <Button
+                            variant="outlined"
+
+                            fullWidth
+
+                            startIcon={
+                                <PsychologyRounded />
+                            }
+
+                            onClick={
+                                () =>
+                                    navigate(
+                                        "/ai-security"
+                                    )
+                            }
+
+                            sx={{
+                                mb:
+                                    1.5,
+                            }}
+                        >
+                            AI Investigation
+                        </Button>
+
+
+                        <Button
+                            variant="outlined"
+
+                            fullWidth
+
+                            startIcon={
+                                <ApprovalRounded />
+                            }
+
+                            onClick={
+                                () =>
+                                    navigate(
+                                        "/approvals"
+                                    )
+                            }
+                        >
+                            Review Approvals
+                        </Button>
+
+                    </CardContent>
+
+                </Card>
+
+            </Box>
+
+
+            {/* ================================================= */}
+            {/* MITIGATION STATUS */}
             {/* ================================================= */}
 
             <Card>
 
                 <CardContent
                     sx={{
-                        p: 3,
+                        p:
+                            3,
                     }}
                 >
 
-                    <Typography
-                        variant="h6"
+                    <Box
                         sx={{
-                            mb: 0.5,
+                            display:
+                                "flex",
+
+                            justifyContent:
+                                "space-between",
+
+                            alignItems:
+                                "center",
+
+                            gap:
+                                2,
+
+                            flexWrap:
+                                "wrap",
                         }}
                     >
-                        Recent Security Activity
-                    </Typography>
+
+                        <Box>
+
+                            <Typography
+                                sx={{
+                                    fontWeight:
+                                        700,
+
+                                    fontSize:
+                                        16,
+                                }}
+                            >
+                                Protection Verification
+                            </Typography>
 
 
-                    <Typography
-                        sx={{
-                            color:
-                                "#64748b",
+                            <Typography
+                                sx={{
+                                    color:
+                                        "#64748b",
 
-                            mb: 3,
+                                    fontSize:
+                                        13,
 
-                            fontSize:
-                                13,
-                        }}
-                    >
-                        Latest activity detected by Sentinel-X.
-                    </Typography>
+                                    mt:
+                                        0.4,
+                                }}
+                            >
+                                Latest Sentinel-X mitigation and
+                                response verification status.
+                            </Typography>
+
+                        </Box>
 
 
-                    <Stack
-                        spacing={
-                            2
-                        }
-                    >
+                        <Chip
+                            label={
+                                formatStatus(
+                                    mitigationStatus
+                                )
+                            }
 
-                        <ActivityItem
-                            icon="🔴"
-                            title="Threat requires review"
-                            description="Suspicious application activity was detected."
-                            time="2 min ago"
+                            sx={{
+                                color:
+                                    getMitigationColor(
+                                        mitigationStatus
+                                    ),
+
+                                background:
+                                    `${getMitigationColor(
+                                        mitigationStatus
+                                    )}15`,
+
+                                fontWeight:
+                                    700,
+                            }}
                         />
 
-
-                        <ActivityItem
-                            icon="🤖"
-                            title="AI investigation completed"
-                            description="Sentinel-X completed an automated threat investigation."
-                            time="8 min ago"
-                        />
-
-
-                        <ActivityItem
-                            icon="🧪"
-                            title="Response simulation completed"
-                            description="The recommended protection plan was safely simulated."
-                            time="15 min ago"
-                        />
-
-
-                        <ActivityItem
-                            icon="🟢"
-                            title="Protection check completed"
-                            description="All active protection modules are running normally."
-                            time="26 min ago"
-                        />
-
-                    </Stack>
+                    </Box>
 
                 </CardContent>
 
@@ -427,36 +1434,20 @@ function Dashboard() {
 function MetricCard({
     title,
     value,
-    subtitle,
     icon,
-    status,
+    color,
 }) {
-
-    const colors = {
-        success: "#22c55e",
-        warning: "#f59e0b",
-        error: "#ef4444",
-        info: "#3b82f6",
-    };
-
-
-    const color =
-        colors[
-            status
-        ]
-        || "#94a3b8";
-
 
     return (
 
-        <Card
-            sx={{
-                height:
-                    "100%",
-            }}
-        >
+        <Card>
 
-            <CardContent>
+            <CardContent
+                sx={{
+                    p:
+                        2.5,
+                }}
+            >
 
                 <Box
                     sx={{
@@ -468,6 +1459,9 @@ function MetricCard({
 
                         alignItems:
                             "flex-start",
+
+                        gap:
+                            2,
                     }}
                 >
 
@@ -476,48 +1470,32 @@ function MetricCard({
                         <Typography
                             sx={{
                                 color:
-                                    "#94a3b8",
-
-                                fontSize:
-                                    13,
-                            }}
-                        >
-                            {
-                                title
-                            }
-                        </Typography>
-
-
-                        <Typography
-                            sx={{
-                                fontSize:
-                                    28,
-
-                                fontWeight:
-                                    700,
-
-                                mt: 0.5,
-                            }}
-                        >
-                            {
-                                value
-                            }
-                        </Typography>
-
-
-                        <Typography
-                            sx={{
-                                color:
                                     "#64748b",
 
                                 fontSize:
                                     12,
+                            }}
+                        >
+                            {title}
+                        </Typography>
 
-                                mt: 0.5,
+
+                        <Typography
+                            sx={{
+                                mt:
+                                    0.5,
+
+                                fontSize:
+                                    30,
+
+                                fontWeight:
+                                    800,
                             }}
                         >
                             {
-                                subtitle
+                                formatNumber(
+                                    value
+                                )
                             }
                         </Typography>
 
@@ -548,12 +1526,12 @@ function MetricCard({
                                 color,
 
                             background:
-                                `${color}18`,
+                                `${color}15`,
                         }}
                     >
-                        {
-                            icon
-                        }
+
+                        {icon}
+
                     </Box>
 
                 </Box>
@@ -568,14 +1546,14 @@ function MetricCard({
 
 
 /* ================================================================ */
-/* ACTIVITY ITEM */
+/* STATUS ROW */
 /* ================================================================ */
 
-function ActivityItem({
-    icon,
-    title,
-    description,
-    time,
+function StatusRow({
+    label,
+    value,
+    color,
+    raw = false,
 }) {
 
     return (
@@ -585,23 +1563,16 @@ function ActivityItem({
                 display:
                     "flex",
 
-                alignItems:
-                    "center",
-
                 justifyContent:
                     "space-between",
 
-                gap: 2,
+                alignItems:
+                    "center",
 
-                p: 2,
+                py:
+                    1.2,
 
-                background:
-                    "#0f172a",
-
-                borderRadius:
-                    "12px",
-
-                border:
+                borderBottom:
                     "1px solid #1e293b",
             }}
         >
@@ -614,80 +1585,477 @@ function ActivityItem({
                     alignItems:
                         "center",
 
-                    gap: 2,
+                    gap:
+                        1,
                 }}
             >
 
                 <Box
                     sx={{
+                        width:
+                            8,
+
+                        height:
+                            8,
+
+                        borderRadius:
+                            "50%",
+
+                        background:
+                            color,
+                    }}
+                />
+
+
+                <Typography
+                    sx={{
+                        color:
+                            "#cbd5e1",
+
                         fontSize:
-                            22,
+                            13,
                     }}
                 >
-                    {
-                        icon
-                    }
-                </Box>
-
-
-                <Box>
-
-                    <Typography
-                        sx={{
-                            fontSize:
-                                14,
-
-                            fontWeight:
-                                600,
-                        }}
-                    >
-                        {
-                            title
-                        }
-                    </Typography>
-
-
-                    <Typography
-                        sx={{
-                            fontSize:
-                                12,
-
-                            color:
-                                "#64748b",
-
-                            mt: 0.4,
-                        }}
-                    >
-                        {
-                            description
-                        }
-                    </Typography>
-
-                </Box>
+                    {label}
+                </Typography>
 
             </Box>
 
 
             <Typography
                 sx={{
+                    fontWeight:
+                        700,
+
                     color:
-                        "#64748b",
-
-                    fontSize:
-                        12,
-
-                    whiteSpace:
-                        "nowrap",
+                        raw
+                            ? color
+                            : "inherit",
                 }}
             >
                 {
-                    time
+                    raw
+                        ? value
+                        : formatNumber(
+                            value
+                        )
                 }
             </Typography>
 
         </Box>
 
     );
+
+}
+
+
+/* ================================================================ */
+/* READ BACKEND VALUE */
+/* ================================================================ */
+
+function readValue(
+    object,
+    paths,
+    fallback = null
+) {
+
+    if (
+        !object
+    ) {
+        return fallback;
+    }
+
+
+    for (
+        const path
+        of paths
+    ) {
+
+        let current =
+            object;
+
+
+        for (
+            const key
+            of path
+        ) {
+
+            if (
+                current
+                === null
+                ||
+                current
+                === undefined
+            ) {
+
+                current =
+                    undefined;
+
+                break;
+
+            }
+
+
+            current =
+                current[key];
+
+        }
+
+
+        if (
+            current
+            !== undefined
+            &&
+            current
+            !== null
+        ) {
+
+            return current;
+
+        }
+
+    }
+
+
+    return fallback;
+
+}
+
+
+/* ================================================================ */
+/* READ NUMBER */
+/* ================================================================ */
+
+function readNumber(
+    object,
+    paths,
+    fallback = 0
+) {
+
+    const value =
+        readValue(
+            object,
+            paths,
+            fallback
+        );
+
+
+    if (
+        typeof value
+        === "number"
+    ) {
+
+        return value;
+
+    }
+
+
+    if (
+        typeof value
+        === "string"
+        &&
+        value.trim()
+        !== ""
+        &&
+        !Number.isNaN(
+            Number(value)
+        )
+    ) {
+
+        return Number(
+            value
+        );
+
+    }
+
+
+    return fallback;
+
+}
+
+
+/* ================================================================ */
+/* HEALTH CHECK */
+/* ================================================================ */
+
+function isHealthy(
+    health
+) {
+
+    if (
+        !health
+    ) {
+
+        return false;
+
+    }
+
+
+    const status =
+        String(
+            health.status
+            ??
+            health.health
+            ??
+            health.state
+            ??
+            ""
+        )
+        .toUpperCase();
+
+
+    if (
+        [
+            "HEALTHY",
+            "OK",
+            "ACTIVE",
+            "RUNNING",
+            "READY",
+        ].includes(
+            status
+        )
+    ) {
+
+        return true;
+
+    }
+
+
+    return true;
+
+}
+
+
+/* ================================================================ */
+/* RISK COLOR */
+/* ================================================================ */
+
+function getRiskColor(
+    riskScore
+) {
+
+    if (
+        riskScore >= 80
+    ) {
+
+        return "#ef4444";
+
+    }
+
+
+    if (
+        riskScore >= 60
+    ) {
+
+        return "#f97316";
+
+    }
+
+
+    if (
+        riskScore >= 40
+    ) {
+
+        return "#f59e0b";
+
+    }
+
+
+    if (
+        riskScore >= 20
+    ) {
+
+        return "#3b82f6";
+
+    }
+
+
+    return "#22c55e";
+
+}
+
+
+/* ================================================================ */
+/* RISK LEVEL */
+/* ================================================================ */
+
+function getRiskLevel(
+    riskScore
+) {
+
+    if (
+        riskScore >= 80
+    ) {
+
+        return "CRITICAL";
+
+    }
+
+
+    if (
+        riskScore >= 60
+    ) {
+
+        return "HIGH";
+
+    }
+
+
+    if (
+        riskScore >= 40
+    ) {
+
+        return "MEDIUM";
+
+    }
+
+
+    if (
+        riskScore >= 20
+    ) {
+
+        return "LOW";
+
+    }
+
+
+    return "SAFE";
+
+}
+
+
+/* ================================================================ */
+/* NUMBER FORMAT */
+/* ================================================================ */
+
+function formatNumber(
+    value
+) {
+
+    const number =
+        Number(
+            value
+        );
+
+
+    if (
+        Number.isNaN(
+            number
+        )
+    ) {
+
+        return 0;
+
+    }
+
+
+    return number
+        .toLocaleString();
+
+}
+
+
+/* ================================================================ */
+/* STATUS FORMAT */
+/* ================================================================ */
+
+function formatStatus(
+    status
+) {
+
+    if (
+        !status
+    ) {
+
+        return "Monitoring";
+
+    }
+
+
+    return String(
+        status
+    )
+        .replaceAll(
+            "_",
+            " "
+        )
+        .toLowerCase()
+        .replace(
+            /\b\w/g,
+            (character) =>
+                character
+                    .toUpperCase()
+        );
+
+}
+
+
+/* ================================================================ */
+/* MITIGATION STATUS COLOR */
+/* ================================================================ */
+
+function getMitigationColor(
+    status
+) {
+
+    const value =
+        String(
+            status
+            ?? ""
+        )
+        .toUpperCase();
+
+
+    if (
+        value.includes(
+            "VERIFIED"
+        )
+        ||
+        value.includes(
+            "COMPLETE"
+        )
+        ||
+        value.includes(
+            "SUCCESS"
+        )
+    ) {
+
+        return "#22c55e";
+
+    }
+
+
+    if (
+        value.includes(
+            "FAIL"
+        )
+        ||
+        value.includes(
+            "ERROR"
+        )
+    ) {
+
+        return "#ef4444";
+
+    }
+
+
+    if (
+        value.includes(
+            "PENDING"
+        )
+        ||
+        value.includes(
+            "REVIEW"
+        )
+    ) {
+
+        return "#f59e0b";
+
+    }
+
+
+    return "#3b82f6";
 
 }
 
