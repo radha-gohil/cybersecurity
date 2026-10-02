@@ -32,8 +32,7 @@ data/malware/raw/
 *.parquet
 *.csv.gz
 
-# Models
-*.joblib
+
 
 # Temp files
 *.tmp
