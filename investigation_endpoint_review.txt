@@ -1,0 +1,336 @@
+# INVESTIGATE DETECTED INCIDENT
+
+# ================================================================
+
+@app.post(
+
+    "/api/v1/detected-incidents/{incident_id}/investigate"
+
+)
+
+def investigate_detected_incident(
+
+    incident_id: str
+
+):
+
+    incident_id = incident_id.strip()
+
+    if not incident_id:
+
+        raise HTTPException(
+
+            status_code=400,
+
+            detail="incident_id cannot be empty.",
+
+        )
+
+    try:
+
+        incident = (
+
+            detected_incident_store.get_incident(
+
+                incident_id
+
+            )
+
+        )
+
+    except Exception as error:
+
+        raise HTTPException(
+
+            status_code=500,
+
+            detail=(
+
+                "Failed to load detected "
+
+                f"incident: {error}"
+
+            ),
+
+        )
+
+    if incident is None:
+
+        raise HTTPException(
+
+            status_code=404,
+
+            detail=(
+
+                f"Detected incident {incident_id} "
+
+                "was not found."
+
+            ),
+
+        )
+
+    existing = workflow.recover_case(
+
+        incident_id
+
+    )
+
+    if existing is not None:
+
+        return {
+
+            "success": True,
+
+            "already_in_soc": True,
+
+            "incident_id": incident_id,
+
+            "status": existing.get("status"),
+
+            "ticket": serialize_value(
+
+                existing.get("ticket_data", {})
+
+            ),
+
+            "response_action_count":
+
+                existing.get("response_action_count", 0),
+
+            "response_actions": serialize_value(
+
+                existing.get("response_actions", [])
+
+            ),
+
+            "digital_twin_decision": serialize_value(
+
+                existing.get("decision", {})
+
+            ),
+
+            "simulation_mode": True,
+
+            "real_response_executed": False,
+
+        }
+
+    try:
+
+        intelligence = (
+
+            multi_agent_pipeline.process_incident(
+
+                incident
+
+            )
+
+        )
+
+        if not isinstance(intelligence, dict):
+
+            raise ValueError(
+
+                "Multi-agent pipeline returned "
+
+                "an invalid intelligence result."
+
+            )
+
+        intelligence["source_incident"] = incident
+
+        coordinated_analysis = (
+
+            intelligence.get(
+
+                "coordinated_analysis"
+
+            )
+
+        )
+
+        if not isinstance(
+
+            coordinated_analysis,
+
+            dict,
+
+        ):
+
+            raise ValueError(
+
+                "Multi-agent pipeline did not "
+
+                "produce coordinated_analysis."
+
+            )
+
+        pipeline_status = str(
+
+            intelligence.get("status", "UNKNOWN")
+
+        ).upper()
+
+        if pipeline_status == "INCOMPLETE":
+
+            raise ValueError(
+
+                "Multi-agent investigation "
+
+                "completed with an INCOMPLETE status."
+
+            )
+
+        case = workflow.create_case(
+
+            incident_id=incident_id,
+
+            intelligence=intelligence,
+
+        )
+
+        return {
+
+            "success": True,
+
+            "already_in_soc": False,
+
+            "incident_id": incident_id,
+
+            "detected_incident":
+
+                serialize_value(incident),
+
+            "multi_agent": {
+
+                "status":
+
+                    intelligence.get("status"),
+
+                "security_state":
+
+                    intelligence.get("security_state"),
+
+                "risk_score":
+
+                    intelligence.get("risk_score", 0),
+
+                "risk_level":
+
+                    intelligence.get("risk_level", "INFO"),
+
+                "final_decision":
+
+                    intelligence.get("final_decision", "MONITOR"),
+
+                "autonomy_level":
+
+                    intelligence.get("autonomy_level"),
+
+                "autonomy_mode":
+
+                    intelligence.get("autonomy_mode"),
+
+                "execution_enabled":
+
+                    intelligence.get(
+
+                        "execution_enabled",
+
+                        False,
+
+                    ),
+
+            },
+
+            "intelligence":
+
+                serialize_value(intelligence),
+
+            "status":
+
+                case.get("status"),
+
+            "ticket":
+
+                serialize_value(
+
+                    case.get("ticket_data", {})
+
+                ),
+
+            "response_action_count":
+
+                case.get("response_action_count", 0),
+
+            "response_actions":
+
+                serialize_value(
+
+                    case.get("response_actions", [])
+
+                ),
+
+            "digital_twin_decision":
+
+                serialize_value(
+
+                    case.get("decision", {})
+
+                ),
+
+            "explanation":
+
+                serialize_value(
+
+                    case.get("explanation", {})
+
+                ),
+
+            "persistence":
+
+                serialize_value(
+
+                    case.get("persistence", {})
+
+                ),
+
+            "simulation_mode": True,
+
+            "real_response_executed": False,
+
+        }
+
+    except HTTPException:
+
+        raise
+
+    except ValueError as error:
+
+        raise HTTPException(
+
+            status_code=422,
+
+            detail=str(error),
+
+        )
+
+    except Exception as error:
+
+        raise HTTPException(
+
+            status_code=500,
+
+            detail=(
+
+                "Failed to investigate detected "
+
+                f"incident: {error}"
+
+            ),
+
+        )
+
+# ================================================================
+

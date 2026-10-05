@@ -1,691 +1,506 @@
+
 from collections import Counter
 from datetime import datetime, timezone
 
 
 class InvestigationAgent:
+    """
+    Evidence-grounded investigation.
+
+    Historical severity and correlation are retained for
+    context, not treated as confirmed attack evidence.
+    """
+
+    VALID_CATEGORIES = {
+        "PROCESS", "FILE", "NETWORK", "REGISTRY"
+    }
+
+    VALID_SEVERITIES = {
+        "MEDIUM", "HIGH", "CRITICAL"
+    }
 
     def __init__(self):
-
         self.name = "InvestigationAgent"
 
+    def safe_list(self, value):
+        return value if isinstance(value, list) else []
 
-    # ============================================================
-    # SAFE LIST HELPER
-    # ============================================================
+    def safe_dict(self, value):
+        return value if isinstance(value, dict) else {}
 
-    def safe_list(
-        self,
-        value,
-    ):
+    def now_iso(self):
+        return datetime.now(timezone.utc).isoformat()
 
-        if isinstance(
-            value,
-            list,
-        ):
+    def get_category(self, event: dict) -> str:
+        metadata = self.safe_dict(event.get("metadata"))
 
-            return value
+        category = str(
+            event.get("event_category")
+            or metadata.get("event_category")
+            or ""
+        ).upper()
 
-        return []
-
-
-    # ============================================================
-    # SAFE DICT HELPER
-    # ============================================================
-
-    def safe_dict(
-        self,
-        value,
-    ):
-
-        if isinstance(
-            value,
-            dict,
-        ):
-
-            return value
-
-        return {}
-
-
-    # ============================================================
-    # CURRENT UTC TIME
-    # ============================================================
-
-    def now_iso(
-        self,
-    ) -> str:
-
-        return (
-            datetime.now(
-                timezone.utc
-            ).isoformat()
-        )
-
-
-    # ============================================================
-    # EXTRACT CATEGORY
-    # ============================================================
-
-    def get_category(
-        self,
-        event: dict,
-    ) -> str:
+        if category in self.VALID_CATEGORIES:
+            return category
 
         event_type = str(
-            event.get(
-                "event_type",
-                ""
-            )
+            event.get("event_type") or ""
         ).lower()
 
-
-        if event_type.startswith(
-            "process"
-        ):
-
+        if event_type.startswith("process"):
             return "PROCESS"
-
-
-        if event_type.startswith(
-            "file"
-        ):
-
+        if event_type.startswith("file"):
             return "FILE"
-
-
-        if event_type.startswith(
-            "network"
-        ):
-
+        if event_type.startswith("network"):
             return "NETWORK"
-
-
-        if (
-            event_type.startswith(
-                "registry"
-            )
-            or event_type.startswith(
-                "startup"
-            )
-        ):
-
+        if event_type.startswith(("registry", "startup")):
             return "REGISTRY"
-
 
         return "OTHER"
 
+    @staticmethod
+    def valid_pid(value):
+        try:
+            if value is None or isinstance(value, bool):
+                return False
+
+            pid = int(value)
+            return pid > 0 and pid != 4
+        except (TypeError, ValueError, OverflowError):
+            return False
+
+    def get_qualifying_events(self, incident: dict) -> list:
+        incident = self.safe_dict(incident)
+
+        events = self.safe_list(
+            incident.get("timeline")
+        )
+
+        result = []
+        seen = set()
+
+        for event in events:
+            if not isinstance(event, dict):
+                continue
+
+            event_id = str(
+                event.get("event_id") or ""
+            ).strip()
+
+            if not event_id or event_id in seen:
+                continue
+
+            seen.add(event_id)
+
+            severity = str(
+                event.get("severity") or "INFO"
+            ).upper()
+
+            if severity not in self.VALID_SEVERITIES:
+                continue
+
+            metadata = self.safe_dict(
+                event.get("metadata")
+            )
+
+            mode = str(
+                event.get("detection_mode")
+                or event.get("mode")
+                or metadata.get("detection_mode")
+                or metadata.get("operating_mode")
+                or metadata.get("mode")
+                or ""
+            ).upper()
+
+            if (
+                "SHADOW" in mode
+                or mode in {
+                    "OFF", "DISABLED", "SIMULATION"
+                }
+            ):
+                continue
+
+            if (
+                event.get("simulation_mode") is True
+                or metadata.get("simulation_mode") is True
+                or metadata.get("synthetic") is True
+            ):
+                continue
+
+            device_id = str(
+                event.get("device_id")
+                or metadata.get("device_id")
+                or ""
+            ).strip()
+
+            if not device_id:
+                continue
+
+            category = self.get_category(event)
+
+            if category not in self.VALID_CATEGORIES:
+                continue
+
+            if category in {"PROCESS", "NETWORK"}:
+                data = self.safe_dict(
+                    event.get(
+                        "process"
+                        if category == "PROCESS"
+                        else "network"
+                    )
+                )
+
+                if not self.valid_pid(data.get("pid")):
+                    continue
+
+            result.append(event)
+
+        return result
 
     # ============================================================
     # COLLECT PROCESSES
     # ============================================================
 
-    def collect_processes(
-        self,
-        events: list,
-    ) -> list:
-
+    def collect_processes(self, events: list) -> list:
         processes = {}
 
-
         for event in events:
-
-            process = (
-                self.safe_dict(
-                    event.get(
-                        "process"
-                    )
-                )
-            )
-
-            network = (
-                self.safe_dict(
-                    event.get(
-                        "network"
-                    )
-                )
-            )
-
-
-            pid = (
-                process.get(
-                    "pid"
-                )
-                or network.get(
-                    "pid"
-                )
-            )
-
-
-            name = (
-                process.get(
-                    "name"
-                )
-                or network.get(
-                    "process_name"
-                )
-            )
-
-
-            exe = (
-                process.get(
-                    "exe"
-                )
-            )
-
-
-            if (
-                pid is None
-                and not name
-            ):
-
+            if not isinstance(event, dict):
                 continue
 
-
-            key = (
-                pid,
-                str(
-                    name
-                ).lower()
-                if name
-                else None,
+            process = self.safe_dict(
+                event.get("process")
             )
 
+            if not self.valid_pid(process.get("pid")):
+                continue
+
+            pid = int(process["pid"])
+            name = process.get("name")
+            device = str(
+                event.get("device_id") or ""
+            )
+
+            key = (
+                device,
+                pid,
+                str(name or "").lower(),
+            )
 
             if key not in processes:
-
-                processes[
-                    key
-                ] = {
-
-                    "pid":
-                        pid,
-
-                    "name":
-                        name,
-
-                    "exe":
-                        exe,
+                processes[key] = {
+                    "pid": pid,
+                    "name": name,
+                    "exe": process.get("exe"),
+                    "device_id": device,
                 }
 
-
-        return list(
-            processes.values()
-        )
-
+        return list(processes.values())
 
     # ============================================================
     # COLLECT FILES
     # ============================================================
 
-    def collect_files(
-        self,
-        events: list,
-    ) -> list:
-
+    def collect_files(self, events: list) -> list:
         files = {}
 
-
         for event in events:
-
-            file_data = (
-                self.safe_dict(
-                    event.get(
-                        "file"
-                    )
-                )
-            )
-
-
-            path = (
-                file_data.get(
-                    "path"
-                )
-            )
-
-
-            if not path:
-
+            if not isinstance(event, dict):
                 continue
 
+            file_data = self.safe_dict(
+                event.get("file")
+            )
 
-            key = str(
-                path
-            ).lower()
+            path = file_data.get("path")
 
+            if not path:
+                continue
 
-            files[
-                key
-            ] = {
+            device = str(
+                event.get("device_id") or ""
+            )
 
-                "name":
-                    file_data.get(
-                        "name"
-                    ),
+            key = (device, str(path).lower())
 
-                "path":
-                    path,
-
-                "sha256":
-                    file_data.get(
-                        "sha256"
-                    ),
-
-                "is_pe":
-                    file_data.get(
-                        "is_pe"
-                    ),
-
+            files[key] = {
+                "name": file_data.get("name"),
+                "path": path,
+                "sha256": file_data.get("sha256"),
+                "is_pe": file_data.get("is_pe"),
                 "static_risk_score":
-                    file_data.get(
-                        "static_risk_score"
-                    ),
-
-                "malware_probability":
-                    file_data.get(
-                        "malware_probability"
-                    ),
+                    file_data.get("static_risk_score"),
+                "malware_probability": None,
+                "device_id": device,
             }
 
-
-        return list(
-            files.values()
-        )
-
+        return list(files.values())
 
     # ============================================================
     # COLLECT NETWORK CONNECTIONS
     # ============================================================
 
-    def collect_network(
-        self,
-        events: list,
-    ) -> list:
-
+    def collect_network(self, events: list) -> list:
         connections = []
-
+        seen = set()
 
         for event in events:
-
-            network = (
-                self.safe_dict(
-                    event.get(
-                        "network"
-                    )
-                )
-            )
-
-
-            remote_ip = (
-                network.get(
-                    "remote_ip"
-                )
-            )
-
-
-            if not remote_ip:
-
+            if not isinstance(event, dict):
                 continue
 
+            network = self.safe_dict(
+                event.get("network")
+            )
+
+            if not self.valid_pid(network.get("pid")):
+                continue
+
+            remote_ip = network.get("remote_ip")
+
+            if not remote_ip:
+                continue
 
             item = {
-
-                "pid":
-                    network.get(
-                        "pid"
-                    ),
-
+                "pid": int(network["pid"]),
                 "process_name":
-                    network.get(
-                        "process_name"
-                    ),
-
-                "protocol":
-                    network.get(
-                        "protocol"
-                    ),
-
-                "remote_ip":
-                    remote_ip,
-
+                    network.get("process_name"),
+                "protocol": network.get("protocol"),
+                "remote_ip": remote_ip,
                 "remote_port":
-                    network.get(
-                        "remote_port"
-                    ),
-
-                "status":
-                    network.get(
-                        "status"
-                    ),
+                    network.get("remote_port"),
+                "status": network.get("status"),
+                "device_id": event.get("device_id"),
             }
 
+            key = (
+                str(item["device_id"]),
+                item["pid"],
+                str(item["remote_ip"]),
+                str(item["remote_port"]),
+                str(item["protocol"]),
+            )
 
-            if item not in connections:
-
-                connections.append(
-                    item
-                )
-
+            if key not in seen:
+                seen.add(key)
+                connections.append(item)
 
         return connections
-
 
     # ============================================================
     # COLLECT REGISTRY
     # ============================================================
 
-    def collect_registry(
-        self,
-        events: list,
-    ) -> list:
-
+    def collect_registry(self, events: list) -> list:
         registry_items = []
-
+        seen = set()
 
         for event in events:
-
-            registry = (
-                self.safe_dict(
-                    event.get(
-                        "registry"
-                    )
-                )
-            )
-
-
-            if not registry:
-
+            if not isinstance(event, dict):
                 continue
 
+            registry = self.safe_dict(
+                event.get("registry")
+            )
 
-            item = {
+            if not registry:
+                continue
 
-                "key":
-                    registry.get(
-                        "key"
-                    )
-                    or registry.get(
-                        "registry_key"
-                    )
-                    or registry.get(
-                        "path"
-                    ),
+            key = (
+                registry.get("key")
+                or registry.get("registry_key")
+                or registry.get("path")
+            )
 
-                "value_name":
-                    registry.get(
-                        "value_name"
-                    ),
+            if not key:
+                continue
 
-                "value_data":
-                    registry.get(
-                        "value_data"
-                    )
-                    or registry.get(
-                        "data"
-                    )
-                    or registry.get(
-                        "value"
-                    ),
-            }
+            device = str(
+                event.get("device_id") or ""
+            )
 
+            value_name = registry.get("value_name")
 
-            if item not in registry_items:
+            identity = (
+                device,
+                str(key).lower(),
+                str(value_name or "").lower(),
+            )
 
-                registry_items.append(
-                    item
-                )
+            if identity in seen:
+                continue
 
+            seen.add(identity)
+
+            registry_items.append({
+                "key": key,
+                "value_name": value_name,
+                "value_data": (
+                    registry.get("value_data")
+                    or registry.get("data")
+                    or registry.get("value")
+                ),
+                "device_id": device,
+            })
 
         return registry_items
-
 
     # ============================================================
     # COLLECT INDICATORS
     # ============================================================
 
-    def collect_indicators(
-        self,
-        events: list,
-    ) -> list:
-
+    def collect_indicators(self, events: list) -> list:
         indicators = []
-
-
-        for event in events:
-
-            process = (
-                self.safe_dict(
-                    event.get(
-                        "process"
-                    )
-                )
-            )
-
-            file_data = (
-                self.safe_dict(
-                    event.get(
-                        "file"
-                    )
-                )
-            )
-
-            metadata = (
-                self.safe_dict(
-                    event.get(
-                        "metadata"
-                    )
-                )
-            )
-
-
-            for key in [
-                "behavior_indicators",
-                "anomaly_indicators",
-            ]:
-
-                values = (
-                    process.get(
-                        key
-                    )
-                )
-
-
-                if isinstance(
-                    values,
-                    list,
-                ):
-
-                    indicators.extend(
-                        values
-                    )
-
-
-            static_reasons = (
-                file_data.get(
-                    "static_reasons"
-                )
-            )
-
-
-            if isinstance(
-                static_reasons,
-                list,
-            ):
-
-                indicators.extend(
-                    static_reasons
-                )
-
-
-            for key in [
-                "behavior_indicators",
-                "anomaly_indicators",
-            ]:
-
-                values = (
-                    metadata.get(
-                        key
-                    )
-                )
-
-
-                if isinstance(
-                    values,
-                    list,
-                ):
-
-                    indicators.extend(
-                        values
-                    )
-
-
-        # Remove duplicates while preserving order
-        unique = []
-
         seen = set()
 
-
-        for indicator in indicators:
-
-            value = str(
-                indicator
-            ).strip()
-
-
-            if not value:
-
+        for event in events:
+            if not isinstance(event, dict):
                 continue
 
-
-            normalized = (
-                value.lower()
+            process = self.safe_dict(
+                event.get("process")
             )
 
-
-            if normalized in seen:
-
-                continue
-
-
-            seen.add(
-                normalized
+            file_data = self.safe_dict(
+                event.get("file")
             )
 
-            unique.append(
-                value
+            metadata = self.safe_dict(
+                event.get("metadata")
             )
 
+            groups = (
+                process.get("behavior_indicators"),
+                process.get("anomaly_indicators"),
+                file_data.get("static_reasons"),
+                metadata.get("behavior_indicators"),
+                metadata.get("anomaly_indicators"),
+            )
 
-        return unique
+            for group in groups:
+                if not isinstance(group, list):
+                    continue
 
+                for item in group:
+                    value = str(item).strip()
+
+                    if not value:
+                        continue
+
+                    normalized = value.lower()
+
+                    if normalized not in seen:
+                        seen.add(normalized)
+                        indicators.append(value)
+
+        return indicators
 
     # ============================================================
     # BUILD TIMELINE
     # ============================================================
 
-    def build_timeline(
-        self,
-        events: list,
-    ) -> list:
-
+    def build_timeline(self, events: list) -> list:
         timeline = []
 
-
         for event in events:
+            if not isinstance(event, dict):
+                continue
 
-            timeline.append(
-                {
-
-                    "event_id":
-                        event.get(
-                            "event_id"
-                        ),
-
-                    "timestamp":
-                        event.get(
-                            "timestamp"
-                        )
-                        or event.get(
-                            "timestamp_unix"
-                        ),
-
-                    "event_type":
-                        event.get(
-                            "event_type"
-                        ),
-
-                    "source":
-                        event.get(
-                            "source"
-                        ),
-
-                    "severity":
-                        event.get(
-                            "severity"
-                        ),
-
-                    "category":
-                        self.get_category(
-                            event
-                        ),
-                }
-            )
-
+            timeline.append({
+                "event_id": event.get("event_id"),
+                "timestamp": (
+                    event.get("timestamp")
+                    if event.get("timestamp") is not None
+                    else event.get("timestamp_unix")
+                ),
+                "event_type": event.get("event_type"),
+                "source": event.get("source"),
+                "severity": event.get("severity"),
+                "category": self.get_category(event),
+            })
 
         return timeline
 
+    # ============================================================
+    # EVIDENCE ASSESSMENT
+    # ============================================================
+
+    def evidence_assessment(self, incident: dict) -> dict:
+        qualifying = self.get_qualifying_events(
+            incident
+        )
+
+        by_device = {}
+
+        for event in qualifying:
+            metadata = self.safe_dict(
+                event.get("metadata")
+            )
+
+            device = str(
+                event.get("device_id")
+                or metadata.get("device_id")
+                or ""
+            )
+
+            by_device.setdefault(
+                device, set()
+            ).add(self.get_category(event))
+
+        diversity = max(
+            (
+                len(categories)
+                for categories in by_device.values()
+            ),
+            default=0,
+        )
+
+        corroborated = (
+            len(qualifying) >= 2
+            and diversity >= 2
+        )
+
+        indicator_event_ids = set()
+
+        for event in qualifying:
+            if self.collect_indicators([event]):
+                indicator_event_ids.add(
+                    str(event.get("event_id"))
+                )
+
+        return {
+            "qualifying_event_count": len(
+                qualifying
+            ),
+            "qualifying_category_count": diversity,
+            "categories_by_device": {
+                device: sorted(categories)
+                for device, categories in by_device.items()
+            },
+            "indicator_event_count": len(
+                indicator_event_ids
+            ),
+            "basic_corroboration": corroborated,
+            "causal_relationship_verified": False,
+            "attack_confirmed": False,
+            "policy": "INVESTIGATION_EVIDENCE_V2",
+        }
 
     # ============================================================
     # DETERMINE INVESTIGATION PRIORITY
     # ============================================================
 
-    def determine_priority(
-        self,
-        incident: dict,
-    ) -> str:
-
-        score = int(
-            incident.get(
-                "correlation_score",
-                0,
-            )
-            or 0
+    def determine_priority(self, incident: dict) -> str:
+        assessment = self.evidence_assessment(
+            incident
         )
 
+        if not assessment["basic_corroboration"]:
+            return "LOW"
 
-        severity = str(
-            incident.get(
-                "severity",
-                "INFO",
-            )
-        ).upper()
-
-
-        if (
-            severity == "CRITICAL"
-            or score >= 80
-        ):
-
-            return "IMMEDIATE"
-
-
-        if (
-            severity == "HIGH"
-            or score >= 60
-        ):
-
-            return "HIGH"
-
-
-        if (
-            severity == "MEDIUM"
-            or score >= 35
-        ):
-
+        if assessment["indicator_event_count"] >= 2:
             return "NORMAL"
 
-
         return "LOW"
-
 
     # ============================================================
     # GENERATE FINDINGS
@@ -701,279 +516,141 @@ class InvestigationAgent:
         registry: list,
         indicators: list,
     ) -> list:
-
         findings = []
 
-
-        categories = set(
-            self.get_category(
-                event
-            )
-            for event in events
+        assessment = self.evidence_assessment(
+            incident
         )
 
+        findings.append(
+            f"{len(events)} recorded events were reviewed. "
+            f"{assessment['qualifying_event_count']} "
+            "met preliminary evidence criteria."
+        )
 
-        if len(
-            categories
-        ) >= 2:
-
+        if assessment["basic_corroboration"]:
             findings.append(
-                f"Activity spans {len(categories)} telemetry categories: "
-                + ", ".join(
-                    sorted(
-                        categories
-                    )
-                )
+                "Two or more qualifying event categories "
+                "were recorded on the same device. "
+                "A causal relationship is not verified."
             )
-
+        else:
+            findings.append(
+                "Insufficient qualifying cross-category "
+                "evidence for corroboration."
+            )
 
         if processes:
-
             findings.append(
-                f"{len(processes)} process entity/entities involved."
+                f"{len(processes)} qualifying process "
+                "entity/entities recorded."
             )
-
 
         if files:
-
             findings.append(
-                f"{len(files)} file entity/entities involved."
+                f"{len(files)} qualifying file "
+                "artifact(s) recorded."
             )
-
 
         if network:
-
             findings.append(
-                f"{len(network)} network connection(s) observed."
+                f"{len(network)} qualifying network "
+                "endpoint(s) recorded."
             )
-
 
         if registry:
-
             findings.append(
-                f"{len(registry)} registry-related artifact(s) observed."
+                f"{len(registry)} qualifying registry "
+                "artifact(s) recorded."
             )
-
-
-        high_probability_files = []
-
-
-        for file_item in files:
-
-            probability = (
-                file_item.get(
-                    "malware_probability"
-                )
-            )
-
-
-            try:
-
-                probability = float(
-                    probability
-                )
-
-            except (
-                TypeError,
-                ValueError,
-            ):
-
-                continue
-
-
-            if probability >= 0.70:
-
-                high_probability_files.append(
-                    file_item
-                )
-
-
-        if high_probability_files:
-
-            findings.append(
-                f"{len(high_probability_files)} file(s) have elevated malware probability."
-            )
-
 
         if indicators:
-
             findings.append(
-                f"{len(indicators)} behavioral/static indicator(s) identified."
+                f"{len(indicators)} reported indicators "
+                "were retained for analyst validation."
             )
 
-
-        if not findings:
-
-            findings.append(
-                "No strong investigation finding was derived from the available telemetry."
-            )
-
+        findings.append(
+            "No attack confirmation or containment "
+            "authorization is issued by this agent."
+        )
 
         return findings
-
 
     # ============================================================
     # INVESTIGATE INCIDENT
     # ============================================================
 
-    def investigate(
-        self,
-        incident: dict,
-    ) -> dict:
+    def investigate(self, incident: dict) -> dict:
+        incident = self.safe_dict(incident)
 
-        incident = (
-            self.safe_dict(
-                incident
+        events = [
+            event
+            for event in self.safe_list(
+                incident.get("timeline")
             )
+            if isinstance(event, dict)
+        ]
+
+        qualifying = self.get_qualifying_events(
+            incident
         )
 
+        processes = self.collect_processes(qualifying)
+        files = self.collect_files(qualifying)
+        network = self.collect_network(qualifying)
+        registry = self.collect_registry(qualifying)
+        indicators = self.collect_indicators(qualifying)
 
-        events = (
-            self.safe_list(
-                incident.get(
-                    "timeline"
-                )
-            )
-        )
-
-
-        processes = (
-            self.collect_processes(
-                events
-            )
-        )
-
-
-        files = (
-            self.collect_files(
-                events
-            )
-        )
-
-
-        network = (
-            self.collect_network(
-                events
-            )
-        )
-
-
-        registry = (
-            self.collect_registry(
-                events
-            )
-        )
-
-
-        indicators = (
-            self.collect_indicators(
-                events
-            )
-        )
-
-
-        timeline = (
-            self.build_timeline(
-                events
-            )
-        )
-
+        timeline = self.build_timeline(events)
 
         category_counts = Counter(
-
-            self.get_category(
-                event
-            )
-
+            self.get_category(event)
             for event in events
         )
 
-
-        findings = (
-            self.generate_findings(
-                incident,
-                events,
-                processes,
-                files,
-                network,
-                registry,
-                indicators,
-            )
+        findings = self.generate_findings(
+            incident,
+            events,
+            processes,
+            files,
+            network,
+            registry,
+            indicators,
         )
 
+        priority = self.determine_priority(
+            incident
+        )
 
-        result = {
+        return {
+            "incident_id": incident.get("incident_id"),
+            "agent": self.name,
+            "investigated_at": self.now_iso(),
+            "priority": priority,
 
-            "incident_id":
-                incident.get(
-                    "incident_id"
-                ),
+            # Historical source values, not conclusions.
+            "incident_score": incident.get(
+                "correlation_score", 0
+            ),
+            "incident_severity": incident.get(
+                "severity", "INFO"
+            ),
 
-            "agent":
-                self.name,
+            "event_count": len(events),
+            "category_counts": dict(category_counts),
+            "processes": processes,
+            "files": files,
+            "network_connections": network,
+            "registry_artifacts": registry,
+            "indicators": indicators,
+            "findings": findings,
+            "timeline": timeline,
 
-            "investigated_at":
-                self.now_iso(),
+            "evidence_assessment":
+                self.evidence_assessment(incident),
 
-            "priority":
-                self.determine_priority(
-                    incident
-                ),
-
-            "incident_score":
-                incident.get(
-                    "correlation_score",
-                    0,
-                ),
-
-            "incident_severity":
-                incident.get(
-                    "severity",
-                    "INFO",
-                ),
-
-            "event_count":
-                len(
-                    events
-                ),
-
-            "category_counts":
-                dict(
-                    category_counts
-                ),
-
-            "processes":
-                processes,
-
-            "files":
-                files,
-
-            "network_connections":
-                network,
-
-            "registry_artifacts":
-                registry,
-
-            "indicators":
-                indicators,
-
-            "findings":
-                findings,
-
-            "timeline":
-                timeline,
-
-            "requires_response":
-                (
-                    self.determine_priority(
-                        incident
-                    )
-                    in [
-                        "IMMEDIATE",
-                        "HIGH",
-                    ]
-                ),
+            "requires_response": False,
+            "attack_confirmed": False,
+            "confidence_calibrated": False,
         }
-
-
-        return result

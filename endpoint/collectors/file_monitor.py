@@ -40,9 +40,17 @@ class SentinelFileEventHandler(
 
     def __init__(
         self,
+        malware_detection_enabled: bool = False,
+        ransomware_detection_mode: str = "SHADOW",
     ):
 
         super().__init__()
+        mode = str(ransomware_detection_mode).upper().strip()
+        if mode not in {"OFF", "SHADOW", "EMIT"}:
+            raise ValueError("ransomware_detection_mode must be OFF, SHADOW, or EMIT")
+        self.ransomware_detection_mode = mode
+        # Fail closed until EMBER feature parity and real PE inference are verified.
+        self.malware_detection_enabled = bool(malware_detection_enabled)
 
         # ========================================================
         # TELEMETRY
@@ -65,7 +73,7 @@ class SentinelFileEventHandler(
         # ========================================================
 
         self.malware_predictor = (
-            MalwarePredictor()
+            MalwarePredictor() if self.malware_detection_enabled else None
         )
 
         # ========================================================
@@ -192,6 +200,9 @@ class SentinelFileEventHandler(
         file_path: str,
     ) -> dict:
 
+        if not self.malware_detection_enabled or self.malware_predictor is None:
+            return {"valid": False, "error": "MALWARE_INFERENCE_DEFERRED"}
+
         try:
 
             return (
@@ -286,6 +297,9 @@ class SentinelFileEventHandler(
                 )
                 or file_path
             )
+
+        if self.ransomware_detection_mode == "OFF":
+            return []
 
         try:
 
@@ -673,7 +687,8 @@ class SentinelFileEventHandler(
             # ----------------------------------------------------
 
             if (
-                static_analysis
+                self.malware_detection_enabled
+                and static_analysis
                 and static_analysis.get(
                     "is_pe"
                 )
@@ -807,8 +822,13 @@ class SentinelFileEventHandler(
             "collector":
                 "FileMonitor",
 
+            "malware_ml_enabled": self.malware_detection_enabled,
+
             "ransomware_behavior_analysis":
-                True,
+                self.ransomware_detection_mode != "OFF",
+
+            "ransomware_detection_mode":
+                self.ransomware_detection_mode,
 
             "ransomware_detection_count":
                 len(
@@ -906,7 +926,7 @@ class SentinelFileEventHandler(
 
                 ml_prediction,
 
-                ransomware_detections,
+                ransomware_detections if self.ransomware_detection_mode == "EMIT" else [],
             )
         )
 
@@ -944,9 +964,8 @@ class SentinelFileEventHandler(
 
         if (
             ml_prediction
-            and ml_prediction.get(
-                "valid"
-            )
+            and ml_prediction.get("valid") is True
+            and ml_prediction.get("prediction") == 1
         ):
 
             sha256 = (
@@ -1087,7 +1106,7 @@ class SentinelFileEventHandler(
         # SAVE RANSOMWARE DETECTIONS
         # ========================================================
 
-        if ransomware_detections:
+        if ransomware_detections and self.ransomware_detection_mode == "EMIT":
 
             self.save_ransomware_detections(
 
@@ -1292,7 +1311,14 @@ class FileMonitor:
     def __init__(
         self,
         watch_path=None,
+        malware_detection_enabled: bool = False,
+        ransomware_detection_mode: str = "SHADOW",
     ):
+
+        mode = str(ransomware_detection_mode).upper().strip()
+        if mode not in {"OFF", "SHADOW", "EMIT"}:
+            raise ValueError("ransomware_detection_mode must be OFF, SHADOW, or EMIT")
+        self.ransomware_detection_mode = mode
 
         if watch_path is None:
 
@@ -1303,6 +1329,8 @@ class FileMonitor:
         self.watch_path = Path(
             watch_path
         )
+
+        self.malware_detection_enabled = bool(malware_detection_enabled)
 
         self.observer = (
             Observer()
@@ -1333,15 +1361,20 @@ class FileMonitor:
         )
 
         logger.info(
-            "Malware ML detection enabled."
+            "Malware ML detection: %s (disabled until validated)",
+            "ENABLED" if self.malware_detection_enabled else "DEFERRED",
         )
 
         logger.info(
-            "Ransomware behavioral detection enabled."
+            "Ransomware detection mode: %s",
+            self.ransomware_detection_mode,
         )
 
         event_handler = (
-            SentinelFileEventHandler()
+            SentinelFileEventHandler(
+                malware_detection_enabled=self.malware_detection_enabled,
+                ransomware_detection_mode=self.ransomware_detection_mode,
+            )
         )
 
         self.observer.schedule(

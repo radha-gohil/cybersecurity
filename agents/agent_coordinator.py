@@ -113,7 +113,7 @@ class AgentCoordinator:
                 context.add_decision(
                     "TriageAgent",
                     "INVESTIGATE",
-                    confidence=confidence,
+                    confidence=0,
                     reason=(
                         f"Triage priority is {priority}."
                     ),
@@ -124,7 +124,7 @@ class AgentCoordinator:
                 context.add_decision(
                     "TriageAgent",
                     "MONITOR",
-                    confidence=confidence,
+                    confidence=0,
                     reason=(
                         f"Triage priority is {priority}."
                     ),
@@ -191,7 +191,7 @@ class AgentCoordinator:
                 context.add_decision(
                     "InvestigationAgent",
                     "RESPONSE_REVIEW",
-                    confidence=80,
+                    confidence=0,
                     reason=(
                         "Investigation identified a high-priority incident."
                     ),
@@ -202,7 +202,7 @@ class AgentCoordinator:
                 context.add_decision(
                     "InvestigationAgent",
                     "CONTINUE_ANALYSIS",
-                    confidence=60,
+                    confidence=0,
                     reason=(
                         "Further analysis is appropriate."
                     ),
@@ -405,7 +405,7 @@ class AgentCoordinator:
                 context.add_decision(
                     "RiskAssessmentAgent",
                     "RESPONSE_RECOMMENDED",
-                    confidence=risk_score,
+                    confidence=0,
                     reason=(
                         f"Risk level is {risk_level}."
                     ),
@@ -416,7 +416,7 @@ class AgentCoordinator:
                 context.add_decision(
                     "RiskAssessmentAgent",
                     "MONITOR",
-                    confidence=risk_score,
+                    confidence=0,
                     reason=(
                         f"Risk level is {risk_level}."
                     ),

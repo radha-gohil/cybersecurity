@@ -633,6 +633,47 @@ class PersistentSOCWorkflow:
         intelligence,
     ):
 
+        # Central fail-closed guard for all case creation callers.
+        # Status COMPLETED is necessary, not proof of an attack.
+        intelligence = self.safe_dict(intelligence)
+        if str(intelligence.get("status", "")).upper() != "COMPLETED":
+            raise ValueError(
+                "Cannot persist SOC case: investigation is not COMPLETED."
+            )
+
+        if str(intelligence.get("incident_id") or "") != str(incident_id):
+            raise ValueError("SOC case incident identity mismatch.")
+
+        validation = self.safe_dict(
+            intelligence.get("evidence_validation")
+        )
+        if validation.get("passed") is not True:
+            raise ValueError(
+                "Cannot persist SOC case: evidence gate not passed."
+            )
+
+        coordinated = self.safe_dict(
+            intelligence.get("coordinated_analysis")
+        )
+        if self.safe_list(coordinated.get("errors")):
+            raise ValueError("Cannot persist failed agent investigation.")
+
+        required = (
+            "TriageAgent", "InvestigationAgent",
+            "EvidenceEnrichmentAgent", "AttackTimelineAgent",
+            "AttackGraphAgent", "RiskAssessmentAgent",
+            "InvestigationReportAgent",
+        )
+        outputs = self.safe_dict(coordinated.get("agent_outputs"))
+        if not all(
+            isinstance(outputs.get(name), dict) and outputs[name]
+            for name in required
+        ):
+            raise ValueError("Missing mandatory agent investigation outputs.")
+
+        if intelligence.get("execution_enabled") is not False:
+            raise ValueError("Real response execution must remain disabled.")
+
         existing = self.case_store.get_case(
             incident_id
         )

@@ -111,17 +111,21 @@ class InvestigationReportAgent:
         )
 
 
+        confirmed = self.safe_dict(
+            risk.get("evidence_summary")
+        ).get("attack_confirmed") is True
+
         return (
-
-            f"Incident {incident_id} was classified as "
-            f"{severity} with correlation score "
-            f"{correlation_score}. "
-
-            f"Triage priority is {priority}. "
-
-            f"The final explainable risk assessment produced "
-            f"a score of {risk_score}/100 "
-            f"({risk_level})."
+            f"Incident {incident_id} has an inherited source label "
+            f"of {severity} and historical correlation score "
+            f"{correlation_score}; neither independently proves an "
+            f"attack. Triage priority: {priority}. "
+            f"Current heuristic risk score: {risk_score}/100 "
+            f"({risk_level}). "
+            f"Attack independently confirmed: "
+            f"{'YES' if confirmed else 'NO'}. "
+            "Evidence attribution and model confidence remain "
+            "uncalibrated unless separately validated."
         )
 
 
@@ -799,6 +803,24 @@ class InvestigationReportAgent:
                 self.build_ioc_summary(
                     evidence
                 ),
+
+            "evidence_validation": {
+                "identity_links": self.safe_list(
+                    evidence.get("identity_links")
+                ),
+                "verified_relationship_count": self.safe_dict(
+                    attack_graph.get("summary")
+                ).get("verified_relationship_count", 0),
+                "attack_confirmed": self.safe_dict(
+                    risk.get("evidence_summary")
+                ).get("attack_confirmed") is True,
+                "causal_relationship_verified": self.safe_dict(
+                    risk.get("evidence_summary")
+                ).get("causal_relationship_verified") is True,
+                "confidence_calibrated": (
+                    risk.get("confidence_calibrated") is True
+                ),
+            },
 
             "attack":
                 self.build_attack_summary(

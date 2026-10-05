@@ -442,113 +442,119 @@ def calculate_path_depth(
 def calculate_process_age_seconds(
     create_time: Any,
 ) -> float:
+    """
+    Calculate process age in seconds.
+
+    Supported inputs:
+        - Unix timestamps
+        - ISO-formatted timestamps
+        - datetime objects
+
+    Invalid, missing, nonfinite, or future timestamps
+    return 0.0 to preserve the existing numeric interface.
+
+    Important:
+        0.0 is a compatibility fallback, not evidence
+        that a process was created just now.
+    """
+
+    import math
+
+    now = datetime.now(timezone.utc)
+
+    # ========================================================
+    # MISSING TIMESTAMP
+    # ========================================================
 
     if create_time is None:
-
         return 0.0
 
+    # ========================================================
+    # NUMERIC UNIX TIMESTAMP
+    # ========================================================
 
-    now = datetime.now(
-        timezone.utc
-    )
-
-
-    # ------------------------------------------------------------
-    # UNIX TIMESTAMP
-    # ------------------------------------------------------------
-
-    if isinstance(
-        create_time,
-        (
-            int,
-            float,
-        ),
-    ):
+    if isinstance(create_time, (int, float)):
 
         try:
+            timestamp = float(create_time)
 
-            created = (
-                datetime.fromtimestamp(
-                    float(
-                        create_time
-                    ),
-                    tz=timezone.utc,
-                )
-            )
+            if not math.isfinite(timestamp):
+                return 0.0
 
+            # Zero or negative creation time is unavailable
+            # or invalid for this monitoring pipeline.
+            if timestamp <= 0.0:
+                return 0.0
+
+            current_timestamp = now.timestamp()
+
+            # Reject timestamps in the future.
+            if timestamp > current_timestamp:
+                return 0.0
 
             return max(
                 0.0,
-                (
-                    now
-                    - created
-                ).total_seconds(),
+                current_timestamp - timestamp,
             )
 
-
         except (
+            TypeError,
             ValueError,
             OverflowError,
             OSError,
         ):
-
             return 0.0
 
-
-    # ------------------------------------------------------------
-    # ISO TIMESTAMP
-    # ------------------------------------------------------------
+    # ========================================================
+    # DATETIME OR ISO TIMESTAMP
+    # ========================================================
 
     try:
 
-        timestamp = str(
-            create_time
-        ).strip()
+        if isinstance(create_time, datetime):
+            created = create_time
 
+        else:
+            timestamp = str(create_time).strip()
 
-        if timestamp.endswith(
-            "Z"
-        ):
+            if not timestamp:
+                return 0.0
 
-            timestamp = (
-                timestamp[:-1]
-                + "+00:00"
-            )
+            if timestamp.endswith("Z"):
+                timestamp = (
+                    timestamp[:-1] + "+00:00"
+                )
 
-
-        created = (
-            datetime.fromisoformat(
+            created = datetime.fromisoformat(
                 timestamp
             )
-        )
 
-
+        # Preserve the current policy for naive ISO
+        # timestamps: interpret them as UTC.
         if created.tzinfo is None:
-
-            created = (
-                created.replace(
-                    tzinfo=timezone.utc
-                )
+            created = created.replace(
+                tzinfo=timezone.utc
             )
 
+        age = (
+            now - created
+        ).total_seconds()
 
-        return max(
-            0.0,
-            (
-                now
-                - created
-            ).total_seconds(),
-        )
+        if not math.isfinite(age):
+            return 0.0
 
+        if age < 0:
+            return 0.0
+
+        return age
 
     except (
         TypeError,
         ValueError,
+        OverflowError,
+        OSError,
     ):
-
         return 0.0
-
-
 # ================================================================
 # RSS CONVERSION
 # ================================================================

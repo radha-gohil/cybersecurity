@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import sqlite3
 import time
 import zlib
@@ -207,6 +208,10 @@ class TemporalProcessMonitor(
             else DEFAULT_DATABASE_PATH
         )
 
+        # Keep feature-record lookups and temporal result persistence on
+        # the same database (especially important for isolated tests).
+        self.temporal_database_path = database_path
+
         self.temporal_result_store = (
             ProcessTemporalResultStore(
                 database_path=
@@ -326,7 +331,7 @@ class TemporalProcessMonitor(
 
         connection = (
             sqlite3.connect(
-                DEFAULT_DATABASE_PATH,
+                getattr(self, "temporal_database_path", DEFAULT_DATABASE_PATH),
                 timeout=30.0,
             )
         )
@@ -679,15 +684,16 @@ class TemporalProcessMonitor(
                 )
             )
 
-            # Reject NaN
+            # Reject epoch zero (PID 4 on Windows), negative values,
+            # infinities and timestamps too far in the future.
+            # The fallback below is a stable identity token, NEVER a
+            # real timestamp or a substitute for valid AI features.
             if (
-                normalized_create_time
-                != normalized_create_time
+                not math.isfinite(normalized_create_time)
+                or normalized_create_time <= 0.0
+                or normalized_create_time > time.time() + 60.0
             ):
-
-                raise ValueError(
-                    "NaN create_time"
-                )
+                raise ValueError("Invalid process creation time")
 
         except (
             TypeError,
@@ -1295,6 +1301,31 @@ class TemporalProcessMonitor(
 
             else time.time()
         )
+
+        # A direct caller must not bypass the ordinary executable
+        # eligibility safeguard in ProcessMonitor.  The numeric
+        # name-based fallback is only for identity compatibility;
+        # it is not valid model input or reliable PID-reuse evidence.
+        if not isinstance(process_info, dict):
+            return {"available": False, "state": "INVALID_PROCESS_IDENTITY"}
+
+        try:
+            observed_pid = int(process_info.get("pid"))
+            created_at = float(process_info.get("create_time"))
+            valid_process = (
+                observed_pid > 0
+                and math.isfinite(created_at)
+                and 0.0 < created_at <= current_time + 60.0
+            )
+        except (TypeError, ValueError, OverflowError):
+            valid_process = False
+
+        if not valid_process:
+            return {
+                "available": False,
+                "state": "INVALID_PROCESS_FEATURE_IDENTITY",
+                "pid": process_info.get("pid"),
+            }
 
         # ========================================================
         # TEMPORAL MODEL AVAILABILITY

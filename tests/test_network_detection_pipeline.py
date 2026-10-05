@@ -1,292 +1,88 @@
-import sys
-from pathlib import Path
+"""Safe, in-memory network detection regression tests.
+
+No sockets, production telemetry, database writes, or incident creation.
+"""
+from types import SimpleNamespace
+
+from detection.network.network_behavior_tracker import NetworkBehaviorTracker
+from endpoint.collectors.network_monitor import NetworkMonitor
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+def connection(port, pid=4321, status="ESTABLISHED", target="203.0.113.25"):
+    return {
+        "pid": pid, "process_name": "unit_test_process.exe",
+        "protocol": "TCP", "local_ip": "192.0.2.10",
+        "local_port": 50000 + int(port), "remote_ip": target,
+        "remote_port": port, "status": status,
+    }
 
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(
-        0,
-        str(PROJECT_ROOT),
+
+def test_port_scan_detection_in_memory():
+    tracker = NetworkBehaviorTracker(
+        connection_burst_threshold=100,
+        port_scan_threshold=5,
+        dos_connection_threshold=100,
+        beacon_min_connections=100,
+        alert_cooldown_seconds=0,
     )
-from detection.network.network_behavior_tracker import (
-    NetworkBehaviorTracker,
-)
-
-from endpoint.collectors.network_monitor import (
-    NetworkMonitor,
-)
+    findings = []
+    for i, port in enumerate((21, 22, 23, 80, 443, 445)):
+        findings.extend(tracker.analyze(connection(port), current_time=1700100000 + i))
+    assert "PORT_SCAN_BEHAVIOR" in {f["detection_type"] for f in findings}
 
 
-def print_separator():
-    print(
-        "\n"
-        + "=" * 70
-    )
+def test_pid_zero_and_teardown_not_used_as_attack_evidence():
+    tracker = NetworkBehaviorTracker(connection_burst_threshold=1, port_scan_threshold=1)
+    assert tracker.analyze(connection(443, pid=0), current_time=1700100000) == []
+    assert tracker.analyze(connection(443, status="TIME_WAIT"), current_time=1700100001) == []
 
 
-def main():
-
-    print_separator()
-
-    print(
-        "SENTINEL-X NETWORK DETECTION "
-        "PIPELINE TEST"
-    )
-
-    print_separator()
-
-    # ------------------------------------------------------------
-    # CREATE NETWORK MONITOR
-    # ------------------------------------------------------------
-
-    monitor = NetworkMonitor(
-        polling_interval=3.0
-    )
-
-    # ------------------------------------------------------------
-    # USE LOW THRESHOLDS ONLY FOR THIS SYNTHETIC TEST
-    #
-    # We are NOT generating real network traffic.
-    # We are feeding synthetic connection metadata.
-    # ------------------------------------------------------------
-
-    monitor.behavior_tracker = (
-        NetworkBehaviorTracker(
-
-            connection_window_seconds=10,
-
-            connection_burst_threshold=5,
-
-            port_scan_window_seconds=30,
-
-            port_scan_threshold=5,
-
-            dos_window_seconds=10,
-
-            dos_connection_threshold=5,
-
-            alert_cooldown_seconds=0,
-        )
+def test_shadow_mode_never_emits_alerts_or_writes_detections():
+    monitor = object.__new__(NetworkMonitor)
+    monitor.network_detection_mode = "SHADOW"
+    monitor.network_behavior_tracker = NetworkBehaviorTracker(
+        connection_burst_threshold=100,
+        port_scan_threshold=3,
+        dos_connection_threshold=100,
+        beacon_min_connections=100,
+        alert_cooldown_seconds=0,
     )
 
-    # ------------------------------------------------------------
-    # SYNTHETIC PORT SCAN-LIKE METADATA
-    # ------------------------------------------------------------
+    class ForbiddenTelemetry:
+        def emit(self, **_):
+            raise AssertionError("SHADOW must never emit an attack event")
 
-    ports = [
-        21,
-        22,
-        23,
-        80,
-        443,
-        445,
-    ]
-
-    detected_types = set()
-
-    latest_event_id = None
-
-    print(
-        "\nFeeding synthetic "
-        "network metadata..."
+    monitor.telemetry = ForbiddenTelemetry()
+    monitor.persist_network_detection = lambda **_: (_ for _ in ()).throw(
+        AssertionError("SHADOW must never persist a detection")
     )
+    findings = []
+    for port in (21, 22, 23):
+        findings.extend(monitor.analyze_network_connection(connection(port)))
+    assert any(f["detection_type"] == "PORT_SCAN_BEHAVIOR" for f in findings)
 
-    for index, port in enumerate(
-        ports,
-        start=1,
-    ):
 
-        connection = {
-
-            "pid":
-                4321,
-
-            "process_name":
-                "synthetic_network_test.exe",
-
-            "protocol":
-                "TCP",
-
-            "local_ip":
-                "192.0.2.10",
-
-            "local_port":
-                50000 + index,
-
-            "remote_ip":
-                "203.0.113.25",
-
-            "remote_port":
-                port,
-
-            "status":
-                "ESTABLISHED",
-        }
-
-        result = (
-            monitor.create_connection_event(
-                connection
-            )
-        )
-
-        event = (
-            result.get(
-                "event"
-            )
-        )
-
-        detections = (
-            result.get(
-                "detections",
-                []
-            )
-        )
-
-        if event:
-
-            latest_event_id = (
-                event.event_id
-            )
-
-            print(
-                "\nEVENT CREATED"
-            )
-
-            print(
-                "Event ID:",
-                event.event_id,
-            )
-
-            print(
-                "Event Type:",
-                event.event_type,
-            )
-
-            print(
-                "Severity:",
-                event.severity,
-            )
-
-        for detection in detections:
-
-            detection_type = (
-                detection.get(
-                    "detection_type"
-                )
-            )
-
-            detected_types.add(
-                detection_type
-            )
-
-            print(
-                "\n>>> DETECTION GENERATED"
-            )
-
-            print(
-                "Type:",
-                detection_type,
-            )
-
-            print(
-                "Severity:",
-                detection.get(
-                    "severity"
-                ),
-            )
-
-            print(
-                "Risk:",
-                detection.get(
-                    "risk_score"
-                ),
-            )
-
-            print(
-                "Confidence:",
-                detection.get(
-                    "confidence"
-                ),
-            )
-
-            print(
-                "Reason:",
-                detection.get(
-                    "reason"
-                ),
-            )
-
-    # ------------------------------------------------------------
-    # RESULT
-    # ------------------------------------------------------------
-
-    print_separator()
-
-    print(
-        "DETECTED TYPES:"
+def test_emit_mode_uses_alert_event_id_for_detection_without_real_storage():
+    monitor = object.__new__(NetworkMonitor)
+    monitor.network_detection_mode = "EMIT"
+    monitor.network_behavior_tracker = NetworkBehaviorTracker(
+        connection_burst_threshold=100, port_scan_threshold=2,
+        dos_connection_threshold=100, beacon_min_connections=100,
+        alert_cooldown_seconds=0,
     )
+    emitted, saved = [], []
 
-    for detection_type in sorted(
-        detected_types
-    ):
+    class FakeTelemetry:
+        def emit(self, **kwargs):
+            emitted.append(kwargs)
+            return SimpleNamespace(event_id="isolated-test-alert")
 
-        print(
-            " -",
-            detection_type,
-        )
-
-    print()
-
-    if (
-        "PORT_SCAN_BEHAVIOR"
-        not in detected_types
-    ):
-
-        raise AssertionError(
-            "PORT_SCAN_BEHAVIOR "
-            "was not detected."
-        )
-
-    if latest_event_id is None:
-
-        raise AssertionError(
-            "No SecurityEvent "
-            "was created."
-        )
-
-    print(
-        "NETWORK DETECTION:"
-        " PASS"
-    )
-
-    print(
-        "SECURITY EVENT:"
-        " PASS"
-    )
-
-    print(
-        "DATABASE SAVE:"
-        " Check logs for "
-        "'NETWORK DETECTION'"
-    )
-
-    print(
-        "CORRELATION:"
-        " Check telemetry/"
-        "correlation logs"
-    )
-
-    print_separator()
-
-    print(
-        "NETWORK PIPELINE TEST "
-        "COMPLETED SUCCESSFULLY"
-    )
-
-    print_separator()
-
-
-if __name__ == "__main__":
-
-    main()
+    monitor.telemetry = FakeTelemetry()
+    monitor.persist_network_detection = lambda **kwargs: saved.append(kwargs) or True
+    for port in (80, 443):
+        monitor.analyze_network_connection(connection(port), source_event_id="source-unit-test")
+    assert len(emitted) == 1
+    assert emitted[0]["event_type"] == "network_behavior_alert"
+    assert emitted[0]["metadata"]["source_event_id"] == "source-unit-test"
+    assert len(saved) == 1
+    assert saved[0]["event_id"] == "isolated-test-alert"

@@ -118,7 +118,10 @@ class SentinelAgent:
         # ========================================================
 
         self.network_monitor = (
-            NetworkMonitor()
+            NetworkMonitor(
+                polling_interval=3.0,
+                network_detection_mode="SHADOW",
+            )
         )
 
 

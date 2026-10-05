@@ -38,6 +38,7 @@ from sklearn.preprocessing import (
 
 from ai_detection.behavior.baseline_dataset_validator import (
     BaselineDatasetValidator,
+    is_epoch_process_age_artifact,
 )
 
 from ai_detection.behavior.process_feature_schema import (
@@ -453,7 +454,10 @@ class ProcessIsolationForestTrainer:
             if vector is None:
 
                 continue
-
+            # Apply the same data-quality filter
+            # used by the baseline validator.
+            if is_epoch_process_age_artifact(vector):
+                continue
 
             # ----------------------------------------------------
             # SELECT MODEL FEATURES

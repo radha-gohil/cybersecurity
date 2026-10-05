@@ -1,1348 +1,616 @@
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
-    Box,
-    Typography,
-    Card,
-    CardContent,
-    Button,
-    Chip,
-    Stack,
-    Divider,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
+  Alert, Box, Button, Card, CardContent, Chip,
+  CircularProgress, Divider, Stack, Typography,
 } from "@mui/material";
-
 import {
-    ApprovalRounded,
-    WarningAmberRounded,
-    CheckCircleRounded,
-    CancelRounded,
-    ShieldRounded,
-    StopCircleRounded,
-    LanguageRounded,
-    FolderRounded,
-    SettingsRounded,
-    DevicesRounded,
+  ApprovalRounded, WarningAmberRounded,
+  CheckCircleRounded, CancelRounded, ShieldRounded,
+  StopCircleRounded, LanguageRounded, FolderRounded,
+  SettingsRounded, DevicesRounded, RefreshRounded,
 } from "@mui/icons-material";
+import api from "../api/sentinelApi";
 
-import {
-    useState,
-} from "react";
+function obj(value) {
+  return value && typeof value === "object" &&
+    !Array.isArray(value) ? value : {};
+}
 
+function arr(value) {
+  return Array.isArray(value) ? value : [];
+}
 
-const initialActions = [
-    {
-        id: "ACTION-001",
-        type: "TERMINATE_PROCESS",
-        title: "Stop suspicious application",
-        description:
-            "Sentinel-X recommends stopping an application that participated in the detected threat sequence.",
-        target: "PowerShell",
-        impact: "LOW",
-        severity: "CRITICAL",
-        reason:
-            "The process showed suspicious behavior and was linked to other high-risk activity.",
-        effect:
-            "The selected application would be stopped from running.",
-        reversible: false,
-        status: "PENDING",
-        icon: <StopCircleRounded />,
-    },
+function valueText(value, fallback = "Not available") {
+  if (value === null || value === undefined || value === "") {
+    return fallback;
+  }
+  if (typeof value === "object") {
+    return JSON.stringify(value);
+  }
+  return String(value);
+}
 
-    {
-        id: "ACTION-002",
-        type: "QUARANTINE_FILE",
-        title: "Quarantine suspicious file",
-        description:
-            "Sentinel-X recommends isolating a suspicious file so it cannot continue running.",
-        target: "demo.exe",
-        impact: "LOW",
-        severity: "CRITICAL",
-        reason:
-            "The file was associated with suspicious process and persistence behavior.",
-        effect:
-            "The file would be moved to a protected quarantine location.",
-        reversible: true,
-        status: "PENDING",
-        icon: <FolderRounded />,
-    },
+function errorText(error) {
+  const detail = error?.response?.data?.detail;
+  return typeof detail === "string"
+    ? detail
+    : error?.message || "Request failed";
+}
 
-    {
-        id: "ACTION-003",
-        type: "BLOCK_NETWORK",
-        title: "Block suspicious connection",
-        description:
-            "Sentinel-X recommends blocking communication with a suspicious external address.",
-        target: "203.0.113.220",
-        impact: "LOW",
-        severity: "CRITICAL",
-        reason:
-            "The connection was associated with the detected threat sequence.",
-        effect:
-            "Future communication with this address would be blocked.",
-        reversible: true,
-        status: "PENDING",
-        icon: <LanguageRounded />,
-    },
+function normalizedStatus(status) {
+  const raw = String(status || "UNKNOWN").toUpperCase();
+  if (raw.includes("REJECT")) return "REJECTED";
+  if (raw.includes("APPROV")) return "APPROVED";
+  if (
+    raw.includes("PENDING") ||
+    raw.includes("AWAIT") ||
+    raw.includes("REVIEW")
+  ) return "PENDING";
+  return raw;
+}
 
-    {
-        id: "ACTION-004",
-        type: "REMEDIATE_PERSISTENCE",
-        title: "Remove suspicious startup behavior",
-        description:
-            "Sentinel-X recommends removing a suspicious startup configuration change.",
-        target: "Windows startup configuration",
-        impact: "MEDIUM",
-        severity: "CRITICAL",
-        reason:
-            "The startup entry may allow the suspicious application to run again after restart.",
-        effect:
-            "The suspicious persistence configuration would be removed.",
-        reversible: true,
-        status: "PENDING",
-        icon: <SettingsRounded />,
-    },
+function actionIcon(type) {
+  switch (String(type).toUpperCase()) {
+    case "TERMINATE_PROCESS":
+      return <StopCircleRounded />;
+    case "QUARANTINE_FILE":
+      return <FolderRounded />;
+    case "BLOCK_NETWORK":
+      return <LanguageRounded />;
+    case "REMEDIATE_PERSISTENCE":
+      return <SettingsRounded />;
+    case "ISOLATE_ENDPOINT":
+      return <DevicesRounded />;
+    default:
+      return <ApprovalRounded />;
+  }
+}
 
-    {
-        id: "ACTION-005",
-        type: "ISOLATE_ENDPOINT",
-        title: "Disconnect device from network",
-        description:
-            "Sentinel-X can isolate this device if stronger containment becomes necessary.",
-        target: "Personal Laptop",
-        impact: "HIGH",
-        severity: "CRITICAL",
-        reason:
-            "Isolation can prevent suspicious activity from communicating with other systems.",
-        effect:
-            "The device would temporarily lose normal network communication.",
-        reversible: true,
-        status: "PENDING",
-        icon: <DevicesRounded />,
-    },
-];
+function statusColor(status) {
+  if (status === "APPROVED") return "#22c55e";
+  if (status === "REJECTED") return "#ef4444";
+  if (status === "PENDING") return "#f59e0b";
+  return "#94a3b8";
+}
 
+function impactColor(impact) {
+  const name = String(impact || "").toUpperCase();
+  if (name === "HIGH") return "#ef4444";
+  if (name === "MEDIUM") return "#f59e0b";
+  if (name === "LOW") return "#22c55e";
+  return "#94a3b8";
+}
 
-function Approvals() {
+function SummaryCard({ title, count, color }) {
+  return (
+    <Card>
+      <CardContent sx={{ p: 2.5 }}>
+        <Typography sx={{ color: "#64748b", fontSize: 13 }}>
+          {title}
+        </Typography>
+        <Typography
+          sx={{ fontSize: 30, fontWeight: 800, mt: 0.5, color }}
+        >
+          {count}
+        </Typography>
+      </CardContent>
+    </Card>
+  );
+}
 
-    const [actions, setActions] =
-        useState(
-            initialActions
+function InfoBox({ label, value, color }) {
+  return (
+    <Box
+      sx={{
+        p: 1.5, borderRadius: "10px",
+        background: "#0f172a",
+        border: "1px solid #1e293b",
+      }}
+    >
+      <Typography sx={{ color: "#64748b", fontSize: 11 }}>
+        {label}
+      </Typography>
+      <Typography
+        sx={{
+          color: color || "#f8fafc", fontSize: 13,
+          fontWeight: 600, mt: 0.5,
+          overflowWrap: "anywhere",
+        }}
+      >
+        {valueText(value)}
+      </Typography>
+    </Box>
+  );
+}
+
+/*
+  Normalize persisted records only. Never create an action
+  from a Digital Twin hypothetical preview.
+*/
+function normalizeAction(source, incidentId, position) {
+  const action = obj(source);
+  const details = obj(action.action);
+  const target = action.target ?? details.target;
+  const targetString =
+    target && typeof target === "object"
+      ? "[Structured target stored in SOC case]"
+      : valueText(target);
+
+  const type = String(
+    action.action_type ||
+    details.action_type ||
+    action.type ||
+    "UNKNOWN"
+  ).toUpperCase();
+
+  const approval = obj(action.approval);
+
+  const rawStatus =
+    approval.status ||
+    action.approval_status ||
+    action.status ||
+    "UNKNOWN";
+
+  return {
+    id: String(
+      action.action_id ||
+      action.id ||
+      `${incidentId}-ACTION-${position + 1}`
+    ),
+    incidentId: String(incidentId),
+    type,
+    title: type.replaceAll("_", " "),
+    description:
+      action.description ||
+      action.reason ||
+      "Persisted SOC response-action record.",
+    target: targetString,
+    impact:
+      String(
+        action.operational_impact?.impact_level ||
+        action.impact ||
+        "UNKNOWN"
+      ).toUpperCase(),
+    severity: String(action.severity || "UNSPECIFIED"),
+    reason:
+      action.reason ||
+      "See the linked SOC case for supporting evidence.",
+    status: normalizedStatus(rawStatus),
+    persistedApprovalStatus:
+      approval.status || action.approval_status || null,
+    source: "PERSISTED_SOC_CASE",
+  };
+}
+
+function ApprovalCard({ action, onOpenCase }) {
+  const status = action.status;
+  const color = statusColor(status);
+
+  return (
+    <Card
+      sx={{
+        borderColor:
+          status === "PENDING"
+            ? "rgba(245,158,11,0.25)"
+            : "#1e293b",
+      }}
+    >
+      <CardContent sx={{ p: 3 }}>
+        <Stack
+          direction={{ xs: "column", md: "row" }}
+          justifyContent="space-between"
+          spacing={3}
+        >
+          <Stack
+            direction="row"
+            spacing={2}
+            alignItems="flex-start"
+            sx={{ flex: 1, minWidth: 0 }}
+          >
+            <Box
+              sx={{
+                width: 50, height: 50, minWidth: 50,
+                borderRadius: "14px", display: "grid",
+                placeItems: "center", color,
+                background: `${color}12`,
+              }}
+            >
+              {actionIcon(action.type)}
+            </Box>
+
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Stack
+                direction="row"
+                gap={1}
+                flexWrap="wrap"
+                alignItems="center"
+                sx={{ mb: 1 }}
+              >
+                <Typography sx={{ fontSize: 18, fontWeight: 700 }}>
+                  {action.title}
+                </Typography>
+                <Chip size="small" label={action.severity} />
+              </Stack>
+
+              <Typography
+                sx={{ color: "#94a3b8", fontSize: 13 }}
+              >
+                {action.description}
+              </Typography>
+
+              <Typography
+                sx={{
+                  color: "#64748b", fontSize: 11,
+                  mt: 1, overflowWrap: "anywhere",
+                }}
+              >
+                Incident: {action.incidentId}
+              </Typography>
+
+              <Box
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: {
+                    xs: "1fr",
+                    md: "repeat(3,1fr)",
+                  },
+                  gap: 1.5,
+                  mt: 2,
+                }}
+              >
+                <InfoBox label="Target" value={action.target} />
+                <InfoBox
+                  label="Impact"
+                  value={action.impact}
+                  color={impactColor(action.impact)}
+                />
+                <InfoBox
+                  label="Approval state"
+                  value={action.persistedApprovalStatus}
+                />
+              </Box>
+
+              <Box
+                sx={{
+                  mt: 2, p: 1.5,
+                  borderRadius: "10px",
+                  background: "#0f172a",
+                }}
+              >
+                <Typography
+                  sx={{ color: "#64748b", fontSize: 11 }}
+                >
+                  Recorded justification
+                </Typography>
+                <Typography
+                  sx={{
+                    color: "#cbd5e1",
+                    fontSize: 13,
+                    mt: 0.4,
+                  }}
+                >
+                  {action.reason}
+                </Typography>
+              </Box>
+            </Box>
+          </Stack>
+
+          <Stack
+            alignItems={{
+              xs: "stretch",
+              md: "flex-end",
+            }}
+            spacing={1.5}
+          >
+            <Chip
+              label={status}
+              sx={{
+                color,
+                background: `${color}12`,
+                border: `1px solid ${color}30`,
+                fontWeight: 700,
+              }}
+            />
+            {status === "PENDING" && (
+              <Stack direction="row" spacing={1}>
+                <Button
+                  variant="outlined"
+                  color="error"
+                  startIcon={<CancelRounded />}
+                  disabled
+                >
+                  Reject
+                </Button>
+                <Button
+                  variant="contained"
+                  color="success"
+                  startIcon={<CheckCircleRounded />}
+                  disabled
+                >
+                  Approve
+                </Button>
+              </Stack>
+            )}
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => onOpenCase(action.incidentId)}
+            >
+              View Incident
+            </Button>
+          </Stack>
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+}
+
+export default function Approvals() {
+  const navigate = useNavigate();
+
+  const [actions, setActions] = useState([]);
+  const [caseCount, setCaseCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [warnings, setWarnings] = useState([]);
+
+  const loadApprovals = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    setWarnings([]);
+
+    try {
+      const response = await api.get("/cases", {
+        params: { limit: 1000 },
+      });
+
+      if (!Array.isArray(response.data?.cases)) {
+        throw new Error(
+          "GET /cases did not return the expected cases array."
+        );
+      }
+
+      const cases = response.data.cases;
+      setCaseCount(cases.length);
+
+      const loaded = [];
+      const failures = [];
+
+      /*
+        Sequential reads avoid sending a burst of requests
+        to the SOC backend. All operations are GET.
+      */
+      for (const entry of cases) {
+        const incidentId = String(
+          entry?.incident_id || entry?.id || ""
         );
 
-    const [selectedAction, setSelectedAction] =
-        useState(null);
-
-    const [dialogMode, setDialogMode] =
-        useState(null);
-
-
-    const pendingCount =
-        actions.filter(
-            (action) =>
-                action.status
-                === "PENDING"
-        ).length;
-
-
-    const approvedCount =
-        actions.filter(
-            (action) =>
-                action.status
-                === "APPROVED"
-        ).length;
-
-
-    const rejectedCount =
-        actions.filter(
-            (action) =>
-                action.status
-                === "REJECTED"
-        ).length;
-
-
-    const openDialog = (
-        action,
-        mode
-    ) => {
-
-        setSelectedAction(
-            action
-        );
-
-        setDialogMode(
-            mode
-        );
-
-    };
-
-
-    const closeDialog = () => {
-
-        setSelectedAction(
-            null
-        );
-
-        setDialogMode(
-            null
-        );
-
-    };
-
-
-    const confirmDecision = () => {
-
-        if (
-            !selectedAction
-            ||
-            !dialogMode
-        ) {
-            return;
+        if (!incidentId) {
+          failures.push("A case has no incident ID.");
+          continue;
         }
 
+        try {
+          const details = await api.get(
+            `/cases/${encodeURIComponent(incidentId)}`
+          );
 
-        setActions(
-            (previous) =>
-                previous.map(
-                    (action) => {
+          const caseRecord = obj(details.data);
+          let sourceActions = arr(caseRecord.response_actions);
 
-                        if (
-                            action.id
-                            !== selectedAction.id
-                        ) {
-                            return action;
-                        }
+          if (!sourceActions.length) {
+            const result = await api.get(
+              `/cases/${encodeURIComponent(incidentId)}/responses`
+            );
 
+            const body = result.data;
+            sourceActions = Array.isArray(body)
+              ? body
+              : arr(body?.actions).length
+                ? body.actions
+                : arr(body?.response_actions);
+          }
 
-                        return {
-                            ...action,
+          sourceActions.forEach((item, index) => {
+            if (item && typeof item === "object") {
+              loaded.push(
+                normalizeAction(item, incidentId, index)
+              );
+            }
+          });
+        } catch (requestError) {
+          failures.push(
+            `${incidentId}: ${errorText(requestError)}`
+          );
+        }
+      }
 
-                            status:
-                                dialogMode
-                                === "APPROVE"
-                                    ? "APPROVED"
-                                    : "REJECTED",
-                        };
+      setActions(loaded);
+      setWarnings(failures);
+    } catch (requestError) {
+      setActions([]);
+      setCaseCount(0);
+      setError(errorText(requestError));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-                    }
-                )
-        );
+  useEffect(() => {
+    loadApprovals();
+  }, [loadApprovals]);
 
+  const stats = useMemo(() => ({
+    pending: actions.filter((a) => a.status === "PENDING").length,
+    approved: actions.filter((a) => a.status === "APPROVED").length,
+    rejected: actions.filter((a) => a.status === "REJECTED").length,
+  }), [actions]);
 
-        closeDialog();
-
-    };
-
-
-    return (
-
+  return (
+    <Box sx={{ pb: 4 }}>
+      {/* HEADER */}
+      <Stack
+        direction={{ xs: "column", sm: "row" }}
+        justifyContent="space-between"
+        spacing={2}
+        sx={{ mb: 3 }}
+      >
         <Box>
-
-            {/* ================================================= */}
-            {/* HEADER */}
-            {/* ================================================= */}
-
-            <Box
-                sx={{
-                    mb: 3,
-                }}
-            >
-
-                <Typography
-                    variant="h4"
-                >
-                    Approvals
-                </Typography>
-
-
-                <Typography
-                    sx={{
-                        color:
-                            "#94a3b8",
-
-                        mt:
-                            0.5,
-                    }}
-                >
-                    Review Sentinel-X protection actions before
-                    anything important is allowed to proceed.
-                </Typography>
-
-            </Box>
-
-
-            {/* ================================================= */}
-            {/* SUMMARY */}
-            {/* ================================================= */}
-
-            <Box
-                sx={{
-                    display:
-                        "grid",
-
-                    gridTemplateColumns:
-                        {
-                            xs:
-                                "1fr",
-
-                            sm:
-                                "repeat(3, 1fr)",
-                        },
-
-                    gap:
-                        2,
-
-                    mb:
-                        3,
-                }}
-            >
-
-                <SummaryCard
-                    title="Needs Your Review"
-                    value={
-                        pendingCount
-                    }
-                    color="#f59e0b"
-                />
-
-                <SummaryCard
-                    title="Approved"
-                    value={
-                        approvedCount
-                    }
-                    color="#22c55e"
-                />
-
-                <SummaryCard
-                    title="Rejected"
-                    value={
-                        rejectedCount
-                    }
-                    color="#ef4444"
-                />
-
-            </Box>
-
-
-            {/* ================================================= */}
-            {/* SAFETY BANNER */}
-            {/* ================================================= */}
-
-            <Card
-                sx={{
-                    mb:
-                        3,
-
-                    borderColor:
-                        "rgba(59,130,246,0.25)",
-                }}
-            >
-
-                <CardContent
-                    sx={{
-                        p:
-                            2.5,
-
-                        display:
-                            "flex",
-
-                        alignItems:
-                            "center",
-
-                        gap:
-                            2,
-                    }}
-                >
-
-                    <ShieldRounded
-                        sx={{
-                            color:
-                                "#3b82f6",
-                        }}
-                    />
-
-
-                    <Box>
-
-                        <Typography
-                            sx={{
-                                fontWeight:
-                                    600,
-                            }}
-                        >
-                            Simulation Mode Active
-                        </Typography>
-
-
-                        <Typography
-                            sx={{
-                                color:
-                                    "#64748b",
-
-                                fontSize:
-                                    13,
-
-                                mt:
-                                    0.3,
-                            }}
-                        >
-                            Approving an action in this prototype
-                            does not modify your real device.
-                            Sentinel-X keeps response execution
-                            simulated.
-                        </Typography>
-
-                    </Box>
-
-                </CardContent>
-
-            </Card>
-
-
-            {/* ================================================= */}
-            {/* ACTION CARDS */}
-            {/* ================================================= */}
-
-            <Stack
-                spacing={
-                    2
-                }
-            >
-
-                {
-                    actions.map(
-                        (
-                            action,
-                        ) => (
-
-                            <ApprovalCard
-                                key={
-                                    action.id
-                                }
-
-                                action={
-                                    action
-                                }
-
-                                onApprove={
-                                    () =>
-                                        openDialog(
-                                            action,
-                                            "APPROVE"
-                                        )
-                                }
-
-                                onReject={
-                                    () =>
-                                        openDialog(
-                                            action,
-                                            "REJECT"
-                                        )
-                                }
-                            />
-
-                        )
-                    )
-                }
-
-            </Stack>
-
-
-            {/* ================================================= */}
-            {/* CONFIRMATION DIALOG */}
-            {/* ================================================= */}
-
-            <Dialog
-                open={
-                    Boolean(
-                        selectedAction
-                    )
-                }
-
-                onClose={
-                    closeDialog
-                }
-
-                fullWidth
-
-                maxWidth="sm"
-
-                PaperProps={{
-                    sx: {
-                        background:
-                            "#111827",
-
-                        backgroundImage:
-                            "none",
-
-                        border:
-                            "1px solid #1e293b",
-                    },
-                }}
-            >
-
-                {
-                    selectedAction
-                    && (
-
-                        <>
-
-                            <DialogTitle>
-
-                                {
-                                    dialogMode
-                                    === "APPROVE"
-                                        ? "Approve protection action?"
-                                        : "Reject protection action?"
-                                }
-
-                            </DialogTitle>
-
-
-                            <DialogContent>
-
-                                <Typography
-                                    sx={{
-                                        fontWeight:
-                                            700,
-
-                                        fontSize:
-                                            17,
-
-                                        mb:
-                                            1,
-                                    }}
-                                >
-                                    {
-                                        selectedAction.title
-                                    }
-                                </Typography>
-
-
-                                <Typography
-                                    sx={{
-                                        color:
-                                            "#94a3b8",
-
-                                        mb:
-                                            2,
-                                    }}
-                                >
-                                    {
-                                        selectedAction.description
-                                    }
-                                </Typography>
-
-
-                                <Box
-                                    sx={{
-                                        p:
-                                            2,
-
-                                        borderRadius:
-                                            "12px",
-
-                                        background:
-                                            "#0f172a",
-
-                                        border:
-                                            "1px solid #1e293b",
-                                    }}
-                                >
-
-                                    <DialogInfo
-                                        label="Target"
-                                        value={
-                                            selectedAction.target
-                                        }
-                                    />
-
-                                    <DialogInfo
-                                        label="Impact"
-                                        value={
-                                            selectedAction.impact
-                                        }
-                                    />
-
-                                    <DialogInfo
-                                        label="What will change"
-                                        value={
-                                            selectedAction.effect
-                                        }
-                                    />
-
-                                    <DialogInfo
-                                        label="Can it be undone?"
-                                        value={
-                                            selectedAction.reversible
-                                                ? "Yes"
-                                                : "Not automatically"
-                                        }
-                                    />
-
-                                </Box>
-
-
-                                {
-                                    dialogMode
-                                    === "APPROVE"
-                                    && (
-
-                                        <Typography
-                                            sx={{
-                                                mt:
-                                                    2,
-
-                                                color:
-                                                    "#94a3b8",
-
-                                                fontSize:
-                                                    13,
-                                            }}
-                                        >
-                                            This approval will only
-                                            mark the action as approved
-                                            in the current frontend
-                                            simulation.
-                                        </Typography>
-
-                                    )
-                                }
-
-                            </DialogContent>
-
-
-                            <DialogActions>
-
-                                <Button
-                                    onClick={
-                                        closeDialog
-                                    }
-                                >
-                                    Cancel
-                                </Button>
-
-
-                                <Button
-                                    variant="contained"
-
-                                    color={
-                                        dialogMode
-                                        === "APPROVE"
-                                            ? "success"
-                                            : "error"
-                                    }
-
-                                    onClick={
-                                        confirmDecision
-                                    }
-                                >
-                                    {
-                                        dialogMode
-                                        === "APPROVE"
-                                            ? "Approve"
-                                            : "Reject"
-                                    }
-                                </Button>
-
-                            </DialogActions>
-
-                        </>
-
-                    )
-                }
-
-            </Dialog>
-
+          <Typography variant="h4">Approvals</Typography>
+          <Typography
+            sx={{ color: "#94a3b8", mt: 0.5 }}
+          >
+            Review only persisted SOC response actions.
+          </Typography>
         </Box>
 
-    );
+        <Button
+          variant="outlined"
+          startIcon={<RefreshRounded />}
+          onClick={loadApprovals}
+          disabled={loading}
+        >
+          Refresh
+        </Button>
+      </Stack>
 
-}
+      {/* SUMMARY */}
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: {
+            xs: "1fr",
+            sm: "repeat(3,1fr)",
+          },
+          gap: 2,
+          mb: 3,
+        }}
+      >
+        <SummaryCard
+          title="Needs Your Review"
+          count={stats.pending}
+          color="#f59e0b"
+        />
+        <SummaryCard
+          title="Approved"
+          count={stats.approved}
+          color="#22c55e"
+        />
+        <SummaryCard
+          title="Rejected"
+          count={stats.rejected}
+          color="#ef4444"
+        />
+      </Box>
 
+      {/* SAFETY BANNER */}
+      <Card
+        sx={{
+          mb: 3,
+          borderColor: "rgba(59,130,246,0.25)",
+        }}
+      >
+        <CardContent
+          sx={{
+            display: "flex", gap: 2,
+            alignItems: "center", p: 2.5,
+          }}
+        >
+          <ShieldRounded sx={{ color: "#3b82f6" }} />
+          <Box>
+            <Typography fontWeight={600}>
+              Simulation Mode Active
+            </Typography>
+            <Typography
+              sx={{
+                color: "#64748b",
+                fontSize: 13, mt: 0.3,
+              }}
+            >
+              Approval submission is locked during validation.
+              This page reads stored SOC case records only.
+              No process, file, network or device is modified.
+            </Typography>
+          </Box>
+        </CardContent>
+      </Card>
 
-/* ================================================================ */
-/* SUMMARY CARD */
-/* ================================================================ */
+      {loading && (
+        <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
+          <CircularProgress size={22} />
+          <Typography>Loading persisted SOC cases...</Typography>
+        </Stack>
+      )}
 
-function SummaryCard({
-    title,
-    value,
-    color,
-}) {
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
 
-    return (
+      {!!warnings.length && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Some case records could not be loaded.
+          {warnings.slice(0, 3).map((text, index) => (
+            <Typography key={index} fontSize={12}>
+              {text}
+            </Typography>
+          ))}
+        </Alert>
+      )}
 
+      <Typography
+        sx={{ color: "#94a3b8", fontSize: 12, mb: 2 }}
+      >
+        Persisted SOC cases: {caseCount} | Loaded response
+        records: {actions.length}
+      </Typography>
+
+      {!loading && !error && !actions.length && (
         <Card>
-
-            <CardContent
-                sx={{
-                    p:
-                        2.5,
-                }}
+          <CardContent sx={{ p: 4, textAlign: "center" }}>
+            <WarningAmberRounded
+              sx={{ color: "#f59e0b", fontSize: 36 }}
+            />
+            <Typography variant="h6" sx={{ mt: 1 }}>
+              No persisted approval actions available
+            </Typography>
+            <Typography
+              sx={{
+                color: "#94a3b8",
+                mt: 1,
+              }}
             >
-
-                <Typography
-                    sx={{
-                        color:
-                            "#64748b",
-
-                        fontSize:
-                            13,
-                    }}
-                >
-                    {
-                        title
-                    }
-                </Typography>
-
-
-                <Typography
-                    sx={{
-                        fontSize:
-                            30,
-
-                        fontWeight:
-                            800,
-
-                        mt:
-                            0.5,
-
-                        color:
-                            color,
-                    }}
-                >
-                    {
-                        value
-                    }
-                </Typography>
-
-            </CardContent>
-
+              This is not a simulated list of pending actions.
+              A valid SOC case must exist before actual response
+              actions can appear here.
+            </Typography>
+          </CardContent>
         </Card>
+      )}
 
-    );
+      <Stack spacing={2}>
+        {actions.map((action, index) => (
+          <ApprovalCard
+            key={`${action.incidentId}-${action.id}-${index}`}
+            action={action}
+            onOpenCase={(id) =>
+              navigate(`/incidents/${encodeURIComponent(id)}`)
+            }
+          />
+        ))}
+      </Stack>
 
+      <Divider sx={{ my: 3 }} />
+
+      <Alert severity="info">
+        Approval and rejection buttons are intentionally disabled.
+        We have not yet validated a backend operation that
+        securely persists those decisions with authorization,
+        evidence checks and audit logging.
+      </Alert>
+    </Box>
+  );
 }
-
-
-/* ================================================================ */
-/* APPROVAL CARD */
-/* ================================================================ */
-
-function ApprovalCard({
-    action,
-    onApprove,
-    onReject,
-}) {
-
-    const statusConfig =
-        getStatusConfig(
-            action.status
-        );
-
-
-    const impactColor =
-        getImpactColor(
-            action.impact
-        );
-
-
-    return (
-
-        <Card
-            sx={{
-                borderColor:
-                    action.status
-                    === "PENDING"
-                        ? "rgba(245,158,11,0.25)"
-                        : "#1e293b",
-            }}
-        >
-
-            <CardContent
-                sx={{
-                    p:
-                        3,
-                }}
-            >
-
-                <Box
-                    sx={{
-                        display:
-                            "flex",
-
-                        justifyContent:
-                            "space-between",
-
-                        gap:
-                            3,
-
-                        flexWrap:
-                            "wrap",
-                    }}
-                >
-
-                    {/* LEFT */}
-
-                    <Box
-                        sx={{
-                            display:
-                                "flex",
-
-                            gap:
-                                2,
-
-                            flex:
-                                1,
-
-                            minWidth:
-                                280,
-                        }}
-                    >
-
-                        <Box
-                            sx={{
-                                width:
-                                    50,
-
-                                height:
-                                    50,
-
-                                minWidth:
-                                    50,
-
-                                borderRadius:
-                                    "14px",
-
-                                display:
-                                    "flex",
-
-                                alignItems:
-                                    "center",
-
-                                justifyContent:
-                                    "center",
-
-                                color:
-                                    action.status
-                                    === "PENDING"
-                                        ? "#f59e0b"
-                                        : statusConfig.color,
-
-                                background:
-                                    action.status
-                                    === "PENDING"
-                                        ? "rgba(245,158,11,0.10)"
-                                        : `${statusConfig.color}12`,
-                            }}
-                        >
-
-                            {
-                                action.icon
-                            }
-
-                        </Box>
-
-
-                        <Box
-                            sx={{
-                                flex:
-                                    1,
-                            }}
-                        >
-
-                            <Box
-                                sx={{
-                                    display:
-                                        "flex",
-
-                                    alignItems:
-                                        "center",
-
-                                    gap:
-                                        1,
-
-                                    flexWrap:
-                                        "wrap",
-
-                                    mb:
-                                        0.7,
-                                }}
-                            >
-
-                                <Typography
-                                    sx={{
-                                        fontSize:
-                                            18,
-
-                                        fontWeight:
-                                            700,
-                                    }}
-                                >
-                                    {
-                                        action.title
-                                    }
-                                </Typography>
-
-
-                                <Chip
-                                    label={
-                                        action.severity
-                                    }
-
-                                    size="small"
-
-                                    sx={{
-                                        color:
-                                            "#ef4444",
-
-                                        background:
-                                            "rgba(239,68,68,0.10)",
-                                    }}
-                                />
-
-                            </Box>
-
-
-                            <Typography
-                                sx={{
-                                    color:
-                                        "#94a3b8",
-
-                                    fontSize:
-                                        13,
-
-                                    maxWidth:
-                                        760,
-                                }}
-                            >
-                                {
-                                    action.description
-                                }
-                            </Typography>
-
-
-                            <Box
-                                sx={{
-                                    display:
-                                        "grid",
-
-                                    gridTemplateColumns:
-                                        {
-                                            xs:
-                                                "1fr",
-
-                                            md:
-                                                "repeat(3, 1fr)",
-                                        },
-
-                                    gap:
-                                        1.5,
-
-                                    mt:
-                                        2,
-                                }}
-                            >
-
-                                <InfoBox
-                                    label="Target"
-                                    value={
-                                        action.target
-                                    }
-                                />
-
-                                <InfoBox
-                                    label="Impact"
-                                    value={
-                                        action.impact
-                                    }
-                                    color={
-                                        impactColor
-                                    }
-                                />
-
-                                <InfoBox
-                                    label="Reversible"
-                                    value={
-                                        action.reversible
-                                            ? "Yes"
-                                            : "Limited"
-                                    }
-                                />
-
-                            </Box>
-
-
-                            <Box
-                                sx={{
-                                    mt:
-                                        2,
-
-                                    p:
-                                        1.5,
-
-                                    borderRadius:
-                                        "10px",
-
-                                    background:
-                                        "#0f172a",
-                                }}
-                            >
-
-                                <Typography
-                                    sx={{
-                                        color:
-                                            "#64748b",
-
-                                        fontSize:
-                                            11,
-                                    }}
-                                >
-                                    Why Sentinel-X recommends this
-                                </Typography>
-
-
-                                <Typography
-                                    sx={{
-                                        color:
-                                            "#cbd5e1",
-
-                                        fontSize:
-                                            13,
-
-                                        mt:
-                                            0.4,
-                                    }}
-                                >
-                                    {
-                                        action.reason
-                                    }
-                                </Typography>
-
-                            </Box>
-
-                        </Box>
-
-                    </Box>
-
-
-                    {/* RIGHT */}
-
-                    <Box
-                        sx={{
-                            minWidth:
-                                180,
-
-                            display:
-                                "flex",
-
-                            flexDirection:
-                                "column",
-
-                            alignItems:
-                                {
-                                    xs:
-                                        "stretch",
-
-                                    md:
-                                        "flex-end",
-                                },
-
-                            gap:
-                                1.5,
-                        }}
-                    >
-
-                        <Chip
-                            label={
-                                statusConfig.label
-                            }
-
-                            sx={{
-                                color:
-                                    statusConfig.color,
-
-                                background:
-                                    `${statusConfig.color}12`,
-
-                                border:
-                                    `1px solid ${statusConfig.color}30`,
-
-                                fontWeight:
-                                    700,
-                            }}
-                        />
-
-
-                        {
-                            action.status
-                            === "PENDING"
-                            && (
-
-                                <Stack
-                                    direction="row"
-                                    spacing={
-                                        1
-                                    }
-                                >
-
-                                    <Button
-                                        variant="outlined"
-
-                                        color="error"
-
-                                        startIcon={
-                                            <CancelRounded />
-                                        }
-
-                                        onClick={
-                                            onReject
-                                        }
-                                    >
-                                        Reject
-                                    </Button>
-
-
-                                    <Button
-                                        variant="contained"
-
-                                        color="success"
-
-                                        startIcon={
-                                            <CheckCircleRounded />
-                                        }
-
-                                        onClick={
-                                            onApprove
-                                        }
-                                    >
-                                        Approve
-                                    </Button>
-
-                                </Stack>
-
-                            )
-                        }
-
-                    </Box>
-
-                </Box>
-
-            </CardContent>
-
-        </Card>
-
-    );
-
-}
-
-
-/* ================================================================ */
-/* INFO BOX */
-/* ================================================================ */
-
-function InfoBox({
-    label,
-    value,
-    color,
-}) {
-
-    return (
-
-        <Box
-            sx={{
-                p:
-                    1.5,
-
-                borderRadius:
-                    "10px",
-
-                background:
-                    "#0f172a",
-
-                border:
-                    "1px solid #1e293b",
-            }}
-        >
-
-            <Typography
-                sx={{
-                    color:
-                        "#64748b",
-
-                    fontSize:
-                        11,
-                }}
-            >
-                {
-                    label
-                }
-            </Typography>
-
-
-            <Typography
-                sx={{
-                    mt:
-                        0.4,
-
-                    fontWeight:
-                        600,
-
-                    fontSize:
-                        13,
-
-                    color:
-                        color
-                        || "#f8fafc",
-                }}
-            >
-                {
-                    value
-                }
-            </Typography>
-
-        </Box>
-
-    );
-
-}
-
-
-/* ================================================================ */
-/* DIALOG INFO */
-/* ================================================================ */
-
-function DialogInfo({
-    label,
-    value,
-}) {
-
-    return (
-
-        <Box
-            sx={{
-                py:
-                    0.8,
-            }}
-        >
-
-            <Typography
-                sx={{
-                    color:
-                        "#64748b",
-
-                    fontSize:
-                        11,
-                }}
-            >
-                {
-                    label
-                }
-            </Typography>
-
-
-            <Typography
-                sx={{
-                    fontSize:
-                        13,
-
-                    fontWeight:
-                        600,
-
-                    mt:
-                        0.2,
-                }}
-            >
-                {
-                    value
-                }
-            </Typography>
-
-        </Box>
-
-    );
-
-}
-
-
-/* ================================================================ */
-/* STATUS CONFIG */
-/* ================================================================ */
-
-function getStatusConfig(
-    status
-) {
-
-    switch (
-        status
-    ) {
-
-        case "APPROVED":
-
-            return {
-                label:
-                    "Approved",
-
-                color:
-                    "#22c55e",
-            };
-
-
-        case "REJECTED":
-
-            return {
-                label:
-                    "Rejected",
-
-                color:
-                    "#ef4444",
-            };
-
-
-        default:
-
-            return {
-                label:
-                    "Needs Approval",
-
-                color:
-                    "#f59e0b",
-            };
-
-    }
-
-}
-
-
-/* ================================================================ */
-/* IMPACT COLOR */
-/* ================================================================ */
-
-function getImpactColor(
-    impact
-) {
-
-    switch (
-        impact
-    ) {
-
-        case "HIGH":
-            return "#ef4444";
-
-        case "MEDIUM":
-            return "#f59e0b";
-
-        case "LOW":
-            return "#22c55e";
-
-        default:
-            return "#94a3b8";
-
-    }
-
-}
-
-
-export default Approvals;

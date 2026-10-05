@@ -470,52 +470,37 @@ class AgentConsensusEngine:
         self,
         decisions: list,
     ) -> dict:
+        """
+        Aggregate advisory agent decisions without treating
+        heuristic scores as calibrated probabilities.
+
+        Containment and response recommendations are not
+        authorized by voting alone.
+        """
 
         if not decisions:
-
             return {
                 "engine": self.name,
-
-                "generated_at":
-                    self.now_iso(),
-
-                "final_decision":
-                    "MONITOR",
-
-                "consensus_confidence":
-                    0,
-
-                "severity":
-                    "INFO",
-
-                "agent_count":
-                    0,
-
-                "conflict_detected":
-                    False,
-
-                "vote_summary":
-                    {},
-
+                "generated_at": self.now_iso(),
+                "final_decision": "MONITOR",
+                "consensus_confidence": 0,
+                "severity": "INFO",
+                "agent_count": 0,
+                "conflict_detected": False,
+                "vote_summary": {},
                 "explanation": [
                     "No agent decisions were provided."
                 ],
+                "confidence_calibrated": False,
+                "response_authorized": False,
             }
 
-        grouped = self.group_decisions(
-            decisions
-        )
+        # Preserve original grouping and explanations.
+        grouped = self.group_decisions(decisions)
+        scores = self.score_groups(grouped)
 
-        scores = self.score_groups(
-            grouped
-        )
-
-        final_decision = self.select_final_decision(
+        proposed_decision = self.select_final_decision(
             scores
-        )
-
-        confidence = self.average_confidence(
-            decisions
         )
 
         severity = self.get_max_severity(
@@ -526,37 +511,53 @@ class AgentConsensusEngine:
             decisions
         )
 
+        # Agent votes alone cannot authorize response.
+        prohibited = {
+            "RESPONSE_REVIEW",
+            "RESPONSE_RECOMMENDED",
+            "CONTAINMENT_RECOMMENDED",
+        }
+
+        final_decision = proposed_decision
+
+        if final_decision in prohibited:
+            final_decision = "INVESTIGATE"
+
+        # The current decision sources are not calibrated.
+        # Report unknown confidence as zero rather than
+        # manufacturing a percentage.
+        confidence = 0
+
         explanation = self.build_explanation(
             final_decision,
             decisions,
             scores,
         )
 
+        explanation.append(
+            "Agent confidence values are uncalibrated. "
+            "Consensus is advisory and does not authorize "
+            "containment or remediation."
+        )
+
+        if proposed_decision != final_decision:
+            explanation.append(
+                "The proposed response-level vote was "
+                "downgraded to INVESTIGATE pending independent "
+                "evidence validation and analyst review."
+            )
+
         return {
-            "engine":
-                self.name,
-
-            "generated_at":
-                self.now_iso(),
-
-            "final_decision":
-                final_decision,
-
-            "consensus_confidence":
-                confidence,
-
-            "severity":
-                severity,
-
-            "agent_count":
-                len(decisions),
-
-            "conflict_detected":
-                conflict,
-
-            "vote_summary":
-                scores,
-
-            "explanation":
-                explanation,
+            "engine": self.name,
+            "generated_at": self.now_iso(),
+            "final_decision": final_decision,
+            "consensus_confidence": confidence,
+            "severity": severity,
+            "agent_count": len(decisions),
+            "conflict_detected": conflict,
+            "vote_summary": scores,
+            "explanation": explanation,
+            "confidence_calibrated": False,
+            "response_authorized": False,
+            "proposed_decision": proposed_decision,
         }

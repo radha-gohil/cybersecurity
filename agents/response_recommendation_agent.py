@@ -503,7 +503,68 @@ class ResponseRecommendationAgent:
             requires_approval=
                 False,
         )
+        # ============================================================
+        # EVIDENCE AUTHORIZATION GATE
+        # ============================================================
+        # Review-only operation until independent attack
+        # confirmation is supported by validated evidence.
+        #
+        # Do not promote consensus votes, inherited labels,
+        # unverified graph links, or model scores into
+        # containment recommendations.
 
+        evidence_summary = self.safe_dict(
+            risk.get("evidence_summary")
+        )
+
+        attack_confirmed = (
+            evidence_summary.get("attack_confirmed") is True
+        )
+
+        causal_verified = (
+            evidence_summary.get(
+                "causal_relationship_verified"
+            ) is True
+        )
+
+        confidence_calibrated = (
+            risk.get("confidence_calibrated") is True
+        )
+
+        if not (
+            attack_confirmed
+            and causal_verified
+            and confidence_calibrated
+        ):
+            self.add_recommendation(
+                recommendations,
+                action="INVESTIGATE_INCIDENT",
+                priority="MEDIUM",
+                reason=(
+                    "Continue analyst investigation. "
+                    "Attack confirmation, causal validation, "
+                    "or calibrated confidence is unavailable."
+                ),
+                requires_approval=False,
+            )
+
+            return {
+                "agent": self.name,
+                "generated_at": self.now_iso(),
+                "response_level": "INVESTIGATION",
+                "consensus_decision": consensus_decision,
+                "consensus_confidence": consensus_confidence,
+                "risk_score": risk_score,
+                "risk_level": risk_level,
+                "recommendation_count": len(recommendations),
+                "recommendations": recommendations,
+                "execution_allowed": False,
+                "evidence_authorized": False,
+                "note": (
+                    "Analyst investigation only. No containment "
+                    "or remediation action was recommended or executed."
+                ),
+            }
 
         # ========================================================
         # INVESTIGATION

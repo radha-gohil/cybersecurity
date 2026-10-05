@@ -1,992 +1,497 @@
+
 from datetime import datetime, timezone
+import math
 
 
 class TriageAgent:
+    """
+    Evidence-grounded triage.
+
+    Existing public method names and downstream result fields
+    are preserved.
+
+    Scores are heuristic review priorities, not calibrated
+    attack probabilities.
+    """
+
+    VALID_CATEGORIES = {
+        "PROCESS", "FILE", "NETWORK", "REGISTRY"
+    }
+
+    QUALIFYING_SEVERITIES = {
+        "MEDIUM", "HIGH", "CRITICAL"
+    }
 
     def __init__(self):
-
         self.name = "TriageAgent"
 
+    def now_iso(self) -> str:
+        return datetime.now(timezone.utc).isoformat()
 
-    # ============================================================
-    # CURRENT TIME
-    # ============================================================
-
-    def now_iso(
-        self,
-    ) -> str:
-
-        return (
-            datetime.now(
-                timezone.utc
-            ).isoformat()
-        )
-
-
-    # ============================================================
-    # SAFE INTEGER
-    # ============================================================
-
-    def safe_int(
-        self,
-        value,
-        default=0,
-    ):
-
+    def safe_int(self, value, default=0):
         try:
-
-            return int(
-                value
-            )
-
-        except (
-            TypeError,
-            ValueError,
-        ):
-
+            number = float(value)
+            if not math.isfinite(number):
+                return default
+            return int(number)
+        except (TypeError, ValueError, OverflowError):
             return default
 
-
-    # ============================================================
-    # SAFE FLOAT
-    # ============================================================
-
-    def safe_float(
-        self,
-        value,
-        default=0.0,
-    ):
-
+    def safe_float(self, value, default=0.0):
         try:
-
-            return float(
-                value
-            )
-
-        except (
-            TypeError,
-            ValueError,
-        ):
-
+            number = float(value)
+            return number if math.isfinite(number) else default
+        except (TypeError, ValueError, OverflowError):
             return default
 
+    def safe_dict(self, value):
+        return value if isinstance(value, dict) else {}
 
-    # ============================================================
-    # SEVERITY SCORE
-    # ============================================================
-
-    def severity_score(
-        self,
-        severity,
-    ) -> int:
-
+    def severity_score(self, severity) -> int:
         mapping = {
-
-            "INFO":
-                0,
-
-            "LOW":
-                5,
-
-            "MEDIUM":
-                15,
-
-            "HIGH":
-                25,
-
-            "CRITICAL":
-                35,
+            "INFO": 0,
+            "LOW": 0,
+            "MEDIUM": 12,
+            "HIGH": 22,
+            "CRITICAL": 30,
         }
+        return mapping.get(str(severity).upper(), 0)
 
-
-        return mapping.get(
-            str(
-                severity
-            ).upper(),
-            0,
-        )
-
-
-    # ============================================================
-    # GET TIMELINE
-    # ============================================================
-
-    def get_timeline(
-        self,
-        incident: dict,
-    ) -> list:
-
-        timeline = (
-            incident.get(
-                "timeline"
-            )
-            or []
-        )
-
-
-        if not isinstance(
-            timeline,
-            list,
-        ):
-
+    def get_timeline(self, incident: dict) -> list:
+        if not isinstance(incident, dict):
             return []
 
+        timeline = incident.get("timeline")
+        return timeline if isinstance(timeline, list) else []
 
-        return timeline
+    def event_category(self, event: dict) -> str:
+        metadata = self.safe_dict(event.get("metadata"))
 
+        category = str(
+            event.get("event_category")
+            or metadata.get("event_category")
+            or ""
+        ).upper()
 
-    # ============================================================
-    # GET EVENT CATEGORIES
-    # ============================================================
+        if category in self.VALID_CATEGORIES:
+            return category
 
-    def get_categories(
-        self,
-        incident: dict,
-    ) -> set:
+        event_type = str(
+            event.get("event_type") or ""
+        ).lower()
 
-        categories = set()
+        if event_type.startswith("process"):
+            return "PROCESS"
+        if event_type.startswith("file"):
+            return "FILE"
+        if event_type.startswith("network"):
+            return "NETWORK"
+        if event_type.startswith(("registry", "startup")):
+            return "REGISTRY"
 
+        return "UNKNOWN"
 
-        timeline = (
-            self.get_timeline(
-                incident
-            )
-        )
+    @staticmethod
+    def valid_pid(value):
+        try:
+            if value is None or isinstance(value, bool):
+                return False
 
+            pid = int(value)
+            return pid > 0 and pid != 4
+        except (TypeError, ValueError, OverflowError):
+            return False
 
-        for event in timeline:
+    def authoritative_events(self, incident: dict) -> list:
+        accepted = []
+        seen = set()
 
-            event_type = str(
-                event.get(
-                    "event_type",
-                    ""
-                )
-            ).lower()
+        for event in self.get_timeline(incident):
+            if not isinstance(event, dict):
+                continue
 
+            event_id = str(
+                event.get("event_id") or ""
+            ).strip()
 
-            if event_type.startswith(
-                "process"
-            ):
+            if not event_id or event_id in seen:
+                continue
 
-                categories.add(
-                    "PROCESS"
-                )
+            seen.add(event_id)
 
+            severity = str(
+                event.get("severity") or "INFO"
+            ).upper()
 
-            elif event_type.startswith(
-                "file"
-            ):
+            if severity not in self.QUALIFYING_SEVERITIES:
+                continue
 
-                categories.add(
-                    "FILE"
-                )
-
-
-            elif event_type.startswith(
-                "network"
-            ):
-
-                categories.add(
-                    "NETWORK"
-                )
-
-
-            elif (
-                event_type.startswith(
-                    "registry"
-                )
-                or event_type.startswith(
-                    "startup"
-                )
-            ):
-
-                categories.add(
-                    "REGISTRY"
-                )
-
-
-        # --------------------------------------------------------
-        # FALLBACK TO INCIDENT CATEGORIES
-        # --------------------------------------------------------
-
-        if not categories:
-
-            stored_categories = (
-                incident.get(
-                    "categories"
-                )
-                or []
+            metadata = self.safe_dict(
+                event.get("metadata")
             )
 
+            mode = str(
+                event.get("detection_mode")
+                or event.get("mode")
+                or metadata.get("detection_mode")
+                or metadata.get("operating_mode")
+                or metadata.get("mode")
+                or ""
+            ).upper()
 
-            if isinstance(
-                stored_categories,
-                list,
+            if (
+                "SHADOW" in mode
+                or mode in {
+                    "OFF", "DISABLED", "SIMULATION"
+                }
             ):
+                continue
 
-                for category in stored_categories:
+            if (
+                event.get("simulation_mode") is True
+                or metadata.get("simulation_mode") is True
+                or metadata.get("synthetic") is True
+            ):
+                continue
 
-                    categories.add(
-                        str(
-                            category
-                        ).upper()
+            device_id = str(
+                event.get("device_id")
+                or metadata.get("device_id")
+                or ""
+            ).strip()
+
+            if not device_id:
+                continue
+
+            category = self.event_category(event)
+
+            if category not in self.VALID_CATEGORIES:
+                continue
+
+            if category in {"PROCESS", "NETWORK"}:
+                data = self.safe_dict(
+                    event.get(
+                        "process"
+                        if category == "PROCESS"
+                        else "network"
                     )
+                )
 
+                if not self.valid_pid(data.get("pid")):
+                    continue
 
-        return categories
+            accepted.append({
+                "event_id": event_id,
+                "category": category,
+                "severity": severity,
+                "device_id": device_id,
+                "event": event,
+            })
 
+        return accepted
 
-    # ============================================================
-    # FIND MAX MALWARE PROBABILITY
-    # ============================================================
+    def get_categories(self, incident: dict) -> set:
+        return {
+            item["category"]
+            for item in self.authoritative_events(incident)
+        }
 
     def get_max_malware_probability(
         self,
         incident: dict,
     ) -> float:
-
-        max_probability = 0.0
-
-
-        for event in self.get_timeline(
-            incident
-        ):
-
-            file_data = (
-                event.get(
-                    "file"
-                )
-                or {}
-            )
-
-
-            probability = (
-                file_data.get(
-                    "malware_probability"
-                )
-            )
-
-
-            probability = (
-                self.safe_float(
-                    probability,
-                    0.0,
-                )
-            )
-
-
-            max_probability = max(
-                max_probability,
-                probability,
-            )
-
-
-        return max_probability
-
-
-    # ============================================================
-    # FIND MAX BEHAVIOR SCORE
-    # ============================================================
+        # Historical EMBER malware inference remains OFF.
+        return 0.0
 
     def get_max_behavior_score(
         self,
         incident: dict,
     ) -> int:
-
         maximum = 0
 
+        for item in self.authoritative_events(incident):
+            if item["category"] != "PROCESS":
+                continue
 
-        for event in self.get_timeline(
-            incident
-        ):
+            event = item["event"]
+            process = self.safe_dict(event.get("process"))
+            metadata = self.safe_dict(event.get("metadata"))
 
-            process = (
-                event.get(
-                    "process"
-                )
-                or {}
-            )
-
-
-            metadata = (
-                event.get(
-                    "metadata"
-                )
-                or {}
-            )
-
-
-            values = [
-
-                process.get(
-                    "behavior_score"
-                ),
-
-                metadata.get(
-                    "behavior_score"
-                ),
-            ]
-
-
-            for value in values:
-
+            for value in (
+                process.get("behavior_score"),
+                metadata.get("behavior_score"),
+                metadata.get("rule_score"),
+            ):
                 maximum = max(
-
                     maximum,
-
-                    self.safe_int(
-                        value,
-                        0,
-                    ),
+                    self.safe_int(value),
                 )
 
-
-        return maximum
-
-
-    # ============================================================
-    # FIND MAX ANOMALY SCORE
-    # ============================================================
+        return max(0, min(100, maximum))
 
     def get_max_anomaly_score(
         self,
         incident: dict,
     ) -> int:
-
         maximum = 0
 
+        for item in self.authoritative_events(incident):
+            if item["category"] != "PROCESS":
+                continue
 
-        for event in self.get_timeline(
-            incident
-        ):
+            event = item["event"]
+            process = self.safe_dict(event.get("process"))
+            metadata = self.safe_dict(event.get("metadata"))
 
-            process = (
-                event.get(
-                    "process"
-                )
-                or {}
-            )
-
-
-            metadata = (
-                event.get(
-                    "metadata"
-                )
-                or {}
-            )
-
-
-            values = [
-
-                process.get(
-                    "anomaly_score"
-                ),
-
-                metadata.get(
-                    "anomaly_score"
-                ),
-            ]
-
-
-            for value in values:
-
+            for value in (
+                process.get("anomaly_score"),
+                metadata.get("anomaly_score"),
+            ):
                 maximum = max(
-
                     maximum,
-
-                    self.safe_int(
-                        value,
-                        0,
-                    ),
+                    self.safe_int(value),
                 )
 
-
-        return maximum
-
-
-    # ============================================================
-    # CHECK REGISTRY PERSISTENCE
-    # ============================================================
+        return max(0, min(100, maximum))
 
     def has_persistence_activity(
         self,
         incident: dict,
     ) -> bool:
+        for item in self.authoritative_events(incident):
+            if item["category"] != "REGISTRY":
+                continue
 
-        persistence_keywords = [
+            event = item["event"]
+            metadata = self.safe_dict(event.get("metadata"))
 
-            "\\run",
-
-            "\\runonce",
-
-            "startup",
-
-            "winlogon",
-
-            "services",
-
-            "scheduled task",
-        ]
-
-
-        for event in self.get_timeline(
-            incident
-        ):
-
-            registry = (
-                event.get(
-                    "registry"
+            reason = " ".join(
+                str(value or "")
+                for value in (
+                    event.get("reason"),
+                    event.get("detection_reason"),
+                    metadata.get("reason"),
+                    metadata.get("detection_reason"),
                 )
-                or {}
-            )
-
-
-            registry_text = " ".join(
-
-                str(
-                    value
-                )
-
-                for value
-                in registry.values()
-
-                if value is not None
             ).lower()
 
-
-            for keyword in persistence_keywords:
-
-                if keyword in registry_text:
-
-                    return True
-
+            if any(
+                keyword in reason
+                for keyword in (
+                    "persistence",
+                    "autorun",
+                    "startup modification",
+                )
+            ):
+                return True
 
         return False
-
-
-    # ============================================================
-    # CHECK NETWORK ACTIVITY
-    # ============================================================
 
     def has_network_activity(
         self,
         incident: dict,
     ) -> bool:
-
-        categories = (
-            self.get_categories(
-                incident
-            )
+        return any(
+            item["category"] == "NETWORK"
+            for item in self.authoritative_events(incident)
         )
-
-
-        return (
-            "NETWORK"
-            in categories
-        )
-
-
-    # ============================================================
-    # CALCULATE TRIAGE SCORE
-    # ============================================================
 
     def calculate_triage_score(
         self,
         incident: dict,
     ) -> dict:
+        incident = self.safe_dict(incident)
+        qualifying = self.authoritative_events(incident)
 
         score = 0
-
         reasons = []
 
-
-        # ========================================================
-        # 1. INCIDENT SEVERITY
-        # ========================================================
-
-        severity = (
-            incident.get(
-                "severity",
-                "INFO",
-            )
-        )
-
-
-        severity_points = (
-            self.severity_score(
-                severity
-            )
-        )
-
-
-        score += (
-            severity_points
-        )
-
-
-        if severity_points > 0:
-
-            reasons.append(
-                f"Incident severity is {str(severity).upper()}."
-            )
-
-
-        # ========================================================
-        # 2. CORRELATION SCORE
-        # ========================================================
-
-        correlation_score = (
-            self.safe_int(
-                incident.get(
-                    "correlation_score"
-                ),
-                0,
-            )
-        )
-
-
-        if correlation_score >= 80:
-
-            score += 25
-
-            reasons.append(
-                "Very high multi-event correlation score."
-            )
-
-
-        elif correlation_score >= 60:
-
-            score += 20
-
-            reasons.append(
-                "High multi-event correlation score."
-            )
-
-
-        elif correlation_score >= 35:
-
-            score += 10
-
-            reasons.append(
-                "Moderate correlation score."
-            )
-
-
-        # ========================================================
-        # 3. TELEMETRY CATEGORY DIVERSITY
-        # ========================================================
-
-        categories = (
-            self.get_categories(
-                incident
-            )
-        )
-
-
-        category_count = len(
-            categories
-        )
-
-
-        if category_count >= 4:
-
-            score += 15
-
-            reasons.append(
-                "Activity spans process, file, network and registry telemetry."
-            )
-
-
-        elif category_count >= 3:
-
-            score += 10
-
-            reasons.append(
-                "Activity spans at least three telemetry categories."
-            )
-
-
-        elif category_count >= 2:
-
-            score += 5
-
-            reasons.append(
-                "Activity spans multiple telemetry categories."
-            )
-
-
-        # ========================================================
-        # 4. MALWARE PROBABILITY
-        # ========================================================
-
-        malware_probability = (
-            self.get_max_malware_probability(
-                incident
-            )
-        )
-
-
-        if malware_probability >= 0.90:
-
-            score += 20
-
-            reasons.append(
-                "File has very high malware probability."
-            )
-
-
-        elif malware_probability >= 0.70:
-
-            score += 15
-
-            reasons.append(
-                "File has elevated malware probability."
-            )
-
-
-        elif malware_probability >= 0.40:
-
-            score += 5
-
-            reasons.append(
-                "File has moderate malware probability."
-            )
-
-
-        # ========================================================
-        # 5. BEHAVIOR SCORE
-        # ========================================================
-
-        behavior_score = (
-            self.get_max_behavior_score(
-                incident
-            )
-        )
-
-
-        if behavior_score >= 70:
-
-            score += 15
-
-            reasons.append(
-                "Strong suspicious process behavior detected."
-            )
-
-
-        elif behavior_score >= 35:
-
-            score += 8
-
-            reasons.append(
-                "Suspicious process behavior detected."
-            )
-
-
-        # ========================================================
-        # 6. ANOMALY SCORE
-        # ========================================================
-
-        anomaly_score = (
-            self.get_max_anomaly_score(
-                incident
-            )
-        )
-
-
-        if anomaly_score >= 70:
-
-            score += 10
-
-            reasons.append(
-                "Strong process anomaly detected."
-            )
-
-
-        elif anomaly_score >= 35:
-
-            score += 5
-
-            reasons.append(
-                "Process anomaly detected."
-            )
-
-
-        # ========================================================
-        # 7. REGISTRY PERSISTENCE
-        # ========================================================
-
-        persistence = (
-            self.has_persistence_activity(
-                incident
-            )
-        )
-
-
-        if persistence:
-
-            score += 15
-
-            reasons.append(
-                "Possible persistence-related registry activity detected."
-            )
-
-
-        # ========================================================
-        # 8. NETWORK ACTIVITY
-        # ========================================================
-
-        network_activity = (
-            self.has_network_activity(
-                incident
-            )
-        )
-
-
-        if network_activity:
-
-            score += 5
-
-            reasons.append(
-                "Network communication is associated with the incident."
-            )
-
-
-        # ========================================================
-        # CAP SCORE
-        # ========================================================
-
-        score = min(
-            score,
-            100,
-        )
-
-
-        return {
-
-            "triage_score":
-                score,
-
-            "reasons":
-                reasons,
-
-            "categories":
-                sorted(
-                    categories
-                ),
-
-            "malware_probability":
-                malware_probability,
-
-            "behavior_score":
-                behavior_score,
-
-            "anomaly_score":
-                anomaly_score,
-
-            "persistence_detected":
-                persistence,
-
-            "network_activity":
-                network_activity,
+        categories = {
+            item["category"]
+            for item in qualifying
         }
 
+        # Strongest distinct detection counts once.
+        strongest = max(
+            (
+                self.severity_score(item["severity"])
+                for item in qualifying
+            ),
+            default=0,
+        )
 
-    # ============================================================
-    # SCORE -> PRIORITY
-    # ============================================================
+        score += strongest
 
-    def score_to_priority(
-        self,
-        score: int,
-    ) -> str:
+        if strongest:
+            reasons.append(
+                "Strongest qualifying detection severity "
+                "counted once."
+            )
 
+        # Count diversity within a device, not globally.
+        by_device = {}
+
+        for item in qualifying:
+            by_device.setdefault(
+                item["device_id"], set()
+            ).add(item["category"])
+
+        diversity = max(
+            (
+                len(device_categories)
+                for device_categories in by_device.values()
+            ),
+            default=0,
+        )
+
+        if diversity >= 3:
+            score += 15
+            reasons.append(
+                "Three or more qualifying event categories "
+                "occur on one device."
+            )
+        elif diversity == 2:
+            score += 8
+            reasons.append(
+                "Two qualifying event categories occur "
+                "on one device."
+            )
+
+        behavior_score = self.get_max_behavior_score(
+            incident
+        )
+
+        anomaly_score = self.get_max_anomaly_score(
+            incident
+        )
+
+        if behavior_score >= 70:
+            score += 12
+            reasons.append(
+                "Elevated recorded process behavior score."
+            )
+        elif behavior_score >= 35:
+            score += 6
+            reasons.append(
+                "Moderate recorded process behavior score."
+            )
+
+        # Anomaly scores remain visible but are not added
+        # again without independent calibration.
+        persistence = self.has_persistence_activity(
+            incident
+        )
+
+        if persistence:
+            score += 8
+            reasons.append(
+                "A qualifying registry detection explicitly "
+                "indicates possible persistence."
+            )
+
+        network_activity = self.has_network_activity(
+            incident
+        )
+
+        # Presence of ordinary network communication:
+        # ZERO additional risk points.
+
+        if not qualifying:
+            reasons.append(
+                "No qualifying authoritative event evidence."
+            )
+
+        score = max(0, min(100, score))
+
+        return {
+            "triage_score": score,
+            "reasons": reasons,
+            "categories": sorted(categories),
+            "malware_probability": 0.0,
+            "behavior_score": behavior_score,
+            "anomaly_score": anomaly_score,
+            "persistence_detected": persistence,
+            "network_activity": network_activity,
+            "authoritative_event_count": len(qualifying),
+            "evidence_policy": "EVIDENCE_TRIAGE_V2",
+        }
+
+    def score_to_priority(self, score: int) -> str:
         if score >= 80:
-
             return "P1"
-
-
         if score >= 60:
-
             return "P2"
-
-
         if score >= 35:
-
             return "P3"
-
-
         return "P4"
-
-
-    # ============================================================
-    # PRIORITY DESCRIPTION
-    # ============================================================
 
     def priority_description(
         self,
         priority: str,
     ) -> str:
-
         mapping = {
-
-            "P1":
-                "Immediate investigation required.",
-
-            "P2":
-                "High-priority investigation recommended.",
-
-            "P3":
-                "Standard investigation required.",
-
-            "P4":
-                "Low-priority monitoring recommended.",
+            "P1": "Urgent analyst investigation recommended.",
+            "P2": "High-priority analyst review recommended.",
+            "P3": "Further investigation recommended.",
+            "P4": "Monitoring and evidence review recommended.",
         }
-
 
         return mapping.get(
             priority,
-            "Monitoring recommended.",
+            "Continue evidence review.",
         )
-
-
-    # ============================================================
-    # TRIAGE INCIDENT
-    # ============================================================
 
     def triage(
         self,
         incident: dict,
     ) -> dict:
+        incident = self.safe_dict(incident)
 
-        analysis = (
-            self.calculate_triage_score(
-                incident
-            )
+        analysis = self.calculate_triage_score(
+            incident
         )
 
-
-        triage_score = (
-            analysis[
-                "triage_score"
-            ]
-        )
-
-
-        priority = (
-            self.score_to_priority(
-                triage_score
-            )
-        )
-
+        score = analysis["triage_score"]
+        priority = self.score_to_priority(score)
 
         return {
-
-            "incident_id":
-                incident.get(
-                    "incident_id"
-                ),
-
-            "agent":
-                self.name,
-
-            "triaged_at":
-                self.now_iso(),
-
-            "triage_score":
-                triage_score,
-
-            "priority":
-                priority,
-
+            "incident_id": incident.get("incident_id"),
+            "agent": self.name,
+            "triaged_at": self.now_iso(),
+            "triage_score": score,
+            "priority": priority,
             "recommendation":
-                self.priority_description(
-                    priority
-                ),
-
-            "reasons":
-                analysis[
-                    "reasons"
-                ],
-
-            "categories":
-                analysis[
-                    "categories"
-                ],
-
+                self.priority_description(priority),
+            "reasons": analysis["reasons"],
+            "categories": analysis["categories"],
             "malware_probability":
-                analysis[
-                    "malware_probability"
-                ],
-
-            "behavior_score":
-                analysis[
-                    "behavior_score"
-                ],
-
-            "anomaly_score":
-                analysis[
-                    "anomaly_score"
-                ],
-
+                analysis["malware_probability"],
+            "behavior_score": analysis["behavior_score"],
+            "anomaly_score": analysis["anomaly_score"],
             "persistence_detected":
-                analysis[
-                    "persistence_detected"
-                ],
-
+                analysis["persistence_detected"],
             "network_activity":
-                analysis[
-                    "network_activity"
-                ],
-
-            "requires_investigation":
-                priority
-                in [
-                    "P1",
-                    "P2",
-                    "P3",
-                ],
+                analysis["network_activity"],
+            "authoritative_event_count":
+                analysis["authoritative_event_count"],
+            "evidence_policy":
+                analysis["evidence_policy"],
+            "requires_investigation": (
+                priority in {"P1", "P2", "P3"}
+            ),
         }
-
-
-    # ============================================================
-    # TRIAGE MULTIPLE INCIDENTS
-    # ============================================================
 
     def triage_incidents(
         self,
         incidents: list,
     ) -> list:
+        results = [
+            self.triage(item)
+            for item in incidents
+        ]
 
-        results = []
-
-
-        for incident in incidents:
-
-            result = (
-                self.triage(
-                    incident
-                )
-            )
-
-            results.append(
-                result
-            )
-
-
-        # --------------------------------------------------------
-        # Highest triage score first
-        # --------------------------------------------------------
-
-        results.sort(
-
-            key=lambda item:
-                item.get(
-                    "triage_score",
-                    0,
-                ),
-
+        return sorted(
+            results,
+            key=lambda result: result["triage_score"],
             reverse=True,
         )
-
-
-        return results

@@ -97,8 +97,7 @@ class DecisionFactory:
             decision=
                 decision,
 
-            confidence=
-                triage_score,
+            confidence=0,
 
             severity=
                 severity_mapping.get(
@@ -233,11 +232,7 @@ class DecisionFactory:
             decision=
                 decision,
 
-            confidence=
-                confidence_mapping.get(
-                    priority,
-                    50,
-                ),
+            confidence=0,
 
             severity=
                 severity_mapping.get(
@@ -368,8 +363,7 @@ class DecisionFactory:
             decision=
                 decision,
 
-            confidence=
-                risk_score,
+            confidence=0,
 
             severity=
                 risk_level,

@@ -1,0 +1,7569 @@
+﻿
+==========================================================================================
+FILE: api/main.py
+==========================================================================================
+from typing import Any
+
+from datetime import datetime, timezone
+
+import threading
+
+from contextlib import asynccontextmanager
+
+import json
+
+import sqlite3
+
+from pathlib import Path
+
+from fastapi import FastAPI, HTTPException
+
+from fastapi.middleware.cors import CORSMiddleware
+
+from pydantic import BaseModel, Field
+
+from api.security_runtime_router import router as security_runtime_router
+
+from response.persistent_soc_workflow import PersistentSOCWorkflow
+
+from response.soc_ticket_store import SOCTicketStore
+
+from response.incident_view_service import IncidentViewService
+
+from response.soc_query_service import SOCQueryService
+
+from response.backend_integrity_service import BackendIntegrityService
+
+from detection.fusion.incident_store import IncidentStore
+
+from endpoint.storage.database import get_endpoint_database_summary
+
+from agents.multi_agent_pipeline import MultiAgentSecurityPipeline
+
+from endpoint.agent.sentinel_agent import SentinelAgent
+
+from endpoint.agent.telemetry_manager import shared_telemetry_manager
+
+from endpoint.utils.logger import get_logger
+
+from endpoint.storage.database import initialize_database
+
+# Inside your existing FastAPI lifespan,
+
+# before starting SentinelAgent:
+
+initialize_database()
+
+logger = get_logger(__name__)
+
+sentinel_agent = None
+
+sentinel_agent_thread = None
+
+sentinel_agent_lock = threading.RLock()
+
+# ================================================================
+
+# SENTINEL AGENT
+
+# ================================================================
+
+def run_sentinel_agent():
+
+    global sentinel_agent
+
+    try:
+
+        logger.info(
+
+            "Starting SENTINEL-X Endpoint Agent from FastAPI runtime."
+
+        )
+
+        if sentinel_agent is None:
+
+            logger.error("SentinelAgent instance is unavailable.")
+
+            return
+
+        sentinel_agent.start()
+
+    except Exception as error:
+
+        logger.exception(
+
+            "SENTINEL-X Endpoint Agent background runtime failed | %s",
+
+            error,
+
+        )
+
+    finally:
+
+        logger.info(
+
+            "SENTINEL-X Endpoint Agent background thread exited."
+
+        )
+
+# ================================================================
+
+# FASTAPI LIFESPAN
+
+# ================================================================
+
+@asynccontextmanager
+
+async def lifespan(app: FastAPI):
+
+    global sentinel_agent
+
+    global sentinel_agent_thread
+
+    logger.info("=" * 78)
+
+    logger.info("Starting SENTINEL-X backend runtime...")
+
+    with sentinel_agent_lock:
+
+        existing_thread_alive = (
+
+            sentinel_agent_thread is not None
+
+            and sentinel_agent_thread.is_alive()
+
+        )
+
+        if not existing_thread_alive:
+
+            sentinel_agent = SentinelAgent()
+
+            sentinel_agent_thread = threading.Thread(
+
+                target=run_sentinel_agent,
+
+                name="SentinelXEndpointAgent",
+
+                daemon=True,
+
+            )
+
+            sentinel_agent_thread.start()
+
+            logger.info(
+
+                "SENTINEL-X Endpoint Agent background thread started."
+
+            )
+
+        else:
+
+            logger.warning(
+
+                "SENTINEL-X Endpoint Agent is already running."
+
+            )
+
+    app.state.sentinel_agent = sentinel_agent
+
+    app.state.telemetry_manager = shared_telemetry_manager
+
+    logger.info("SENTINEL-X FastAPI runtime started.")
+
+    logger.info("=" * 78)
+
+    try:
+
+        yield
+
+    finally:
+
+        logger.info("=" * 78)
+
+        logger.info("Stopping SENTINEL-X backend runtime...")
+
+        with sentinel_agent_lock:
+
+            if sentinel_agent is not None:
+
+                try:
+
+                    sentinel_agent.stop()
+
+                except Exception as error:
+
+                    logger.exception(
+
+                        "Unable to stop SentinelAgent cleanly | %s",
+
+                        error,
+
+                    )
+
+            if (
+
+                sentinel_agent_thread is not None
+
+                and sentinel_agent_thread.is_alive()
+
+            ):
+
+                sentinel_agent_thread.join(timeout=10)
+
+        logger.info("SENTINEL-X backend runtime stopped.")
+
+        logger.info("=" * 78)
+
+# ================================================================
+
+# APPLICATION
+
+# ================================================================
+
+app = FastAPI(
+
+    title="SENTINEL-X SOC API",
+
+    description=(
+
+        "Persistent backend API for SENTINEL-X "
+
+        "Autonomous Multi-Agent Cybersecurity Defense "
+
+        "and Incident Intelligence Platform."
+
+    ),
+
+    version="1.4.0",
+
+    lifespan=lifespan,
+
+)
+
+app.include_router(security_runtime_router)
+
+app.add_middleware(
+
+    CORSMiddleware,
+
+    allow_origins=[
+
+        "http://localhost:5173",
+
+        "http://127.0.0.1:5173",
+
+        "http://localhost:5174",
+
+        "http://127.0.0.1:5174",
+
+        "http://localhost:5175",
+
+        "http://127.0.0.1:5175",
+
+    ],
+
+    allow_credentials=True,
+
+    allow_methods=["*"],
+
+    allow_headers=["*"],
+
+)
+
+# ================================================================
+
+# SHARED SERVICES
+
+# ================================================================
+
+workflow = PersistentSOCWorkflow(simulation_mode=True)
+
+detected_incident_store = IncidentStore()
+
+multi_agent_pipeline = MultiAgentSecurityPipeline(
+
+    autonomy_level=2
+
+)
+
+ticket_store = SOCTicketStore()
+
+incident_view_service = IncidentViewService(
+
+    workflow=workflow,
+
+    ticket_store=ticket_store,
+
+)
+
+query_service = SOCQueryService(
+
+    case_store=workflow.case_store,
+
+    ticket_store=ticket_store,
+
+    action_store=workflow.action_store,
+
+)
+
+integrity_service = BackendIntegrityService(
+
+    case_store=workflow.case_store,
+
+    ticket_store=ticket_store,
+
+    action_store=workflow.action_store,
+
+    evidence_store=workflow.evidence_store,
+
+)
+
+# ================================================================
+
+# REQUEST MODELS
+
+# ================================================================
+
+class CreateCaseRequest(BaseModel):
+
+    incident_id: str = Field(..., min_length=1)
+
+    intelligence: dict
+
+class AnalystDecisionRequest(BaseModel):
+
+    analyst: str = Field(..., min_length=1)
+
+    comment: str = ""
+
+class AnalystRejectionRequest(BaseModel):
+
+    analyst: str = Field(..., min_length=1)
+
+    reason: str = Field(..., min_length=1)
+
+class MitigationVerificationRequest(BaseModel):
+
+    before_state: dict
+
+    simulated_after_state: dict
+
+    response_result: dict
+
+# ================================================================
+
+# HELPERS
+
+# ================================================================
+
+def now_iso():
+
+    return datetime.now(timezone.utc).isoformat()
+
+def enrich_detected_incident(incident: dict):
+
+    if not isinstance(incident, dict):
+
+        return {}
+
+    incident_id = incident.get("incident_id")
+
+    soc_case = None
+
+    if incident_id:
+
+        try:
+
+            soc_case = workflow.recover_case(incident_id)
+
+        except Exception:
+
+            soc_case = None
+
+    soc_case_exists = soc_case is not None
+
+    soc_case_status = None
+
+    approval_status = None
+
+    ticket_id = None
+
+    ticket_priority = None
+
+    selected_plan = None
+
+    residual_risk = None
+
+    mitigation_status = "NOT_VERIFIED"
+
+    if soc_case_exists:
+
+        soc_case_status = soc_case.get("status")
+
+        ticket_data = soc_case.get("ticket_data") or {}
+
+        if isinstance(ticket_data, dict):
+
+            approval_status = ticket_data.get("approval_status")
+
+            ticket_id = ticket_data.get("ticket_id")
+
+            ticket_priority = ticket_data.get("priority")
+
+        decision = soc_case.get("decision") or {}
+
+        if isinstance(decision, dict):
+
+            selected_plan = (
+
+                decision.get("selected_plan_name")
+
+                or decision.get("selected_plan")
+
+                or decision.get("plan_name")
+
+            )
+
+            residual_risk = (
+
+                decision.get("predicted_residual_risk")
+
+                or decision.get("residual_risk")
+
+            )
+
+        mitigation = soc_case.get("mitigation_verification") or {}
+
+        if isinstance(mitigation, dict):
+
+            mitigation_status = (
+
+                mitigation.get("status")
+
+                or "NOT_VERIFIED"
+
+            )
+
+    return {
+
+        **incident,
+
+        "record_type": "DETECTED_INCIDENT",
+
+        "soc_case_exists": soc_case_exists,
+
+        "soc_case_status": soc_case_status,
+
+        "approval_status": approval_status,
+
+        "ticket_id": ticket_id,
+
+        "ticket_priority": ticket_priority,
+
+        "selected_plan": selected_plan,
+
+        "residual_risk": residual_risk,
+
+        "mitigation_status": mitigation_status,
+
+        "simulation_mode": True,
+
+        "real_response_executed": False,
+
+    }
+
+def serialize_value(value: Any):
+
+    if value is None:
+
+        return None
+
+    if isinstance(value, (str, int, float, bool)):
+
+        return value
+
+    if isinstance(value, dict):
+
+        return {
+
+            str(key): serialize_value(item)
+
+            for key, item in value.items()
+
+        }
+
+    if isinstance(value, (list, tuple, set)):
+
+        return [
+
+            serialize_value(item)
+
+            for item in value
+
+        ]
+
+    if hasattr(value, "to_dict"):
+
+        return serialize_value(value.to_dict())
+
+    return str(value)
+
+def require_case(incident_id: str):
+
+    case = workflow.recover_case(incident_id)
+
+    if case is None:
+
+        raise HTTPException(
+
+            status_code=404,
+
+            detail=f"SOC case not found for incident {incident_id}.",
+
+        )
+
+    return case
+
+# ================================================================
+
+# ROOT
+
+# ================================================================
+
+@app.get("/")
+
+def root():
+
+    return {
+
+        "product": "SENTINEL-X",
+
+        "service": "Persistent SOC Backend API",
+
+        "version": "1.4.0",
+
+        "status": "RUNNING",
+
+        "simulation_mode": True,
+
+        "persistent_recovery": True,
+
+        "evidence_persistence": True,
+
+        "timeline_persistence": True,
+
+        "soc_query_layer": True,
+
+        "backend_integrity": True,
+
+        "real_response_execution": False,
+
+    }
+
+# ================================================================
+
+# HEALTH
+
+# ================================================================
+
+@app.get("/api/v1/health")
+
+def health():
+
+    return {
+
+        "status": "HEALTHY",
+
+        "service": "SENTINEL-X SOC API",
+
+        "version": "1.4.0",
+
+        "timestamp": now_iso(),
+
+        "simulation_mode": True,
+
+        "persistent_recovery": True,
+
+        "evidence_persistence": True,
+
+        "timeline_persistence": True,
+
+        "soc_query_layer": True,
+
+        "backend_integrity": True,
+
+        "real_response_execution": False,
+
+    }
+
+# ================================================================
+
+# LIVE TELEMETRY
+
+# ================================================================
+
+@app.get("/api/v1/telemetry/live")
+
+def get_live_telemetry():
+
+    try:
+
+        manager = shared_telemetry_manager
+
+        snapshot = manager.get_live_snapshot(
+
+            reset_interval=False
+
+        )
+
+        agent = sentinel_agent
+
+        agent_running = bool(
+
+            agent is not None
+
+            and agent.running
+
+        )
+
+        collectors = {
+
+            "process": False,
+
+            "file": False,
+
+            "network": False,
+
+            "registry": False,
+
+        }
+
+        if agent is not None:
+
+            threads = dict(
+
+                getattr(agent, "collector_threads", {}) or {}
+
+            )
+
+            for name, thread in threads.items():
+
+                if name in collectors:
+
+                    collectors[name] = bool(
+
+                        thread is not None
+
+                        and thread.is_alive()
+
+                    )
+
+        healthy_count = sum(collectors.values())
+
+        all_healthy = (
+
+            agent_running
+
+            and healthy_count == 4
+
+        )
+
+        runtime_counts = (
+
+            snapshot.get("runtime_counts") or {}
+
+        )
+
+        recent = (
+
+            snapshot.get("recent") or {}
+
+        )
+
+        return {
+
+            **snapshot,
+
+            "status": (
+
+                "ACTIVE"
+
+                if all_healthy
+
+                else "DEGRADED"
+
+                if agent_running
+
+                else "OFFLINE"
+
+            ),
+
+            "running": agent_running,
+
+            "agent_running": agent_running,
+
+            "total": snapshot.get(
+
+                "total",
+
+                snapshot.get("runtime_event_count", 0),
+
+            ),
+
+            "runtime_event_count": snapshot.get(
+
+                "runtime_event_count",
+
+                snapshot.get("total", 0),
+
+            ),
+
+            "runtime_counts": runtime_counts,
+
+            "recent": recent,
+
+            "collectors": collectors,
+
+            "healthy_collector_count": healthy_count,
+
+            "expected_collector_count": 4,
+
+            "all_collectors_healthy": all_healthy,
+
+            "collection_mode": "CONTINUOUS",
+
+            "simulation_mode": True,
+
+            "real_response_execution": False,
+
+        }
+
+    except Exception:
+
+        logger.exception("Live telemetry endpoint failed")
+
+        raise HTTPException(
+
+            status_code=500,
+
+            detail="Unable to retrieve live telemetry.",
+
+        )
+
+# ================================================================
+
+# DETECTION EVENT ENRICHMENT HELPERS
+
+# ================================================================
+
+def _safe_json_dict(value):
+
+    """
+
+    Convert a JSON database value into a dictionary.
+
+    This helper is intentionally defensive because historical
+
+    endpoint records may contain NULL, malformed JSON, or already
+
+    decoded dictionaries.
+
+    """
+
+    if isinstance(value, dict):
+
+        return value
+
+    if not value:
+
+        return {}
+
+    try:
+
+        parsed = json.loads(value)
+
+        if isinstance(parsed, dict):
+
+            return parsed
+
+    except (
+
+        TypeError,
+
+        ValueError,
+
+        json.JSONDecodeError,
+
+    ):
+
+        pass
+
+    return {}
+
+def _get_endpoint_database_path() -> Path:
+
+    """
+
+    Resolve the existing Sentinel-X endpoint SQLite database.
+
+    api/main.py
+
+        -> project root
+
+        -> data/database/sentinel_endpoint.db
+
+    """
+
+    return (
+
+        Path(__file__)
+
+        .resolve()
+
+        .parents[1]
+
+        / "data"
+
+        / "database"
+
+        / "sentinel_endpoint.db"
+
+    )
+
+def _load_event_context_by_event_ids(
+
+    event_ids,
+
+):
+
+    """
+
+    Read already-persisted endpoint events for the requested
+
+    detection event IDs.
+
+    IMPORTANT:
+
+    - Read-only SQLite connection.
+
+    - Does not run collectors.
+
+    - Does not run models.
+
+    - Does not create detections.
+
+    - Does not modify incidents.
+
+    """
+
+    clean_event_ids = [
+
+        str(event_id)
+
+        for event_id in event_ids
+
+        if event_id
+
+    ]
+
+    if not clean_event_ids:
+
+        return {}
+
+    database_path = (
+
+        _get_endpoint_database_path()
+
+    )
+
+    if not database_path.exists():
+
+        logger.warning(
+
+            "Endpoint database not found for "
+
+            "detection enrichment | Path=%s",
+
+            database_path,
+
+        )
+
+        return {}
+
+    placeholders = ",".join(
+
+        "?"
+
+        for _ in clean_event_ids
+
+    )
+
+    query = f"""
+
+        SELECT
+
+            event_id,
+
+            timestamp,
+
+            device_id,
+
+            event_type,
+
+            severity,
+
+            source,
+
+            process_data,
+
+            file_data,
+
+            network_data,
+
+            registry_data,
+
+            metadata
+
+        FROM events
+
+        WHERE event_id IN ({placeholders})
+
+    """
+
+    connection = None
+
+    try:
+
+        connection = sqlite3.connect(
+
+            database_path.as_uri()
+
+            + "?mode=ro",
+
+            uri=True,
+
+        )
+
+        connection.row_factory = (
+
+            sqlite3.Row
+
+        )
+
+        rows = connection.execute(
+
+            query,
+
+            clean_event_ids,
+
+        ).fetchall()
+
+        result = {}
+
+        for row in rows:
+
+            result[
+
+                str(row["event_id"])
+
+            ] = dict(row)
+
+        return result
+
+    except Exception:
+
+        logger.exception(
+
+            "Unable to enrich detections "
+
+            "with endpoint event evidence"
+
+        )
+
+        return {}
+
+    finally:
+
+        if connection is not None:
+
+            connection.close()
+
+def _build_detection_evidence(
+
+    event_record,
+
+):
+
+    """
+
+    Convert a persisted endpoint event into a small,
+
+    frontend-safe evidence object.
+
+    This does NOT assign an attack family.
+
+    """
+
+    if not event_record:
+
+        return {
+
+            "event_found": False,
+
+        }
+
+    process_data = _safe_json_dict(
+
+        event_record.get(
+
+            "process_data"
+
+        )
+
+    )
+
+    file_data = _safe_json_dict(
+
+        event_record.get(
+
+            "file_data"
+
+        )
+
+    )
+
+    network_data = _safe_json_dict(
+
+        event_record.get(
+
+            "network_data"
+
+        )
+
+    )
+
+    registry_data = _safe_json_dict(
+
+        event_record.get(
+
+            "registry_data"
+
+        )
+
+    )
+
+    metadata = _safe_json_dict(
+
+        event_record.get(
+
+            "metadata"
+
+        )
+
+    )
+
+    process_name = (
+
+        process_data.get("name")
+
+        or process_data.get(
+
+            "process_name"
+
+        )
+
+    )
+
+    parent_process_name = (
+
+        process_data.get(
+
+            "parent_name"
+
+        )
+
+        or process_data.get(
+
+            "parent_process_name"
+
+        )
+
+    )
+
+    # ------------------------------------------------------------
+
+    # PROCESS / MODEL EVIDENCE
+
+    # ------------------------------------------------------------
+
+    process_evidence = {
+
+        "pid":
+
+            process_data.get("pid"),
+
+        "ppid":
+
+            process_data.get("ppid"),
+
+        "process_name":
+
+            process_name,
+
+        "parent_process_name":
+
+            parent_process_name,
+
+        "create_time":
+
+            process_data.get(
+
+                "create_time"
+
+            ),
+
+        "cpu_percent":
+
+            process_data.get(
+
+                "cpu_percent"
+
+            ),
+
+        "memory_percent":
+
+            process_data.get(
+
+                "memory_percent"
+
+            ),
+
+        "rss_mb":
+
+            process_data.get(
+
+                "rss_mb"
+
+            ),
+
+        "num_threads":
+
+            process_data.get(
+
+                "num_threads"
+
+            ),
+
+        "num_handles":
+
+            process_data.get(
+
+                "num_handles"
+
+            ),
+
+        "fusion_version":
+
+            process_data.get(
+
+                "fusion_version"
+
+            ),
+
+        "fusion_score":
+
+            process_data.get(
+
+                "fusion_score"
+
+            ),
+
+        "fusion_severity":
+
+            process_data.get(
+
+                "fusion_severity"
+
+            ),
+
+        "fusion_confidence":
+
+            process_data.get(
+
+                "fusion_confidence"
+
+            ),
+
+        "fusion_reasons":
+
+            process_data.get(
+
+                "fusion_reasons"
+
+            ),
+
+        "ai_consensus_score":
+
+            process_data.get(
+
+                "ai_consensus_score"
+
+            ),
+
+        "ai_consensus":
+
+            process_data.get(
+
+                "ai_consensus"
+
+            ),
+
+        "isolation_forest":
+
+            process_data.get(
+
+                "isolation_forest"
+
+            ),
+
+        "autoencoder":
+
+            process_data.get(
+
+                "autoencoder"
+
+            ),
+
+        "ai_behavior_context":
+
+            process_data.get(
+
+                "ai_behavior_context"
+
+            ),
+
+    }
+
+    # ------------------------------------------------------------
+
+    # FUSION / METADATA SCORES
+
+    # ------------------------------------------------------------
+
+    model_scores = {
+
+        "rule_score":
+
+            metadata.get(
+
+                "rule_score"
+
+            ),
+
+        "statistical_score":
+
+            metadata.get(
+
+                "statistical_score"
+
+            ),
+
+        "isolation_forest_score":
+
+            metadata.get(
+
+                "isolation_forest_score"
+
+            ),
+
+        "autoencoder_score":
+
+            metadata.get(
+
+                "autoencoder_score"
+
+            ),
+
+        "ai_consensus_score":
+
+            metadata.get(
+
+                "ai_consensus_score"
+
+            ),
+
+        "ai_agreement":
+
+            metadata.get(
+
+                "ai_agreement"
+
+            ),
+
+        "ai_disagreement":
+
+            metadata.get(
+
+                "ai_disagreement"
+
+            ),
+
+        "fusion_score":
+
+            metadata.get(
+
+                "fusion_score"
+
+            ),
+
+        "evidence_confidence":
+
+            metadata.get(
+
+                "evidence_confidence"
+
+            ),
+
+        "critical_allowed":
+
+            metadata.get(
+
+                "critical_allowed"
+
+            ),
+
+        "feature_record_id":
+
+            metadata.get(
+
+                "feature_record_id"
+
+            ),
+
+        "event_category":
+
+            metadata.get(
+
+                "event_category"
+
+            ),
+
+    }
+
+    # ------------------------------------------------------------
+
+    # OTHER TELEMETRY
+
+    #
+
+    # These fields remain empty for a process-only fusion event
+
+    # unless the persisted event actually contains that modality.
+
+    # ------------------------------------------------------------
+
+    return {
+
+        "event_found": True,
+
+        "event": {
+
+            "timestamp":
+
+                event_record.get(
+
+                    "timestamp"
+
+                ),
+
+            "device_id":
+
+                event_record.get(
+
+                    "device_id"
+
+                ),
+
+            "event_type":
+
+                event_record.get(
+
+                    "event_type"
+
+                ),
+
+            "severity":
+
+                event_record.get(
+
+                    "severity"
+
+                ),
+
+            "source":
+
+                event_record.get(
+
+                    "source"
+
+                ),
+
+        },
+
+        "process":
+
+            process_evidence,
+
+        "model_scores":
+
+            model_scores,
+
+        "file":
+
+            file_data,
+
+        "network":
+
+            network_data,
+
+        "registry":
+
+            registry_data,
+
+    }
+
+# ================================================================
+
+# RECENT SECURITY DETECTIONS
+
+# ================================================================
+
+@app.get("/api/v1/telemetry/detections")
+def get_live_detections(limit: int = 50):
+    """Return recent persisted detections with read-only event evidence."""
+    limit = max(1, min(limit, 100))
+
+    try:
+        summary = get_endpoint_database_summary(recent_limit=limit) or {}
+        records = summary.get("detections") or []
+        if not isinstance(records, list):
+            records = []
+
+        event_ids = [
+            record.get("event_id")
+            for record in records
+            if isinstance(record, dict)
+            and record.get("detected") is not False
+            and record.get("event_id")
+        ]
+        event_context = _load_event_context_by_event_ids(event_ids)
+        detections = []
+
+        for record in records:
+            if not isinstance(record, dict) or record.get("detected") is False:
+                continue
+
+            event_id = record.get("event_id")
+            persisted_event = event_context.get(str(event_id)) if event_id else None
+            evidence = _build_detection_evidence(persisted_event)
+            event_fields = evidence.get("event") or {}
+
+            process = evidence.get("process") or {}
+            network = evidence.get("network") or {}
+
+            threat_type = record.get("threat_type")
+            event_type = event_fields.get("event_type")
+
+            # Network alerts can carry their process identity
+            # inside network_data rather than process_data.
+            is_network_alert = (
+                event_type == "network_behavior_alert"
+                and record.get("engine") == "network_behavior"
+            )
+
+            process_name = (
+                process.get("process_name")
+                or (
+                    network.get("process_name")
+                    if is_network_alert
+                    else None
+                )
+            )
+
+            pid = (
+                process.get("pid")
+                if process.get("pid") is not None
+                else (
+                    network.get("pid")
+                    if is_network_alert
+                    else None
+                )
+            )
+
+            # ============================================================
+            # EVIDENCE-GROUNDED DISPLAY TITLE
+            # ============================================================
+
+            if is_network_alert:
+
+                category = str(
+                    threat_type or "NETWORK_BEHAVIOR"
+                ).replace("_", " ").title()
+
+                if process_name:
+                    display_title = f"{category} — {process_name}"
+                else:
+                    display_title = category
+
+            elif process_name and event_type == "process_fusion_detection":
+
+                display_title = f"Behavioral AI alert — {process_name}"
+
+            elif process_name:
+
+                display_title = f"Process alert — {process_name}"
+
+            else:
+
+                display_title = str(
+                    threat_type or "Security detection"
+                ).replace("_", " ")
+
+            detections.append({
+                # Preserve all previous frontend response keys.
+                "detection_id": record.get("detection_id", record.get("id")),
+                "event_id": event_id,
+                "timestamp": (
+                    record.get("timestamp")
+                    or record.get("detected_at")
+                    or record.get("created_at")
+                    or event_fields.get("timestamp")
+                ),
+                "source": (
+                    record.get("source")
+                    or record.get("event_type")
+                    or record.get("category")
+                    or event_fields.get("source")
+                ),
+                "engine": record.get("engine"),
+                "threat_type": threat_type,
+                "severity": record.get("severity"),
+                "confidence": record.get("confidence"),
+                "risk_score": record.get("risk_score"),
+                "incident_id": record.get("incident_id"),
+                # Event-linked explanation fields.
+                "display_title": display_title,
+                "detection_reason": record.get("reason"),
+                "event_type": event_type,
+                "device_id": event_fields.get("device_id"),
+                "process_name": process_name,
+                "pid": pid,
+                "ppid": process.get("ppid"),
+                "parent_process_name": process.get("parent_process_name"),
+                "process_evidence": process,
+                "model_scores": evidence.get("model_scores") or {},
+                "file_evidence": evidence.get("file") or {},
+                "network_evidence": evidence.get("network") or {},
+                "registry_evidence": evidence.get("registry") or {},
+                "event_evidence_available": bool(evidence.get("event_found")),
+            })
+
+        return {
+            "status": "ACTIVE",
+            "timestamp": now_iso(),
+            "count": len(detections),
+            "total_stored_detections": summary.get("detection_count", 0),
+            "detections": detections,
+            "simulation_mode": True,
+            "real_response_execution": False,
+        }
+
+    except Exception:
+        logger.exception("Failed to retrieve recent detections")
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to retrieve security detections.",
+        )
+
+# ================================================================
+
+# ENDPOINT OVERVIEW
+
+# ================================================================
+
+@app.get("/api/v1/endpoint/overview")
+
+def endpoint_overview(recent_limit: int = 25):
+
+    recent_limit = max(
+
+        1,
+
+        min(recent_limit, 100),
+
+    )
+
+    try:
+
+        endpoint_data = (
+
+            get_endpoint_database_summary(
+
+                recent_limit=recent_limit
+
+            )
+
+            or {}
+
+        )
+
+        detected_incidents = (
+
+            detected_incident_store.get_incidents()
+
+            or []
+
+        )
+
+        if not isinstance(detected_incidents, list):
+
+            detected_incidents = []
+
+        promoted_incident_count = 0
+
+        for incident in detected_incidents:
+
+            if not isinstance(incident, dict):
+
+                continue
+
+            incident_id = incident.get("incident_id")
+
+            if not incident_id:
+
+                continue
+
+            try:
+
+                soc_case = workflow.recover_case(
+
+                    incident_id
+
+                )
+
+            except Exception:
+
+                soc_case = None
+
+            if soc_case is not None:
+
+                promoted_incident_count += 1
+
+        incident_count = len(detected_incidents)
+
+        awaiting_investigation_count = max(
+
+            0,
+
+            incident_count - promoted_incident_count,
+
+        )
+
+        collector_states = {
+
+            "process": "OFFLINE",
+
+            "file": "OFFLINE",
+
+            "network": "OFFLINE",
+
+            "registry": "OFFLINE",
+
+        }
+
+        if sentinel_agent is not None:
+
+            for collector_name, thread in (
+
+                sentinel_agent.collector_threads.items()
+
+            ):
+
+                collector_states[collector_name] = (
+
+                    "ACTIVE"
+
+                    if thread.is_alive()
+
+                    else "OFFLINE"
+
+                )
+
+        return {
+
+            "status": "HEALTHY",
+
+            "timestamp": now_iso(),
+
+            "data_source": "ENDPOINT_SQLITE_DATABASE",
+
+            "simulation_mode": True,
+
+            "real_response_execution": False,
+
+            "collector_runtime_tracking": True,
+
+            "live_collection_started_by_api": bool(
+
+                sentinel_agent is not None
+
+                and sentinel_agent.running
+
+            ),
+
+            "collectors": collector_states,
+
+            "note": (
+
+                "Collectors are managed continuously "
+
+                "by the SENTINEL-X Endpoint Agent."
+
+            ),
+
+            "event_count": int(
+
+                endpoint_data.get("event_count", 0) or 0
+
+            ),
+
+            "detection_count": int(
+
+                endpoint_data.get("detection_count", 0) or 0
+
+            ),
+
+            "incident_count": incident_count,
+
+            "promoted_incident_count":
+
+                promoted_incident_count,
+
+            "awaiting_investigation_count":
+
+                awaiting_investigation_count,
+
+            "event_severity_counts":
+
+                endpoint_data.get(
+
+                    "event_severity_counts", {}
+
+                ) or {},
+
+            "detection_severity_counts":
+
+                endpoint_data.get(
+
+                    "detection_severity_counts", {}
+
+                ) or {},
+
+            "detection_engine_counts":
+
+                endpoint_data.get(
+
+                    "detection_engine_counts", {}
+
+                ) or {},
+
+            "detection_type_counts":
+
+                endpoint_data.get(
+
+                    "detection_type_counts", {}
+
+                ) or {},
+
+            "event_category_counts":
+
+                endpoint_data.get(
+
+                    "event_category_counts", {}
+
+                ) or {},
+
+            "events":
+
+                endpoint_data.get("events", []) or [],
+
+            "detections":
+
+                endpoint_data.get("detections", []) or [],
+
+            "recent_limit": recent_limit,
+
+        }
+
+    except Exception as error:
+
+        raise HTTPException(
+
+            status_code=500,
+
+            detail=f"Failed to load endpoint overview: {error}",
+
+        )
+
+# ================================================================
+
+# DASHBOARD SUMMARY
+
+# ================================================================
+
+@app.get("/api/v1/dashboard/summary")
+
+def dashboard_summary():
+
+    try:
+
+        cases = (
+
+            workflow.list_cases(limit=1000)
+
+            or []
+
+        )
+
+        tickets = (
+
+            ticket_store.list_tickets(limit=1000)
+
+            or []
+
+        )
+
+        actions = (
+
+            workflow.action_store.list_actions(limit=1000)
+
+            or []
+
+        )
+
+        endpoint_data = (
+
+            get_endpoint_database_summary(recent_limit=1)
+
+            or {}
+
+        )
+
+        detected_incidents = (
+
+            detected_incident_store.get_incidents()
+
+            or []
+
+        )
+
+        if not isinstance(detected_incidents, list):
+
+            detected_incidents = []
+
+        def get_value(item, key, default=None):
+
+            if isinstance(item, dict):
+
+                return item.get(key, default)
+
+            return getattr(item, key, default)
+
+        soc_case_ids = set()
+
+        for case in cases:
+
+            case_incident_id = get_value(
+
+                case,
+
+                "incident_id",
+
+            )
+
+            if case_incident_id:
+
+                soc_case_ids.add(
+
+                    str(case_incident_id)
+
+                )
+
+        detected_incident_count = len(
+
+            detected_incidents
+
+        )
+
+        promoted_incident_count = 0
+
+        for incident in detected_incidents:
+
+            detected_id = get_value(
+
+                incident,
+
+                "incident_id",
+
+            )
+
+            if (
+
+                detected_id
+
+                and str(detected_id) in soc_case_ids
+
+            ):
+
+                promoted_incident_count += 1
+
+        awaiting_investigation_count = max(
+
+            0,
+
+            detected_incident_count
+
+            - promoted_incident_count,
+
+        )
+
+        incident_severity_counts = {
+
+            "CRITICAL": 0,
+
+            "HIGH": 0,
+
+            "MEDIUM": 0,
+
+            "LOW": 0,
+
+            "INFO": 0,
+
+            "UNKNOWN": 0,
+
+        }
+
+        for incident in detected_incidents:
+
+            severity = str(
+
+                get_value(
+
+                    incident,
+
+                    "severity",
+
+                    "UNKNOWN",
+
+                )
+
+                or "UNKNOWN"
+
+            ).upper()
+
+            if severity not in incident_severity_counts:
+
+                severity = "UNKNOWN"
+
+            incident_severity_counts[severity] += 1
+
+        priority_counts = {
+
+            "P1": 0,
+
+            "P2": 0,
+
+            "P3": 0,
+
+            "P4": 0,
+
+        }
+
+        for ticket in tickets:
+
+            priority = str(
+
+                get_value(
+
+                    ticket,
+
+                    "priority",
+
+                    "P4",
+
+                )
+
+                or "P4"
+
+            ).upper()
+
+            if priority not in priority_counts:
+
+                priority = "P4"
+
+            priority_counts[priority] += 1
+
+        pending_approvals = 0
+
+        approved_tickets = 0
+
+        rejected_tickets = 0
+
+        open_tickets = 0
+
+        for ticket in tickets:
+
+            approval_status = str(
+
+                get_value(
+
+                    ticket,
+
+                    "approval_status",
+
+                    "",
+
+                )
+
+                or ""
+
+            ).upper()
+
+            ticket_status = str(
+
+                get_value(
+
+                    ticket,
+
+                    "status",
+
+                    "OPEN",
+
+                )
+
+                or "OPEN"
+
+            ).upper()
+
+            if approval_status == "PENDING":
+
+                pending_approvals += 1
+
+            elif approval_status == "APPROVED":
+
+                approved_tickets += 1
+
+            elif approval_status == "REJECTED":
+
+                rejected_tickets += 1
+
+            if ticket_status not in {
+
+                "CLOSED",
+
+                "RESOLVED",
+
+                "REJECTED",
+
+            }:
+
+                open_tickets += 1
+
+        pending_cases = 0
+
+        critical_cases = 0
+
+        high_cases = 0
+
+        medium_cases = 0
+
+        low_cases = 0
+
+        info_cases = 0
+
+        mitigation_status_counts = {
+
+            "VERIFIED": 0,
+
+            "PARTIAL": 0,
+
+            "FAILED": 0,
+
+            "NOT_VERIFIED": 0,
+
+            "UNKNOWN": 0,
+
+        }
+
+        for case in cases:
+
+            case_status = str(
+
+                get_value(
+
+                    case,
+
+                    "case_status",
+
+                    get_value(case, "status", ""),
+
+                )
+
+                or ""
+
+            ).upper()
+
+            if (
+
+                case_status
+
+                == "AWAITING_ANALYST_REVIEW"
+
+            ):
+
+                pending_cases += 1
+
+            risk_level = str(
+
+                get_value(
+
+                    case,
+
+                    "risk_level",
+
+                    "INFO",
+
+                )
+
+                or "INFO"
+
+            ).upper()
+
+            if risk_level == "CRITICAL":
+
+                critical_cases += 1
+
+            elif risk_level == "HIGH":
+
+                high_cases += 1
+
+            elif risk_level == "MEDIUM":
+
+                medium_cases += 1
+
+            elif risk_level == "LOW":
+
+                low_cases += 1
+
+            else:
+
+                info_cases += 1
+
+            case_incident_id = get_value(
+
+                case,
+
+                "incident_id",
+
+            )
+
+            mitigation_verification = {}
+
+            if case_incident_id:
+
+                try:
+
+                    mitigation_verification = (
+
+                        workflow.get_mitigation_verification(
+
+                            case_incident_id
+
+                        )
+
+                        or {}
+
+                    )
+
+                except Exception:
+
+                    mitigation_verification = {}
+
+            mitigation_status = str(
+
+                mitigation_verification.get(
+
+                    "status",
+
+                    "NOT_VERIFIED",
+
+                )
+
+                or "NOT_VERIFIED"
+
+            ).upper()
+
+            if mitigation_status in {
+
+                "VERIFIED",
+
+                "SIMULATION_VERIFIED",
+
+                "MITIGATION_VERIFIED",
+
+            }:
+
+                mitigation_key = "VERIFIED"
+
+            elif mitigation_status in {
+
+                "PARTIAL",
+
+                "SIMULATION_PARTIAL",
+
+                "PARTIALLY_VERIFIED",
+
+                "PARTIAL_SUCCESS",
+
+            }:
+
+                mitigation_key = "PARTIAL"
+
+            elif mitigation_status in {
+
+                "FAILED",
+
+                "SIMULATION_NO_IMPROVEMENT",
+
+                "MITIGATION_FAILED",
+
+            }:
+
+                mitigation_key = "FAILED"
+
+            elif mitigation_status in {
+
+                "NOT_VERIFIED",
+
+                "PENDING",
+
+                "NOT_RUN",
+
+            }:
+
+                mitigation_key = "NOT_VERIFIED"
+
+            else:
+
+                mitigation_key = "UNKNOWN"
+
+            mitigation_status_counts[
+
+                mitigation_key
+
+            ] += 1
+
+        ready_actions = 0
+
+        pending_actions = 0
+
+        successful_actions = 0
+
+        failed_actions = 0
+
+        for action in actions:
+
+            execution_status = str(
+
+                get_value(
+
+                    action,
+
+                    "execution_status",
+
+                    "",
+
+                )
+
+                or ""
+
+            ).upper()
+
+            approval_status = str(
+
+                get_value(
+
+                    action,
+
+                    "approval_status",
+
+                    "",
+
+                )
+
+                or ""
+
+            ).upper()
+
+            if execution_status == "READY":
+
+                ready_actions += 1
+
+            elif execution_status == "SUCCESS":
+
+                successful_actions += 1
+
+            elif execution_status == "FAILED":
+
+                failed_actions += 1
+
+            if approval_status == "PENDING":
+
+                pending_actions += 1
+
+        event_count = int(
+
+            endpoint_data.get("event_count", 0) or 0
+
+        )
+
+        detection_count = int(
+
+            endpoint_data.get("detection_count", 0) or 0
+
+        )
+
+        event_category_counts = (
+
+            endpoint_data.get(
+
+                "event_category_counts", {}
+
+            ) or {}
+
+        )
+
+        event_severity_counts = (
+
+            endpoint_data.get(
+
+                "event_severity_counts", {}
+
+            ) or {}
+
+        )
+
+        detection_severity_counts = (
+
+            endpoint_data.get(
+
+                "detection_severity_counts", {}
+
+            ) or {}
+
+        )
+
+        detection_engine_counts = (
+
+            endpoint_data.get(
+
+                "detection_engine_counts", {}
+
+            ) or {}
+
+        )
+
+        detection_type_counts = (
+
+            endpoint_data.get(
+
+                "detection_type_counts", {}
+
+            ) or {}
+
+        )
+
+        return {
+
+            "timestamp": now_iso(),
+
+            "data_source": "ENDPOINT_SQLITE_DATABASE",
+
+            "event_count": event_count,
+
+            "detection_count": detection_count,
+
+            "event_category_counts":
+
+                event_category_counts,
+
+            "event_severity_counts":
+
+                event_severity_counts,
+
+            "detection_severity_counts":
+
+                detection_severity_counts,
+
+            "detection_engine_counts":
+
+                detection_engine_counts,
+
+            "detection_type_counts":
+
+                detection_type_counts,
+
+            "detected_incidents":
+
+                detected_incident_count,
+
+            "total_detected_incidents":
+
+                detected_incident_count,
+
+            "awaiting_investigation":
+
+                awaiting_investigation_count,
+
+            "awaiting_investigation_count":
+
+                awaiting_investigation_count,
+
+            "promoted_to_soc":
+
+                promoted_incident_count,
+
+            "promoted_incident_count":
+
+                promoted_incident_count,
+
+            "incident_severity_counts":
+
+                incident_severity_counts,
+
+            "persistent_soc_cases": len(cases),
+
+            "pending_soc_cases": pending_cases,
+
+            "critical_cases": critical_cases,
+
+            "high_cases": high_cases,
+
+            "medium_cases": medium_cases,
+
+            "low_cases": low_cases,
+
+            "info_cases": info_cases,
+
+            "total_tickets": len(tickets),
+
+            "open_tickets": open_tickets,
+
+            "pending_approvals": pending_approvals,
+
+            "approved_tickets": approved_tickets,
+
+            "rejected_tickets": rejected_tickets,
+
+            "priority_counts": priority_counts,
+
+            "total_response_actions": len(actions),
+
+            "pending_response_actions":
+
+                pending_actions,
+
+            "ready_response_actions":
+
+                ready_actions,
+
+            "successful_response_actions":
+
+                successful_actions,
+
+            "failed_response_actions":
+
+                failed_actions,
+
+            "mitigation_status_counts":
+
+                mitigation_status_counts,
+
+            "verified_mitigations":
+
+                mitigation_status_counts["VERIFIED"],
+
+            "partial_mitigations":
+
+                mitigation_status_counts["PARTIAL"],
+
+            "failed_mitigations":
+
+                mitigation_status_counts["FAILED"],
+
+            "not_verified_mitigations":
+
+                mitigation_status_counts["NOT_VERIFIED"],
+
+            "simulation_mode": True,
+
+            "persistent_recovery": True,
+
+            "real_response_execution": False,
+
+            "collector_runtime_tracking": True,
+
+            "live_collection_started_by_api": bool(
+
+                sentinel_agent is not None
+
+                and sentinel_agent.running
+
+            ),
+
+        }
+
+    except HTTPException:
+
+        raise
+
+    except Exception as error:
+
+        raise HTTPException(
+
+            status_code=500,
+
+            detail=f"Failed to load dashboard summary: {error}",
+
+        )
+
+# ================================================================
+
+# CREATE SOC CASE
+
+# ================================================================
+
+@app.post("/api/v1/cases")
+
+def create_case(request: CreateCaseRequest):
+
+    incident_id = request.incident_id.strip()
+
+    if not incident_id:
+
+        raise HTTPException(
+
+            status_code=400,
+
+            detail="incident_id cannot be empty.",
+
+        )
+
+    existing = workflow.recover_case(
+
+        incident_id
+
+    )
+
+    if existing is not None:
+
+        raise HTTPException(
+
+            status_code=409,
+
+            detail=(
+
+                f"SOC case already exists for "
+
+                f"incident {incident_id}."
+
+            ),
+
+        )
+
+    try:
+
+        case = workflow.create_case(
+
+            incident_id=incident_id,
+
+            intelligence=request.intelligence,
+
+        )
+
+        return {
+
+            "success": True,
+
+            "incident_id": incident_id,
+
+            "status": case.get("status"),
+
+            "ticket": serialize_value(
+
+                case.get("ticket_data")
+
+            ),
+
+            "response_action_count":
+
+                case.get("response_action_count", 0),
+
+            "digital_twin_decision":
+
+                serialize_value(case.get("decision")),
+
+            "explanation":
+
+                serialize_value(case.get("explanation")),
+
+            "response_actions":
+
+                serialize_value(case.get("response_actions")),
+
+            "evidence":
+
+                serialize_value(case.get("evidence", {})),
+
+            "timeline":
+
+                serialize_value(case.get("timeline", [])),
+
+            "persistence":
+
+                serialize_value(case.get("persistence")),
+
+            "simulation_mode": True,
+
+            "persistent_recovery": True,
+
+            "real_response_executed": False,
+
+        }
+
+    except HTTPException:
+
+        raise
+
+    except ValueError as error:
+
+        raise HTTPException(
+
+            status_code=409,
+
+            detail=str(error),
+
+        )
+
+    except Exception as error:
+
+        raise HTTPException(
+
+            status_code=500,
+
+            detail=f"Failed to create SOC case: {error}",
+
+        )
+
+# ================================================================
+
+# LIST SOC CASES
+
+# ================================================================
+
+@app.get("/api/v1/cases")
+
+def list_cases(limit: int = 100):
+
+    limit = max(1, min(limit, 1000))
+
+    cases = workflow.list_cases(
+
+        limit=limit
+
+    )
+
+    return {
+
+        "count": len(cases),
+
+        "persistent": True,
+
+        "cases": serialize_value(cases),
+
+    }
+
+# ================================================================
+
+# LIST DETECTED INCIDENTS
+
+# ================================================================
+
+@app.get("/api/v1/detected-incidents")
+
+def list_detected_incidents(limit: int = 100):
+
+    limit = max(1, min(limit, 1000))
+
+    try:
+
+        incidents = (
+
+            detected_incident_store.get_incidents()
+
+            or []
+
+        )
+
+        incidents = incidents[:limit]
+
+        enriched_incidents = [
+
+            enrich_detected_incident(incident)
+
+            for incident in incidents
+
+        ]
+
+        return {
+
+            "count": len(enriched_incidents),
+
+            "source": "CORRELATION_INCIDENT_STORE",
+
+            "persistent": True,
+
+            "incidents": serialize_value(
+
+                enriched_incidents
+
+            ),
+
+            "simulation_mode": True,
+
+            "real_response_executed": False,
+
+        }
+
+    except Exception as error:
+
+        raise HTTPException(
+
+            status_code=500,
+
+            detail=(
+
+                "Failed to retrieve detected "
+
+                f"incidents: {error}"
+
+            ),
+
+        )
+
+# ================================================================
+
+# GET DETECTED INCIDENT
+
+# ================================================================
+
+@app.get("/api/v1/detected-incidents/{incident_id}")
+
+def get_detected_incident(incident_id: str):
+
+    try:
+
+        incident = (
+
+            detected_incident_store.get_incident(
+
+                incident_id
+
+            )
+
+        )
+
+        if incident is None:
+
+            raise HTTPException(
+
+                status_code=404,
+
+                detail=(
+
+                    f"Detected incident {incident_id} "
+
+                    "was not found."
+
+                ),
+
+            )
+
+        return enrich_detected_incident(
+
+            incident
+
+        )
+
+    except HTTPException:
+
+        raise
+
+    except Exception as error:
+
+        raise HTTPException(
+
+            status_code=500,
+
+            detail=(
+
+                "Failed to retrieve detected "
+
+                f"incident: {error}"
+
+            ),
+
+        )
+
+# ================================================================
+
+# INVESTIGATE DETECTED INCIDENT
+
+# ================================================================
+
+@app.post(
+
+    "/api/v1/detected-incidents/{incident_id}/investigate"
+
+)
+
+def investigate_detected_incident(
+
+    incident_id: str
+
+):
+
+    incident_id = incident_id.strip()
+
+    if not incident_id:
+
+        raise HTTPException(
+
+            status_code=400,
+
+            detail="incident_id cannot be empty.",
+
+        )
+
+    try:
+
+        incident = (
+
+            detected_incident_store.get_incident(
+
+                incident_id
+
+            )
+
+        )
+
+    except Exception as error:
+
+        raise HTTPException(
+
+            status_code=500,
+
+            detail=(
+
+                "Failed to load detected "
+
+                f"incident: {error}"
+
+            ),
+
+        )
+
+    if incident is None:
+
+        raise HTTPException(
+
+            status_code=404,
+
+            detail=(
+
+                f"Detected incident {incident_id} "
+
+                "was not found."
+
+            ),
+
+        )
+
+    existing = workflow.recover_case(
+
+        incident_id
+
+    )
+
+    if existing is not None:
+
+        return {
+
+            "success": True,
+
+            "already_in_soc": True,
+
+            "incident_id": incident_id,
+
+            "status": existing.get("status"),
+
+            "ticket": serialize_value(
+
+                existing.get("ticket_data", {})
+
+            ),
+
+            "response_action_count":
+
+                existing.get("response_action_count", 0),
+
+            "response_actions": serialize_value(
+
+                existing.get("response_actions", [])
+
+            ),
+
+            "digital_twin_decision": serialize_value(
+
+                existing.get("decision", {})
+
+            ),
+
+            "simulation_mode": True,
+
+            "real_response_executed": False,
+
+        }
+
+    try:
+
+        intelligence = (
+
+            multi_agent_pipeline.process_incident(
+
+                incident
+
+            )
+
+        )
+
+        if not isinstance(intelligence, dict):
+
+            raise ValueError(
+
+                "Multi-agent pipeline returned "
+
+                "an invalid intelligence result."
+
+            )
+
+        intelligence["source_incident"] = incident
+
+        coordinated_analysis = (
+
+            intelligence.get(
+
+                "coordinated_analysis"
+
+            )
+
+        )
+
+        if not isinstance(
+
+            coordinated_analysis,
+
+            dict,
+
+        ):
+
+            raise ValueError(
+
+                "Multi-agent pipeline did not "
+
+                "produce coordinated_analysis."
+
+            )
+
+        pipeline_status = str(
+
+            intelligence.get("status", "UNKNOWN")
+
+        ).upper()
+
+        if pipeline_status == "INCOMPLETE":
+
+            raise ValueError(
+
+                "Multi-agent investigation "
+
+                "completed with an INCOMPLETE status."
+
+            )
+
+        case = workflow.create_case(
+
+            incident_id=incident_id,
+
+            intelligence=intelligence,
+
+        )
+
+        return {
+
+            "success": True,
+
+            "already_in_soc": False,
+
+            "incident_id": incident_id,
+
+            "detected_incident":
+
+                serialize_value(incident),
+
+            "multi_agent": {
+
+                "status":
+
+                    intelligence.get("status"),
+
+                "security_state":
+
+                    intelligence.get("security_state"),
+
+                "risk_score":
+
+                    intelligence.get("risk_score", 0),
+
+                "risk_level":
+
+                    intelligence.get("risk_level", "INFO"),
+
+                "final_decision":
+
+                    intelligence.get("final_decision", "MONITOR"),
+
+                "autonomy_level":
+
+                    intelligence.get("autonomy_level"),
+
+                "autonomy_mode":
+
+                    intelligence.get("autonomy_mode"),
+
+                "execution_enabled":
+
+                    intelligence.get(
+
+                        "execution_enabled",
+
+                        False,
+
+                    ),
+
+            },
+
+            "intelligence":
+
+                serialize_value(intelligence),
+
+            "status":
+
+                case.get("status"),
+
+            "ticket":
+
+                serialize_value(
+
+                    case.get("ticket_data", {})
+
+                ),
+
+            "response_action_count":
+
+                case.get("response_action_count", 0),
+
+            "response_actions":
+
+                serialize_value(
+
+                    case.get("response_actions", [])
+
+                ),
+
+            "digital_twin_decision":
+
+                serialize_value(
+
+                    case.get("decision", {})
+
+                ),
+
+            "explanation":
+
+                serialize_value(
+
+                    case.get("explanation", {})
+
+                ),
+
+            "persistence":
+
+                serialize_value(
+
+                    case.get("persistence", {})
+
+                ),
+
+            "simulation_mode": True,
+
+            "real_response_executed": False,
+
+        }
+
+    except HTTPException:
+
+        raise
+
+    except ValueError as error:
+
+        raise HTTPException(
+
+            status_code=422,
+
+            detail=str(error),
+
+        )
+
+    except Exception as error:
+
+        raise HTTPException(
+
+            status_code=500,
+
+            detail=(
+
+                "Failed to investigate detected "
+
+                f"incident: {error}"
+
+            ),
+
+        )
+
+# ================================================================
+
+# GET SOC CASE
+
+# ================================================================
+
+@app.get("/api/v1/cases/{incident_id}")
+
+def get_case(incident_id: str):
+
+    case = require_case(
+
+        incident_id
+
+    )
+
+    return {
+
+        "incident_id": incident_id,
+
+        "status": case.get("status"),
+
+        "ticket": serialize_value(
+
+            case.get("ticket_data")
+
+        ),
+
+        "decision": serialize_value(
+
+            case.get("decision")
+
+        ),
+
+        "explanation": serialize_value(
+
+            case.get("explanation")
+
+        ),
+
+        "response_actions": serialize_value(
+
+            case.get("response_actions")
+
+        ),
+
+        "response_action_count":
+
+            case.get("response_action_count", 0),
+
+        "evidence": serialize_value(
+
+            case.get("evidence", {})
+
+        ),
+
+        "timeline": serialize_value(
+
+            case.get("timeline", [])
+
+        ),
+
+        "recovered_from_database":
+
+            case.get("recovered_from_database", False),
+
+        "simulation_mode": True,
+
+        "real_response_executed": False,
+
+    }
+
+# ================================================================
+
+# GET MITIGATION VERIFICATION
+
+# ================================================================
+
+@app.get(
+
+    "/api/v1/cases/{incident_id}/mitigation-verification"
+
+)
+
+def get_mitigation_verification(
+
+    incident_id: str
+
+):
+
+    require_case(incident_id)
+
+    verification = (
+
+        workflow.get_mitigation_verification(
+
+            incident_id
+
+        )
+
+    )
+
+    if not verification:
+
+        return {
+
+            "incident_id": incident_id,
+
+            "status": "NOT_VERIFIED",
+
+            "verified": False,
+
+            "verification": {},
+
+            "persistent": True,
+
+            "simulation_mode": True,
+
+            "real_response_executed": False,
+
+        }
+
+    return {
+
+        "incident_id": incident_id,
+
+        "status": verification.get("status"),
+
+        "verified": True,
+
+        "verification":
+
+            serialize_value(verification),
+
+        "persistent": True,
+
+        "simulation_mode": True,
+
+        "real_response_executed": False,
+
+    }
+
+# ================================================================
+
+# RUN SIMULATED MITIGATION VERIFICATION
+
+# ================================================================
+
+@app.post(
+
+    "/api/v1/cases/{incident_id}/mitigation-verification"
+
+)
+
+def run_mitigation_verification(
+
+    incident_id: str,
+
+    request: MitigationVerificationRequest,
+
+):
+
+    require_case(incident_id)
+
+    try:
+
+        if (
+
+            request.response_result.get(
+
+                "simulation_mode",
+
+                True,
+
+            )
+
+            is not True
+
+        ):
+
+            raise ValueError(
+
+                "Only simulation-mode response results "
+
+                "can be verified through this API."
+
+            )
+
+        result = (
+
+            workflow.verify_simulated_mitigation(
+
+                incident_id=incident_id,
+
+                before_state=request.before_state,
+
+                simulated_after_state=
+
+                    request.simulated_after_state,
+
+                response_result=request.response_result,
+
+            )
+
+        )
+
+        return {
+
+            "success": result.get("success", False),
+
+            "incident_id": incident_id,
+
+            "status": result.get("status"),
+
+            "verification": serialize_value(
+
+                result.get("verification", {})
+
+            ),
+
+            "persisted":
+
+                result.get("persisted", False),
+
+            "simulation_mode": True,
+
+            "real_response_executed": False,
+
+        }
+
+    except TypeError as error:
+
+        raise HTTPException(
+
+            status_code=400,
+
+            detail=str(error),
+
+        )
+
+    except ValueError as error:
+
+        raise HTTPException(
+
+            status_code=409,
+
+            detail=str(error),
+
+        )
+
+    except Exception as error:
+
+        raise HTTPException(
+
+            status_code=500,
+
+            detail=(
+
+                "Mitigation verification failed: "
+
+                f"{error}"
+
+            ),
+
+        )
+
+# ================================================================
+
+# DIGITAL TWIN
+
+# ================================================================
+
+@app.get(
+
+    "/api/v1/cases/{incident_id}/digital-twin"
+
+)
+
+def get_digital_twin(incident_id: str):
+
+    case = require_case(incident_id)
+
+    return {
+
+        "incident_id": incident_id,
+
+        "decision": serialize_value(
+
+            case.get("decision")
+
+        ),
+
+        "explanation": serialize_value(
+
+            case.get("explanation")
+
+        ),
+
+        "recovered_from_database":
+
+            case.get(
+
+                "recovered_from_database",
+
+                False,
+
+            ),
+
+        "simulation_mode": True,
+
+        "real_endpoint_modified": False,
+
+    }
+
+# ================================================================
+
+# RESPONSE ACTIONS
+
+# ================================================================
+
+@app.get(
+
+    "/api/v1/cases/{incident_id}/responses"
+
+)
+
+def get_response_actions(incident_id: str):
+
+    require_case(incident_id)
+
+    actions = workflow.get_response_actions(
+
+        incident_id
+
+    )
+
+    return {
+
+        "incident_id": incident_id,
+
+        "count": len(actions),
+
+        "actions": serialize_value(actions),
+
+        "persistent": True,
+
+        "simulation_mode": True,
+
+        "real_response_executed": False,
+
+    }
+
+# ================================================================
+
+# INCIDENT EVIDENCE
+
+# ================================================================
+
+@app.get(
+
+    "/api/v1/cases/{incident_id}/evidence"
+
+)
+
+def get_case_evidence(incident_id: str):
+
+    require_case(incident_id)
+
+    evidence = workflow.get_evidence(
+
+        incident_id
+
+    )
+
+    return
+
+
+==========================================================================================
+FILE: api/security_runtime_router.py
+==========================================================================================
+from __future__ import annotations
+
+
+from fastapi import (
+    APIRouter,
+    HTTPException,
+)
+
+
+from api.security_runtime_service import (
+    SecurityRuntimeService,
+)
+
+
+# ================================================================
+# ROUTER
+# ================================================================
+
+router = APIRouter(
+
+    prefix="/api/v1/security",
+
+    tags=[
+        "Security Runtime"
+    ],
+)
+
+
+# ================================================================
+# SERVICE
+# ================================================================
+
+runtime_service = (
+    SecurityRuntimeService()
+)
+
+
+# ================================================================
+# SECURITY RUNTIME
+#
+# GET:
+#
+#   /api/v1/security/runtime
+#
+# This endpoint does NOT start SentinelAgent or any collectors.
+#
+# It only reads:
+#
+#   collector heartbeat persistence
+#   Temporal-v2 metadata
+#   Temporal-v2 calibration
+#   Fusion-v3 persisted results
+#
+# ================================================================
+
+@router.get(
+    "/runtime"
+)
+def get_security_runtime():
+
+    try:
+
+        return (
+            runtime_service
+            .get_runtime_status()
+        )
+
+
+    except Exception as error:
+
+        raise HTTPException(
+
+            status_code=500,
+
+            detail=(
+                "Unable to read SENTINEL-X "
+                "security runtime status: "
+                f"{error}"
+            ),
+        )
+
+==========================================================================================
+FILE: api/security_runtime_service.py
+==========================================================================================
+from __future__ import annotations
+
+import json
+
+from datetime import (
+    datetime,
+    timezone,
+)
+
+from pathlib import Path
+
+from typing import (
+    Any,
+    Dict,
+    List,
+    Optional,
+)
+
+
+# ================================================================
+# SENTINEL-X RUNTIME SOURCES
+# ================================================================
+
+from endpoint.runtime.collector_heartbeat import (
+    get_collector_heartbeats,
+)
+
+
+from ai_detection.behavior.process_fusion_v3_result_store import (
+    ProcessFusionV3ResultStore,
+)
+
+
+# ================================================================
+# PROJECT PATHS
+# ================================================================
+
+PROJECT_ROOT = (
+    Path(__file__)
+    .resolve()
+    .parents[1]
+)
+
+
+TRANSFORMER_MODEL_PATH = (
+    PROJECT_ROOT
+    / "models"
+    / "temporal"
+    / "sentinelx_process_temporal_transformer_v2.pt"
+)
+
+
+TRANSFORMER_METADATA_PATH = (
+    PROJECT_ROOT
+    / "models"
+    / "temporal"
+    / "sentinelx_process_temporal_transformer_v2_metadata.json"
+)
+
+
+TEMPORAL_CALIBRATION_PATH = (
+    PROJECT_ROOT
+    / "models"
+    / "temporal"
+    / "sentinelx_temporal_anomaly_calibration_v2.json"
+)
+
+
+TEMPORAL_SCALER_PATH = (
+    PROJECT_ROOT
+    / "models"
+    / "temporal"
+    / "process_temporal_scaler_v2.joblib"
+)
+
+
+# ================================================================
+# EXPECTED PRODUCTION CONFIGURATION
+# ================================================================
+
+PRIMARY_ENGINE = (
+    "process_threat_fusion_v3"
+)
+
+
+PRIMARY_VERSION = "v3"
+
+
+PRIMARY_MODE = (
+    "PRODUCTION_PRIMARY"
+)
+
+
+ROLLBACK_ENGINE = (
+    "process_threat_fusion_v2"
+)
+
+
+EXPECTED_TEMPORAL_MODEL_VERSION = "v2"
+
+EXPECTED_TEMPORAL_CALIBRATION_VERSION = "v2"
+
+EXPECTED_TEMPORAL_SEQUENCE_LENGTH = 8
+
+EXPECTED_TEMPORAL_FEATURE_COUNT = 26
+
+EXPECTED_TEMPORAL_EMBEDDING_DIMENSION = 64
+
+
+EXPECTED_COLLECTORS = (
+    "process",
+    "file",
+    "network",
+    "registry",
+)
+
+
+HEARTBEAT_FRESH_SECONDS = 20.0
+
+
+# ================================================================
+# HELPERS
+# ================================================================
+
+def now_iso() -> str:
+
+    return (
+        datetime
+        .now(
+            timezone.utc
+        )
+        .isoformat()
+    )
+
+
+def load_json(
+    path: Path,
+) -> Dict[str, Any]:
+
+    if not path.exists():
+
+        return {}
+
+
+    try:
+
+        with open(
+            path,
+            "r",
+            encoding="utf-8",
+        ) as file:
+
+            result = (
+                json.load(
+                    file
+                )
+            )
+
+
+        if isinstance(
+            result,
+            dict,
+        ):
+
+            return result
+
+
+    except Exception:
+
+        pass
+
+
+    return {}
+
+
+def parse_datetime(
+    value,
+) -> Optional[datetime]:
+
+    if not value:
+
+        return None
+
+
+    try:
+
+        parsed = (
+            datetime.fromisoformat(
+
+                str(
+                    value
+                ).replace(
+                    "Z",
+                    "+00:00",
+                )
+            )
+        )
+
+
+        if parsed.tzinfo is None:
+
+            parsed = (
+                parsed.replace(
+                    tzinfo=timezone.utc
+                )
+            )
+
+
+        return (
+            parsed.astimezone(
+                timezone.utc
+            )
+        )
+
+
+    except (
+        TypeError,
+        ValueError,
+    ):
+
+        return None
+
+
+def safe_float(
+    value,
+) -> Optional[float]:
+
+    try:
+
+        return float(
+            value
+        )
+
+    except (
+        TypeError,
+        ValueError,
+    ):
+
+        return None
+
+
+def safe_int(
+    value,
+    default: int = 0,
+) -> int:
+
+    try:
+
+        return int(
+            value
+        )
+
+    except (
+        TypeError,
+        ValueError,
+    ):
+
+        return default
+
+
+# ================================================================
+# SECURITY RUNTIME SERVICE
+# ================================================================
+
+class SecurityRuntimeService:
+
+    def __init__(
+        self,
+    ):
+
+        self.fusion_v3_store = (
+            ProcessFusionV3ResultStore()
+        )
+
+
+    # ============================================================
+    # COLLECTORS
+    # ============================================================
+
+    def get_collectors(
+        self,
+    ) -> Dict[str, Any]:
+
+        raw_heartbeats = (
+            get_collector_heartbeats()
+        )
+
+
+        now = (
+            datetime.now(
+                timezone.utc
+            )
+        )
+
+
+        collectors = {}
+
+
+        active_count = 0
+
+
+        for collector_name in EXPECTED_COLLECTORS:
+
+            heartbeat = (
+                raw_heartbeats.get(
+                    collector_name,
+                    {}
+                )
+            )
+
+
+            status = str(
+
+                heartbeat.get(
+                    "status",
+                    "UNKNOWN",
+                )
+
+            ).upper()
+
+
+            thread_alive = bool(
+
+                heartbeat.get(
+                    "thread_alive",
+                    False,
+                )
+            )
+
+
+            last_seen = (
+                heartbeat.get(
+                    "last_seen"
+                )
+            )
+
+
+            parsed_last_seen = (
+                parse_datetime(
+                    last_seen
+                )
+            )
+
+
+            age_seconds = None
+
+
+            if parsed_last_seen is not None:
+
+                age_seconds = max(
+
+                    0.0,
+
+                    (
+                        now
+                        - parsed_last_seen
+                    ).total_seconds(),
+                )
+
+
+            fresh = (
+
+                age_seconds is not None
+
+                and
+
+                age_seconds
+                <= HEARTBEAT_FRESH_SECONDS
+            )
+
+
+            error = (
+                heartbeat.get(
+                    "error"
+                )
+            )
+
+
+            healthy = (
+
+                status
+                == "ACTIVE"
+
+                and
+
+                thread_alive
+
+                and
+
+                fresh
+
+                and
+
+                not error
+            )
+
+
+            if healthy:
+
+                active_count += 1
+
+
+            collectors[
+                collector_name
+            ] = {
+                "collector_name":
+                    collector_name,
+
+                "status":
+                    status,
+
+                "thread_alive":
+                    thread_alive,
+
+                "last_seen":
+                    last_seen,
+
+                "heartbeat_age_seconds":
+                    (
+                        round(
+                            age_seconds,
+                            2,
+                        )
+
+                        if age_seconds
+                        is not None
+
+                        else None
+                    ),
+
+                "fresh":
+                    fresh,
+
+                "healthy":
+                    healthy,
+
+                "error":
+                    error,
+            }
+
+
+        return {
+            "expected_count":
+                len(
+                    EXPECTED_COLLECTORS
+                ),
+
+            "healthy_count":
+                active_count,
+
+            "all_healthy":
+                (
+                    active_count
+                    == len(
+                        EXPECTED_COLLECTORS
+                    )
+                ),
+
+            "collectors":
+                collectors,
+        }
+
+
+    # ============================================================
+    # TEMPORAL MODEL
+    # ============================================================
+
+    def get_temporal_runtime(
+        self,
+    ) -> Dict[str, Any]:
+
+        metadata = (
+            load_json(
+                TRANSFORMER_METADATA_PATH
+            )
+        )
+
+
+        calibration = (
+            load_json(
+                TEMPORAL_CALIBRATION_PATH
+            )
+        )
+
+
+        architecture = (
+            metadata.get(
+                "architecture",
+                {}
+            )
+
+            or {}
+        )
+
+
+        feature_policy = (
+            metadata.get(
+                "feature_policy",
+                {}
+            )
+
+            or {}
+        )
+
+
+        representation_health = (
+            metadata.get(
+                "representation_health",
+                {}
+            )
+
+            or {}
+        )
+
+
+        artifact_files = {
+            "transformer_model":
+                TRANSFORMER_MODEL_PATH.exists(),
+
+            "transformer_metadata":
+                TRANSFORMER_METADATA_PATH.exists(),
+
+            "scaler":
+                TEMPORAL_SCALER_PATH.exists(),
+
+            "calibration":
+                TEMPORAL_CALIBRATION_PATH.exists(),
+        }
+
+
+        artifacts_ready = all(
+            artifact_files.values()
+        )
+
+
+        model_version = (
+            metadata.get(
+                "model_version"
+            )
+        )
+
+
+        sequence_length = safe_int(
+
+            architecture.get(
+                "sequence_length"
+            ),
+
+            -1,
+        )
+
+
+        feature_count = safe_int(
+
+            architecture.get(
+                "input_feature_count"
+            )
+            or
+            feature_policy.get(
+                "input_feature_count"
+            ),
+
+            -1,
+        )
+
+
+        representation_dimension = (
+            safe_int(
+
+                architecture.get(
+                    "representation_dimension"
+                ),
+
+                -1,
+            )
+        )
+
+
+        calibration_version = (
+            calibration.get(
+                "calibration_version"
+            )
+        )
+
+
+        calibration_model_version = (
+            calibration.get(
+                "model_version"
+            )
+        )
+
+
+        calibration_feature_count = (
+            safe_int(
+
+                calibration.get(
+                    "input_feature_count"
+                ),
+
+                -1,
+            )
+        )
+
+
+        calibration_sequence_length = (
+            safe_int(
+
+                calibration.get(
+                    "sequence_length"
+                ),
+
+                -1,
+            )
+        )
+
+
+        removed_feature = (
+            feature_policy.get(
+                "removed_feature"
+            )
+        )
+
+
+        model_configuration_valid = all(
+            [
+                artifacts_ready,
+
+                (
+                    model_version
+                    == EXPECTED_TEMPORAL_MODEL_VERSION
+                ),
+
+                (
+                    sequence_length
+                    == EXPECTED_TEMPORAL_SEQUENCE_LENGTH
+                ),
+
+                (
+                    feature_count
+                    == EXPECTED_TEMPORAL_FEATURE_COUNT
+                ),
+
+                (
+                    representation_dimension
+                    == EXPECTED_TEMPORAL_EMBEDDING_DIMENSION
+                ),
+
+                (
+                    removed_feature
+                    == "process_age_seconds"
+                ),
+
+                (
+                    calibration_version
+                    == EXPECTED_TEMPORAL_CALIBRATION_VERSION
+                ),
+
+                (
+                    calibration_model_version
+                    == EXPECTED_TEMPORAL_MODEL_VERSION
+                ),
+
+                (
+                    calibration_feature_count
+                    == EXPECTED_TEMPORAL_FEATURE_COUNT
+                ),
+
+                (
+                    calibration_sequence_length
+                    == EXPECTED_TEMPORAL_SEQUENCE_LENGTH
+                ),
+            ]
+        )
+
+
+        return {
+            "available":
+                artifacts_ready,
+
+            "healthy":
+                model_configuration_valid,
+
+            "model_name":
+                metadata.get(
+                    "model_name"
+                ),
+
+            "model_version":
+                model_version,
+
+            "predictor_version":
+                "v2",
+
+            "calibration_version":
+                calibration_version,
+
+            "schema_version":
+                metadata.get(
+                    "schema_version"
+                ),
+
+            "sequence_length":
+                sequence_length,
+
+            "feature_count":
+                feature_count,
+
+            "representation_dimension":
+                representation_dimension,
+
+            "removed_feature":
+                removed_feature,
+
+            "representation_health":
+                representation_health,
+
+            "test_split_used":
+                metadata.get(
+                    "test_split_used"
+                ),
+
+            "artifacts":
+                artifact_files,
+
+            "artifacts_ready":
+                artifacts_ready,
+
+            "configuration_valid":
+                model_configuration_valid,
+        }
+
+
+    # ============================================================
+    # FUSION V3
+    # ============================================================
+
+    def get_fusion_runtime(
+        self,
+    ) -> Dict[str, Any]:
+
+        total_rows = (
+            self.fusion_v3_store
+            .count()
+        )
+
+
+        alert_rows = (
+            self.fusion_v3_store
+            .count_alerts()
+        )
+
+
+        recent = (
+            self.fusion_v3_store
+            .get_recent(
+                limit=50
+            )
+        )
+
+
+        recent = [
+
+            row
+
+            for row in recent
+
+            if isinstance(
+                row,
+                dict,
+            )
+        ]
+
+
+        production_rows = [
+
+            row
+
+            for row in recent
+
+            if str(
+                row.get(
+                    "operating_mode",
+                    ""
+                )
+            ).upper()
+            == PRIMARY_MODE
+        ]
+
+
+        latest = (
+
+            production_rows[
+                0
+            ]
+
+            if production_rows
+
+            else (
+                recent[
+                    0
+                ]
+
+                if recent
+
+                else None
+            )
+        )
+
+
+        temporal_evidence_count = 0
+
+        four_category_count = 0
+
+
+        for row in production_rows:
+
+            categories = (
+                row.get(
+                    "categories"
+                )
+
+                or {}
+            )
+
+
+            if not isinstance(
+                categories,
+                dict,
+            ):
+
+                continue
+
+
+            required_categories = {
+                "rules",
+                "statistical",
+                "behavioral_ai",
+                "temporal_ai",
+            }
+
+
+            if required_categories.issubset(
+                categories.keys()
+            ):
+
+                four_category_count += 1
+
+
+            temporal = (
+                categories.get(
+                    "temporal_ai"
+                )
+
+                or {}
+            )
+
+
+            if (
+
+                isinstance(
+                    temporal,
+                    dict,
+                )
+
+                and
+
+                temporal.get(
+                    "available",
+                    False,
+                )
+
+            ):
+
+                temporal_evidence_count += 1
+
+
+        latest_summary = None
+
+
+        if isinstance(
+            latest,
+            dict,
+        ):
+
+            latest_summary = {
+                "result_id":
+                    latest.get(
+                        "result_id"
+                    ),
+
+                "pid":
+                    latest.get(
+                        "pid"
+                    ),
+
+                "process_name":
+                    latest.get(
+                        "process_name"
+                    ),
+
+                "fusion_score":
+                    latest.get(
+                        "fusion_score"
+                    ),
+
+                "severity":
+                    latest.get(
+                        "severity"
+                    ),
+
+                "should_alert":
+                    latest.get(
+                        "should_alert"
+                    ),
+
+                "evidence_confidence":
+                    latest.get(
+                        "evidence_confidence"
+                    ),
+
+                "operating_mode":
+                    latest.get(
+                        "operating_mode"
+                    ),
+
+                "scores":
+                    latest.get(
+                        "scores"
+                    ),
+
+                "categories":
+                    latest.get(
+                        "categories"
+                    ),
+
+                "active_categories":
+                    latest.get(
+                        "active_categories"
+                    ),
+
+                "strong_categories":
+                    latest.get(
+                        "strong_categories"
+                    ),
+
+                "created_at":
+                    (
+                        latest.get(
+                            "created_at"
+                        )
+                        or
+                        latest.get(
+                            "timestamp"
+                        )
+                    ),
+            }
+
+
+        primary_runtime_seen = (
+
+            len(
+                production_rows
+            )
+            > 0
+        )
+
+
+        return {
+            "primary_engine":
+                PRIMARY_ENGINE,
+
+            "primary_version":
+                PRIMARY_VERSION,
+
+            "operating_mode":
+                PRIMARY_MODE,
+
+            "promoted_to_primary":
+                True,
+
+            "rollback_engine":
+                ROLLBACK_ENGINE,
+
+            "rollback_available":
+                True,
+
+            "total_persisted_results":
+                total_rows,
+
+            "alert_results":
+                alert_rows,
+
+            "recent_results_examined":
+                len(
+                    recent
+                ),
+
+            "recent_primary_results":
+                len(
+                    production_rows
+                ),
+
+            "four_category_primary_results":
+                four_category_count,
+
+            "temporal_evidence_primary_results":
+                temporal_evidence_count,
+
+            "primary_runtime_seen":
+                primary_runtime_seen,
+
+            "latest":
+                latest_summary,
+        }
+
+
+    # ============================================================
+    # OVERALL STATUS
+    # ============================================================
+
+    def get_runtime_status(
+        self,
+    ) -> Dict[str, Any]:
+
+        collectors = (
+            self.get_collectors()
+        )
+
+
+        temporal = (
+            self.get_temporal_runtime()
+        )
+
+
+        fusion = (
+            self.get_fusion_runtime()
+        )
+
+
+        checks = {
+            "collectors":
+                bool(
+                    collectors.get(
+                        "all_healthy",
+                        False,
+                    )
+                ),
+
+            "temporal_v2":
+                bool(
+                    temporal.get(
+                        "healthy",
+                        False,
+                    )
+                ),
+
+            "fusion_v3_primary":
+                bool(
+                    fusion.get(
+                        "primary_runtime_seen",
+                        False,
+                    )
+                ),
+        }
+
+
+        healthy = all(
+            checks.values()
+        )
+
+
+        return {
+            "status":
+                (
+                    "HEALTHY"
+
+                    if healthy
+
+                    else "DEGRADED"
+                ),
+
+            "timestamp":
+                now_iso(),
+
+            "product":
+                "SENTINEL-X",
+
+            "runtime_phase":
+                "FUSION_V3_PRIMARY",
+
+            "primary_decision_engine":
+                PRIMARY_ENGINE,
+
+            "primary_version":
+                PRIMARY_VERSION,
+
+            "operating_mode":
+                PRIMARY_MODE,
+
+            "rollback_engine":
+                ROLLBACK_ENGINE,
+
+            "rollback_available":
+                True,
+
+            "checks":
+                checks,
+
+            "collectors":
+                collectors,
+
+            "temporal_ai":
+                temporal,
+
+            "fusion_v3":
+                fusion,
+
+            # Response execution remains simulated.
+            "simulation_mode":
+                True,
+
+            "real_response_execution":
+                False,
+        }
+
+==========================================================================================
+FILE: frontend/src/App.jsx
+==========================================================================================
+import {
+    BrowserRouter,
+    Routes,
+    Route,
+} from "react-router-dom";
+
+import SystemHealth from "./pages/SystemHealth";
+
+import Layout from "./components/Layout";
+
+import Dashboard from "./pages/Dashboard";
+import SOCDashboard from "./pages/SOCDashboard";
+
+import Incidents from "./pages/Incidents";
+import IncidentDetail from "./pages/IncidentDetail";
+import Tickets from "./pages/Tickets";
+import Approvals from "./pages/Approvals";
+import ResponseActions from "./pages/ResponseActions";
+import Endpoint from "./pages/Endpoint";
+import SystemHealth from "./pages/SystemHealth";
+
+
+function App() {
+
+    return (
+
+        <BrowserRouter>
+
+            <Routes>
+
+                <Route
+                    element={<Layout />}
+                >
+
+                    {/* =========================================
+                        EXISTING DASHBOARD
+                    ========================================== */}
+                    <Route
+                        path="/health"
+                        element={
+                            <SystemHealth />
+                        }
+                    />
+
+                    <Route
+                        path="/"
+                        element={<Dashboard />}
+                    />
+
+
+                    {/* =========================================
+                        NEW SENTINEL-X SOC DASHBOARD
+                    ========================================== */}
+
+                    <Route
+                        path="/soc"
+                        element={<SOCDashboard />}
+                    />
+
+
+                    {/* =========================================
+                        INCIDENTS
+                    ========================================== */}
+
+                    <Route
+                        path="/incidents"
+                        element={<Incidents />}
+                    />
+
+
+                    <Route
+                        path="/incidents/:incidentId"
+                        element={<IncidentDetail />}
+                    />
+
+
+                    {/* =========================================
+                        SOC TICKETS
+                    ========================================== */}
+
+                    <Route
+                        path="/tickets"
+                        element={<Tickets />}
+                    />
+
+
+                    {/* =========================================
+                        ANALYST APPROVALS
+                    ========================================== */}
+
+                    <Route
+                        path="/approvals"
+                        element={<Approvals />}
+                    />
+
+
+                    {/* =========================================
+                        RESPONSE ACTIONS
+                    ========================================== */}
+
+                    <Route
+                        path="/responses"
+                        element={<ResponseActions />}
+                    />
+
+
+                    {/* =========================================
+                        ENDPOINT MONITORING
+                    ========================================== */}
+
+                    <Route
+                        path="/endpoint"
+                        element={<Endpoint />}
+                    />
+
+
+                    {/* =========================================
+                        SYSTEM HEALTH
+                    ========================================== */}
+
+                    <Route
+                        path="/health"
+                        element={<SystemHealth />}
+                    />
+
+                </Route>
+
+            </Routes>
+
+        </BrowserRouter>
+    );
+}
+
+
+export default App;
+
+==========================================================================================
+FILE: frontend/src/components/Sidebar.jsx
+==========================================================================================
+import {
+    NavLink,
+} from "react-router-dom";
+
+
+const menuItems = [
+
+    {
+        name: "SOC Dashboard",
+        path: "/soc",
+    },
+
+    {
+        name: "SOC Overview",
+        path: "/",
+    },
+
+    {
+        name: "Incidents",
+        path: "/incidents",
+    },
+
+    {
+        name: "Tickets",
+        path: "/tickets",
+    },
+
+    {
+        name: "Approvals",
+        path: "/approvals",
+    },
+
+    {
+        name: "Response Actions",
+        path: "/responses",
+    },
+
+    {
+        name: "Endpoint",
+        path: "/endpoint",
+    },
+
+    {
+        name: "System Health",
+        path: "/health",
+    },
+
+];
+
+
+function Sidebar() {
+
+    return (
+
+        <aside className="sidebar">
+
+            {/* =========================================
+                BRAND
+            ========================================== */}
+
+            <div className="sidebar-brand">
+
+                <h2>
+                    SENTINEL-X
+                </h2>
+
+                <p>
+                    Autonomous Security Operations
+                </p>
+
+            </div>
+
+
+            {/* =========================================
+                NAVIGATION
+            ========================================== */}
+
+            <nav className="sidebar-nav">
+
+                {
+                    menuItems.map(
+                        (item) => (
+
+                            <NavLink
+                                key={
+                                    item.path
+                                }
+
+                                to={
+                                    item.path
+                                }
+
+                                end={
+                                    item.path === "/"
+                                }
+
+                                className={
+                                    ({
+                                        isActive,
+                                    }) =>
+                                        isActive
+                                            ? "nav-link active"
+                                            : "nav-link"
+                                }
+                            >
+
+                                {
+                                    item.name
+                                }
+
+                            </NavLink>
+
+                        )
+                    )
+                }
+
+            </nav>
+
+
+            {/* =========================================
+                SAFETY / AUTONOMY STATUS
+            ========================================== */}
+
+            <div className="sidebar-footer">
+
+                <strong>
+                    SIMULATION MODE
+                </strong>
+
+                <small>
+                    Real response execution
+                    disabled
+                </small>
+
+            </div>
+
+        </aside>
+    );
+}
+
+
+export default Sidebar;
+
+==========================================================================================
+FILE: frontend/src/api/sentinelApi.js
+==========================================================================================
+// ================================================================
+// SENTINEL-X SOC API CLIENT
+// ================================================================
+
+const API_BASE_URL =
+    import.meta.env.VITE_SOC_API_BASE_URL ||
+    "http://127.0.0.1:8003";
+
+
+// ================================================================
+// GENERIC REQUEST
+// ================================================================
+
+async function request(
+    endpoint,
+    options = {}
+) {
+
+    const method =
+        (
+            options.method ||
+            "GET"
+        ).toUpperCase();
+
+
+    const headers = {
+        ...(options.headers || {}),
+    };
+
+
+    // Only requests containing a body need JSON Content-Type.
+    if (
+        options.body !== undefined
+        &&
+        options.body !== null
+    ) {
+
+        headers["Content-Type"] =
+            "application/json";
+    }
+
+
+    const response =
+        await fetch(
+            `${API_BASE_URL}${endpoint}`,
+            {
+                ...options,
+                method,
+                headers,
+            }
+        );
+
+
+    let data = null;
+
+
+    try {
+
+        data =
+            await response.json();
+
+    } catch {
+
+        data = null;
+    }
+
+
+    if (!response.ok) {
+
+        const message =
+            data?.detail
+            ||
+            data?.message
+            ||
+            `HTTP ${response.status}: API request failed.`;
+
+
+        throw new Error(
+            message
+        );
+    }
+
+
+    return data;
+}
+
+
+// ================================================================
+// QUERY STRING HELPER
+// ================================================================
+
+function buildQueryString(
+    params = {}
+) {
+
+    if (
+        params === null
+        ||
+        params === undefined
+    ) {
+
+        return "";
+    }
+
+
+    if (
+        typeof params === "string"
+    ) {
+
+        const query =
+            new URLSearchParams();
+
+
+        query.set(
+            "query",
+            params
+        );
+
+
+        return (
+            `?${query.toString()}`
+        );
+    }
+
+
+    const query =
+        new URLSearchParams();
+
+
+    Object.entries(
+        params
+    ).forEach(
+        ([
+            key,
+            value,
+        ]) => {
+
+            if (
+                value !== undefined
+                &&
+                value !== null
+                &&
+                value !== ""
+            ) {
+
+                query.set(
+                    key,
+                    String(
+                        value
+                    )
+                );
+            }
+        }
+    );
+
+
+    const text =
+        query.toString();
+
+
+    return (
+        text
+            ? `?${text}`
+            : ""
+    );
+}
+
+
+// ================================================================
+// HEALTH
+// ================================================================
+
+export async function getSOCHealth() {
+
+    return request(
+        "/api/v1/health"
+    );
+}
+
+
+// ================================================================
+// SECURITY RUNTIME
+//
+// Real runtime source:
+//
+//   Collector heartbeats
+//   Temporal Transformer v2
+//   Fusion v3 PRIMARY
+//   Fusion v2 rollback
+//
+// ================================================================
+
+export async function getSecurityRuntime() {
+
+    return request(
+        "/api/v1/security/runtime"
+    );
+}
+
+
+// ================================================================
+// ENDPOINT OVERVIEW
+// ================================================================
+
+export async function getEndpointOverview() {
+
+    return request(
+        "/api/v1/endpoint/overview"
+    );
+}
+
+
+// ================================================================
+// DASHBOARD SUMMARY
+// ================================================================
+
+export async function getSOCDashboardSummary() {
+
+    return request(
+        "/api/v1/dashboard/summary"
+    );
+}
+
+
+// ================================================================
+// DETECTED / CORRELATED INCIDENTS
+// ================================================================
+
+export async function getDetectedIncidents(
+    limit = 100
+) {
+
+    return request(
+
+        `/api/v1/detected-incidents?limit=${encodeURIComponent(
+            limit
+        )}`
+    );
+}
+
+
+// ================================================================
+// SINGLE DETECTED / CORRELATED INCIDENT
+// ================================================================
+
+export async function getDetectedIncident(
+    incidentId
+) {
+
+    return request(
+
+        `/api/v1/detected-incidents/${encodeURIComponent(
+            incidentId
+        )}`
+    );
+}
+
+
+// ================================================================
+// SOC CASES
+// ================================================================
+
+export async function getSOCCases(
+    limit = 100
+) {
+
+    return request(
+
+        `/api/v1/cases?limit=${encodeURIComponent(
+            limit
+        )}`
+    );
+}
+
+
+// ================================================================
+// CREATE SOC CASE
+// ================================================================
+
+export async function createSOCCase(
+    incidentId,
+    intelligence
+) {
+
+    return request(
+        "/api/v1/cases",
+        {
+            method:
+                "POST",
+
+            body:
+                JSON.stringify(
+                    {
+                        incident_id:
+                            incidentId,
+
+                        intelligence:
+                            intelligence,
+                    }
+                ),
+        }
+    );
+}
+
+
+// ================================================================
+// SINGLE SOC CASE
+// ================================================================
+
+export async function getSOCCase(
+    incidentId
+) {
+
+    return request(
+
+        `/api/v1/cases/${encodeURIComponent(
+            incidentId
+        )}`
+    );
+}
+
+
+// ================================================================
+// FULL INCIDENT
+// ================================================================
+
+export async function getFullIncident(
+    incidentId
+) {
+
+    return request(
+
+        `/api/v1/incidents/${encodeURIComponent(
+            incidentId
+        )}/full`
+    );
+}
+
+
+// ================================================================
+// DIGITAL TWIN
+// ================================================================
+
+export async function getDigitalTwin(
+    incidentId
+) {
+
+    return request(
+
+        `/api/v1/cases/${encodeURIComponent(
+            incidentId
+        )}/digital-twin`
+    );
+}
+
+
+// ================================================================
+// RESPONSE ACTIONS
+// ================================================================
+
+export async function getResponseActions(
+    incidentId
+) {
+
+    return request(
+
+        `/api/v1/cases/${encodeURIComponent(
+            incidentId
+        )}/responses`
+    );
+}
+
+
+// ================================================================
+// INCIDENT EVIDENCE
+// ================================================================
+
+export async function getIncidentEvidence(
+    incidentId
+) {
+
+    return request(
+
+        `/api/v1/cases/${encodeURIComponent(
+            incidentId
+        )}/evidence`
+    );
+}
+
+
+// ================================================================
+// INCIDENT TIMELINE
+// ================================================================
+
+export async function getIncidentTimeline(
+    incidentId
+) {
+
+    return request(
+
+        `/api/v1/cases/${encodeURIComponent(
+            incidentId
+        )}/timeline`
+    );
+}
+
+
+// ================================================================
+// APPROVE SOC CASE
+// ================================================================
+
+export async function approveSOCCase(
+    incidentId,
+    analyst,
+    comment = ""
+) {
+
+    return request(
+
+        `/api/v1/cases/${encodeURIComponent(
+            incidentId
+        )}/approve`,
+
+        {
+            method:
+                "POST",
+
+            body:
+                JSON.stringify(
+                    {
+                        analyst,
+                        comment,
+                    }
+                ),
+        }
+    );
+}
+
+
+// ================================================================
+// REJECT SOC CASE
+// ================================================================
+
+export async function rejectSOCCase(
+    incidentId,
+    analyst,
+    reason
+) {
+
+    return request(
+
+        `/api/v1/cases/${encodeURIComponent(
+            incidentId
+        )}/reject`,
+
+        {
+            method:
+                "POST",
+
+            body:
+                JSON.stringify(
+                    {
+                        analyst,
+                        reason,
+                    }
+                ),
+        }
+    );
+}
+
+
+// ================================================================
+// ALL SOC TICKETS
+// ================================================================
+
+export async function getSOCTickets(
+    limit = 100
+) {
+
+    return request(
+
+        `/api/v1/tickets?limit=${encodeURIComponent(
+            limit
+        )}`
+    );
+}
+
+
+// ================================================================
+// SINGLE SOC TICKET
+// ================================================================
+
+export async function getSOCTicket(
+    ticketId
+) {
+
+    return request(
+
+        `/api/v1/tickets/${encodeURIComponent(
+            ticketId
+        )}`
+    );
+}
+
+
+// ================================================================
+// INCIDENT TICKETS
+// ================================================================
+
+export async function getIncidentTickets(
+    incidentId
+) {
+
+    return request(
+
+        `/api/v1/incidents/${encodeURIComponent(
+            incidentId
+        )}/tickets`
+    );
+}
+
+
+// ================================================================
+// MITIGATION VERIFICATION
+// ================================================================
+
+export async function getMitigationVerification(
+    incidentId
+) {
+
+    return request(
+
+        `/api/v1/cases/${encodeURIComponent(
+            incidentId
+        )}/mitigation-verification`
+    );
+}
+
+
+// ================================================================
+// VERIFY SIMULATED MITIGATION
+// ================================================================
+
+export async function verifyMitigation(
+    incidentId,
+    beforeState,
+    simulatedAfterState,
+    responseResult = {}
+) {
+
+    return request(
+
+        `/api/v1/cases/${encodeURIComponent(
+            incidentId
+        )}/mitigation-verification`,
+
+        {
+            method:
+                "POST",
+
+            body:
+                JSON.stringify(
+                    {
+                        before_state:
+                            beforeState,
+
+                        simulated_after_state:
+                            simulatedAfterState,
+
+                        response_result:
+                            responseResult,
+                    }
+                ),
+        }
+    );
+}
+
+
+// ================================================================
+// SEARCH INCIDENTS
+// ================================================================
+
+export async function searchIncidents(
+    filters = {}
+) {
+
+    return request(
+
+        `/api/v1/search/incidents${buildQueryString(
+            filters
+        )}`
+    );
+}
+
+
+// ================================================================
+// SEARCH TICKETS
+// ================================================================
+
+export async function searchTickets(
+    filters = {}
+) {
+
+    return request(
+
+        `/api/v1/search/tickets${buildQueryString(
+            filters
+        )}`
+    );
+}
+
+
+// ================================================================
+// SEARCH RESPONSE ACTIONS
+// ================================================================
+
+export async function searchResponseActions(
+    filters = {}
+) {
+
+    return request(
+
+        `/api/v1/search/actions${buildQueryString(
+            filters
+        )}`
+    );
+}
+
+
+// ================================================================
+// BACKEND INTEGRITY
+// ================================================================
+
+export async function getBackendIntegrity(
+    limit = 1000
+) {
+
+    return request(
+
+        `/api/v1/integrity?limit=${encodeURIComponent(
+            limit
+        )}`
+    );
+}
+
+
+// ================================================================
+// INCIDENT INTEGRITY
+// ================================================================
+
+export async function getIncidentIntegrity(
+    incidentId
+) {
+
+    return request(
+
+        `/api/v1/integrity/incidents/${encodeURIComponent(
+            incidentId
+        )}`
+    );
+}
+
+
+// ================================================================
+// EXPORT BASE URL
+// ================================================================
+
+export {
+    API_BASE_URL,
+};
+
+==========================================================================================
+FILE: frontend/src/services/socApi.js
+==========================================================================================
+// ================================================================
+// SENTINEL-X SOC API CLIENT
+// ================================================================
+
+const API_BASE_URL =
+    import.meta.env.VITE_SOC_API_BASE_URL ||
+    "http://127.0.0.1:8003";
+
+
+// ================================================================
+// GENERIC REQUEST
+// ================================================================
+
+async function request(
+    endpoint,
+    options = {}
+) {
+
+    const method =
+        (
+            options.method ||
+            "GET"
+        ).toUpperCase();
+
+
+    const headers = {
+        ...(options.headers || {}),
+    };
+
+
+    // Only requests containing a body need JSON Content-Type.
+    if (
+        options.body !== undefined
+        && options.body !== null
+    ) {
+
+        headers["Content-Type"] =
+            "application/json";
+    }
+
+
+    const response =
+        await fetch(
+            `${API_BASE_URL}${endpoint}`,
+            {
+                ...options,
+                method,
+                headers,
+            }
+        );
+
+
+    let data = null;
+
+
+    try {
+
+        data =
+            await response.json();
+
+    } catch {
+
+        data = null;
+    }
+
+
+    if (!response.ok) {
+
+        const message =
+            data?.detail
+            || data?.message
+            || `HTTP ${response.status}: API request failed.`;
+
+
+        throw new Error(
+            message
+        );
+    }
+
+
+    return data;
+}
+
+
+// ================================================================
+// HEALTH
+// ================================================================
+
+export async function getSOCHealth() {
+
+    return request(
+        "/api/v1/health"
+    );
+}
+
+
+// ================================================================
+// ENDPOINT OVERVIEW
+// ================================================================
+
+export async function getEndpointOverview() {
+
+    return request(
+        "/api/v1/endpoint/overview"
+    );
+}
+
+
+// ================================================================
+// DASHBOARD SUMMARY
+// ================================================================
+
+export async function getSOCDashboardSummary() {
+
+    return request(
+        "/api/v1/dashboard/summary"
+    );
+}
+
+
+// ================================================================
+// SOC CASES
+// ================================================================
+
+export async function getSOCCases(
+    limit = 100
+) {
+
+    return request(
+        `/api/v1/cases?limit=${limit}`
+    );
+}
+
+
+// ================================================================
+// SINGLE SOC CASE
+// ================================================================
+
+export async function getSOCCase(
+    incidentId
+) {
+
+    return request(
+        `/api/v1/cases/${incidentId}`
+    );
+}
+
+
+// ================================================================
+// FULL INCIDENT
+// ================================================================
+
+export async function getFullIncident(
+    incidentId
+) {
+
+    return request(
+        `/api/v1/incidents/${incidentId}/full`
+    );
+}
+
+
+// ================================================================
+// DIGITAL TWIN
+// ================================================================
+
+export async function getDigitalTwin(
+    incidentId
+) {
+
+    return request(
+        `/api/v1/cases/${incidentId}/digital-twin`
+    );
+}
+
+
+// ================================================================
+// RESPONSE ACTIONS
+// ================================================================
+
+export async function getResponseActions(
+    incidentId
+) {
+
+    return request(
+        `/api/v1/cases/${incidentId}/responses`
+    );
+}
+
+
+// ================================================================
+// INCIDENT EVIDENCE
+// ================================================================
+
+export async function getIncidentEvidence(
+    incidentId
+) {
+
+    return request(
+        `/api/v1/cases/${incidentId}/evidence`
+    );
+}
+
+
+// ================================================================
+// INCIDENT TIMELINE
+// ================================================================
+
+export async function getIncidentTimeline(
+    incidentId
+) {
+
+    return request(
+        `/api/v1/cases/${incidentId}/timeline`
+    );
+}
+
+
+// ================================================================
+// APPROVE SOC CASE
+// ================================================================
+
+export async function approveSOCCase(
+    incidentId,
+    analyst,
+    comment = ""
+) {
+
+    return request(
+        `/api/v1/cases/${incidentId}/approve`,
+        {
+            method: "POST",
+
+            body: JSON.stringify({
+                analyst,
+                comment,
+            }),
+        }
+    );
+}
+
+
+// ================================================================
+// REJECT SOC CASE
+// ================================================================
+
+export async function rejectSOCCase(
+    incidentId,
+    analyst,
+    reason
+) {
+
+    return request(
+        `/api/v1/cases/${incidentId}/reject`,
+        {
+            method: "POST",
+
+            body: JSON.stringify({
+                analyst,
+                reason,
+            }),
+        }
+    );
+}
+
+
+// ================================================================
+// ALL SOC TICKETS
+// ================================================================
+
+export async function getSOCTickets(
+    limit = 100
+) {
+
+    return request(
+        `/api/v1/tickets?limit=${limit}`
+    );
+}
+
+
+// ================================================================
+// SINGLE SOC TICKET
+// ================================================================
+
+export async function getSOCTicket(
+    ticketId
+) {
+
+    return request(
+        `/api/v1/tickets/${ticketId}`
+    );
+}
+
+
+// ================================================================
+// INCIDENT TICKETS
+// ================================================================
+
+export async function getIncidentTickets(
+    incidentId
+) {
+
+    return request(
+        `/api/v1/incidents/${incidentId}/tickets`
+    );
+}
+
+
+// ================================================================
+// MITIGATION VERIFICATION
+// ================================================================
+
+export async function getMitigationVerification(
+    incidentId
+) {
+
+    return request(
+        `/api/v1/cases/${incidentId}/mitigation-verification`
+    );
+}
+
+
+// ================================================================
+// VERIFY SIMULATED MITIGATION
+// ================================================================
+
+export async function verifyMitigation(
+    incidentId,
+    beforeState,
+    simulatedAfterState,
+    responseResult = {}
+) {
+
+    return request(
+        `/api/v1/cases/${incidentId}/mitigation-verification`,
+        {
+            method: "POST",
+
+            body: JSON.stringify({
+
+                before_state:
+                    beforeState,
+
+                simulated_after_state:
+                    simulatedAfterState,
+
+                response_result:
+                    responseResult,
+            }),
+        }
+    );
+}
+
+
+// ================================================================
+// SEARCH INCIDENTS
+// ================================================================
+
+export async function searchIncidents(
+    query
+) {
+
+    return request(
+        `/api/v1/search/incidents?query=${encodeURIComponent(
+            query
+        )}`
+    );
+}
+
+
+// ================================================================
+// SEARCH TICKETS
+// ================================================================
+
+export async function searchTickets(
+    query
+) {
+
+    return request(
+        `/api/v1/search/tickets?query=${encodeURIComponent(
+            query
+        )}`
+    );
+}
+
+
+// ================================================================
+// SEARCH RESPONSE ACTIONS
+// ================================================================
+
+export async function searchResponseActions(
+    query
+) {
+
+    return request(
+        `/api/v1/search/actions?query=${encodeURIComponent(
+            query
+        )}`
+    );
+}
+
+
+// ================================================================
+// BACKEND INTEGRITY
+// ================================================================
+
+export async function getBackendIntegrity() {
+
+    return request(
+        "/api/v1/integrity"
+    );
+}
+
+
+// ================================================================
+// INCIDENT INTEGRITY
+// ================================================================
+
+export async function getIncidentIntegrity(
+    incidentId
+) {
+
+    return request(
+        `/api/v1/integrity/incidents/${incidentId}`
+    );
+}
+
+
+// ================================================================
+// EXPORT BASE URL
+// ================================================================
+
+export {
+    API_BASE_URL,
+};
+
+==========================================================================================
+FILE: frontend/src/pages/Incidents.jsx
+==========================================================================================
+import {
+    useEffect,
+    useMemo,
+    useState,
+} from "react";
+
+import {
+    useNavigate,
+} from "react-router-dom";
+
+import {
+    getDetectedIncidents,
+    getSOCCases,
+    investigateDetectedIncident,
+} from "../api/sentinelApi";
+
+
+// ================================================================
+// NORMALIZATION HELPERS
+// ================================================================
+
+function normalizeDetectedIncident(
+    incident
+) {
+
+    const eventIds =
+        Array.isArray(
+            incident?.event_ids
+        )
+            ? incident.event_ids
+            : [];
+
+
+    return {
+
+        incident_id:
+            incident?.incident_id,
+
+        title:
+            incident?.title
+            || incident?.incident_id
+            || "Unknown incident",
+
+        source:
+            incident?.soc_case_exists
+                ? "DETECTION + SOC"
+                : "DETECTION",
+
+        correlation_score:
+            incident?.correlation_score
+            ?? null,
+
+        risk_score:
+            incident?.risk_score
+            ?? null,
+
+        risk_level:
+            incident?.risk_level
+            || incident?.severity
+            || "UNKNOWN",
+
+        severity:
+            incident?.severity
+            || incident?.risk_level
+            || "UNKNOWN",
+
+        event_count:
+            incident?.event_count
+            ?? eventIds.length
+            ?? 0,
+
+        soc_case_exists:
+            Boolean(
+                incident?.soc_case_exists
+            ),
+
+        soc_case_status:
+            incident?.soc_case_status
+            || null,
+
+        case_status:
+            incident?.soc_case_status
+            || null,
+
+        approval_status:
+            incident?.approval_status
+            || null,
+
+        ticket_id:
+            incident?.ticket_id
+            || null,
+
+        ticket_priority:
+            incident?.ticket_priority
+            || null,
+
+        selected_plan:
+            incident?.selected_plan
+            || null,
+
+        residual_risk:
+            incident?.residual_risk
+            ?? incident?.predicted_residual_risk
+            ?? null,
+
+        mitigation_status:
+            incident?.mitigation_status
+            || "NOT_VERIFIED",
+
+        created_at:
+            incident?.created_at
+            || incident?.updated_at
+            || null,
+
+        raw_detected_incident:
+            incident,
+    };
+}
+
+
+function normalizeSOCCase(
+    socCase
+) {
+
+    const ticketData =
+        socCase?.ticket_data
+        || socCase?.ticket
+        || {};
+
+
+    const decision =
+        socCase?.decision
+        || socCase?.digital_twin_decision
+        || {};
+
+
+    const intelligence =
+        socCase?.intelligence
+        || {};
+
+
+    const mitigation =
+        socCase?.mitigation_verification
+        || {};
+
+
+    return {
+
+        incident_id:
+            socCase?.incident_id,
+
+        title:
+            socCase?.title
+            || intelligence?.title
+            || socCase?.incident_id
+            || "Unknown incident",
+
+        source:
+            "SOC",
+
+        correlation_score:
+            socCase?.correlation_score
+            ?? intelligence?.correlation_score
+            ?? null,
+
+        risk_score:
+            socCase?.risk_score
+            ?? intelligence?.risk_score
+            ?? null,
+
+        risk_level:
+            socCase?.risk_level
+            || socCase?.severity
+            || intelligence?.risk_level
+            || intelligence?.severity
+            || "UNKNOWN",
+
+        severity:
+            socCase?.severity
+            || socCase?.risk_level
+            || intelligence?.severity
+            || intelligence?.risk_level
+            || "UNKNOWN",
+
+        event_count:
+            socCase?.event_count
+            ?? intelligence?.event_count
+            ?? 0,
+
+        soc_case_exists:
+            true,
+
+        soc_case_status:
+            socCase?.case_status
+            || socCase?.status
+            || null,
+
+        case_status:
+            socCase?.case_status
+            || socCase?.status
+            || null,
+
+        approval_status:
+            socCase?.approval_status
+            || ticketData?.approval_status
+            || null,
+
+        ticket_id:
+            socCase?.ticket_id
+            || ticketData?.ticket_id
+            || null,
+
+        ticket_priority:
+            socCase?.ticket_priority
+            || ticketData?.priority
+            || null,
+
+        selected_plan:
+            socCase?.selected_plan
+            || decision?.selected_plan_name
+            || decision?.selected_plan
+            || decision?.plan_name
+            || null,
+
+        residual_risk:
+            socCase?.residual_risk
+            ?? socCase?.predicted_residual_risk
+            ?? decision?.predicted_residual_risk
+            ?? decision?.residual_risk
+            ?? null,
+
+        mitigation_status:
+            socCase?.mitigation_status
+            || mitigation?.status
+            || "NOT_VERIFIED",
+
+        created_at:
+            socCase?.created_at
+            || socCase?.updated_at
+            || null,
+
+        raw_soc_case:
+            socCase,
+    };
+}
+
+
+function mergeIncidentSources(
+    detectedIncidents,
+    socCases
+) {
+
+    const incidentMap =
+        new Map();
+
+
+    detectedIncidents.forEach(
+        (incident) => {
+
+            const normalized =
+                normalizeDetectedIncident(
+                    incident
+                );
+
+
+            if (
+                normalized.incident_id
+            ) {
+
+                incidentMap.set(
+                    normalized.incident_id,
+                    normalized
+                );
+            }
+        }
+    );
+
+
+    socCases.forEach(
+        (socCase) => {
+
+            const normalized =
+                normalizeSOCCase(
+                    socCase
+                );
+
+
+            if (
+                !normalized.incident_id
+            ) {
+                return;
+            }
+
+
+            const existing =
+                incidentMap.get(
+                    normalized.incident_id
+                );
+
+
+            if (!existing) {
+
+                incidentMap.set(
+                    normalized.incident_id,
+                    normalized
+                );
+
+                return;
+            }
+
+
+            incidentMap.set(
+                normalized.incident_id,
+                {
+                    ...existing,
+
+                    source:
+                        "DETECTION + SOC",
+
+                    title:
+                        normalized.title
+                        || existing.title,
+
+                    correlation_score:
+                        normalized.correlation_score
+                        ?? existing.correlation_score,
+
+                    risk_score:
+                        normalized.risk_score
+                        ?? existing.risk_score,
+
+                    risk_level:
+                        normalized.risk_level !== "UNKNOWN"
+                            ? normalized.risk_level
+                            : existing.risk_level,
+
+                    severity:
+                        normalized.severity !== "UNKNOWN"
+                            ? normalized.severity
+                            : existing.severity,
+
+                    event_count:
+                        normalized.event_count
+                        || existing.event_count,
+
+                    soc_case_exists:
+                        true,
+
+                    soc_case_status:
+                        normalized.soc_case_status
+                        || existing.soc_case_status,
+
+                    case_status:
+                        normalized.case_status
+                        || existing.case_status,
+
+                    approval_status:
+                        normalized.approval_status
+                        || existing.approval_status,
+
+                    ticket_id:
+                        normalized.ticket_id
+                        || existing.ticket_id,
+
+                    ticket_priority:
+                        normalized.ticket_priority
+                        || existing.ticket_priority,
+
+                    selected_plan:
+                        normalized.selected_plan
+                        || existing.selected_plan,
+
+                    residual_risk:
+                        normalized.residual_risk
+                        ?? existing.residual_risk,
+
+                    mitigation_status:
+                        normalized.mitigation_status !== "NOT_VERIFIED"
+                            ? normalized.mitigation_status
+                            : existing.mitigation_status,
+
+                    created_at:
+                        existing.created_at
+                        || normalized.created_at,
+
+                    raw_soc_case:
+                        socCase,
+                }
+            );
+        }
+    );
+
+
+    return Array.from(
+        incidentMap.values()
+    ).sort(
+        (
+            first,
+            second
+        ) => {
+
+            const firstTime =
+                first.created_at
+                    ? new Date(
+                        first.created_at
+                    ).getTime()
+                    : 0;
+
+
+            const secondTime =
+                second.created_at
+                    ? new Date(
+                        second.created_at
+                    ).getTime()
+                    : 0;
+
+
+            return secondTime - firstTime;
+        }
+    );
+}
+
+
+// ================================================================
+// COMPONENT
+// ================================================================
+
+function Incidents() {
+
+    const navigate =
+        useNavigate();
+
+
+    const [
+        incidents,
+        setIncidents,
+    ] = useState([]);
+
+
+    const [
+        loading,
+        setLoading,
+    ] = useState(true);
+
+
+    const [
+        error,
+        setError,
+    ] = useState("");
+
+
+    const [
+        investigatingId,
+        setInvestigatingId,
+    ] = useState("");
+
+
+    const [
+        riskLevel,
+        setRiskLevel,
+    ] = useState("");
+
+
+    const [
+        status,
+        setStatus,
+    ] = useState("");
+
+
+    const [
+        minRisk,
+        setMinRisk,
+    ] = useState("");
+
+
+    // ============================================================
+    // LOAD BOTH INCIDENT SOURCES
+    // ============================================================
+
+    const loadIncidents =
+        async () => {
+
+            try {
+
+                setLoading(
+                    true
+                );
+
+                setError(
+                    ""
+                );
+
+
+                const [
+                    detectedResult,
+                    socResult,
+                ] =
+                    await Promise.all([
+                        getDetectedIncidents(
+                            1000
+                        ),
+
+                        getSOCCases(
+                            1000
+                        ),
+                    ]);
+
+
+                const detectedIncidents =
+                    Array.isArray(
+                        detectedResult?.incidents
+                    )
+                        ? detectedResult.incidents
+                        : [];
+
+
+                const socCases =
+                    Array.isArray(
+                        socResult?.cases
+                    )
+                        ? socResult.cases
+                        : [];
+
+
+                const merged =
+                    mergeIncidentSources(
+                        detectedIncidents,
+                        socCases
+                    );
+
+
+                setIncidents(
+                    merged
+                );
+
+
+            } catch (err) {
+
+                console.error(
+                    "Incident loading failed:",
+                    err
+                );
+
+
+                setError(
+                    err?.message
+                    || "Unable to load incidents."
+                );
+
+
+            } finally {
+
+                setLoading(
+                    false
+                );
+            }
+        };
+
+
+    useEffect(
+        () => {
+
+            loadIncidents();
+
+        },
+        []
+    );
+
+
+    // ============================================================
+    // FILTERING
+    // ============================================================
+
+    const filteredIncidents =
+        useMemo(
+            () => {
+
+                return incidents.filter(
+                    (incident) => {
+
+                        if (riskLevel) {
+
+                            const currentRisk =
+                                String(
+                                    incident.risk_level
+                                    || incident.severity
+                                    || ""
+                                ).toUpperCase();
+
+
+                            if (
+                                currentRisk !==
+                                riskLevel.toUpperCase()
+                            ) {
+
+                                return false;
+                            }
+                        }
+
+
+                        if (status) {
+
+                            if (
+                                status ===
+                                "DETECTED_ONLY"
+                            ) {
+
+                                if (
+                                    incident.soc_case_exists
+                                ) {
+
+                                    return false;
+                                }
+
+                            } else {
+
+                                const currentStatus =
+                                    String(
+                                        incident.soc_case_status
+                                        || incident.case_status
+                                        || ""
+                                    ).toUpperCase();
+
+
+                                if (
+                                    currentStatus !==
+                                    status.toUpperCase()
+                                ) {
+
+                                    return false;
+                                }
+                            }
+                        }
+
+
+                        if (
+                            minRisk !== ""
+                        ) {
+
+                            const minimum =
+                                Number(
+                                    minRisk
+                                );
+
+
+                            const currentRiskScore =
+                                Number(
+                                    incident.risk_score
+                                );
+
+
+                            if (
+                                !Number.isFinite(
+                                    currentRiskScore
+                                )
+                                || currentRiskScore
+                                    < minimum
+                            ) {
+
+                                return false;
+                            }
+                        }
+
+
+                        return true;
+                    }
+                );
+            },
+            [
+                incidents,
+                riskLevel,
+                status,
+                minRisk,
+            ]
+        );
+
+
+    const clearFilters =
+        () => {
+
+            setRiskLevel(
+                ""
+            );
+
+            setStatus(
+                ""
+            );
+
+            setMinRisk(
+                ""
+            );
+        };
+
+
+    // ============================================================
+    // DISPLAY HELPERS
+    // ============================================================
+
+    const getRiskClass =
+        (
+            risk
+        ) => {
+
+            const value =
+                String(
+                    risk || ""
+                ).toUpperCase();
+
+
+            if (
+                value === "CRITICAL"
+            ) {
+
+                return "badge critical";
+            }
+
+
+            if (
+                value === "HIGH"
+            ) {
+
+                return "badge high";
+            }
+
+
+            if (
+                value === "MEDIUM"
+            ) {
+
+                return "badge medium";
+            }
+
+
+            if (
+                value === "LOW"
+            ) {
+
+                return "badge low";
+            }
+
+
+            return "badge neutral";
+        };
+
+
+    const formatDate =
+        (
+            value
+        ) => {
+
+            if (!value) {
+
+                return "-";
+            }
+
+
+            const date =
+                new Date(
+                    value
+                );
+
+
+            if (
+                Number.isNaN(
+                    date.getTime()
+                )
+            ) {
+
+                return value;
+            }
+
+
+            return date.toLocaleString();
+        };
+
+
+    const formatCorrelation =
+        (
+            value
+        ) => {
+
+            if (
+                value === null
+                || value === undefined
+                || value === ""
+            ) {
+
+                return "-";
+            }
+
+
+            const number =
+                Number(
+                    value
+                );
+
+
+            if (
+                !Number.isFinite(
+                    number
+                )
+            ) {
+
+                return String(
+                    value
+                );
+            }
+
+
+            return number.toFixed(
+                3
+            );
+        };
+
+
+    const formatStatus =
+        (
+            value,
+            fallback = "-"
+        ) => {
+
+            if (!value) {
+
+                return fallback;
+            }
+
+
+            return String(
+                value
+            )
+                .replaceAll(
+                    "_",
+                    " "
+                );
+        };
+
+
+    // ============================================================
+    // ACTIONS
+    // ============================================================
+
+    const viewIncident =
+        (
+            incidentId
+        ) => {
+
+            navigate(
+                `/incidents/${incidentId}`
+            );
+        };
+
+
+    // ============================================================
+    // INVESTIGATE DETECTED INCIDENT
+    // ============================================================
+
+    const investigateIncident =
+        async (
+            incident
+        ) => {
+
+            const incidentId =
+                incident?.incident_id;
+
+
+            if (!incidentId) {
+
+                setError(
+                    "Incident ID is missing."
+                );
+
+                return;
+            }
+
+
+            try {
+
+                setError(
+                    ""
+                );
+
+                setInvestigatingId(
+                    incidentId
+                );
+
+
+                const result =
+                    await investigateDetectedIncident(
+                        incidentId
+                    );
+
+
+                if (
+                    !result?.success
+                ) {
+
+                    throw new Error(
+                        "Investigation did not complete successfully."
+                    );
+                }
+
+
+                navigate(
+                    `/incidents/${incidentId}`
+                );
+
+
+            } catch (err) {
+
+                console.error(
+                    "Incident investigation failed:",
+                    err
+                );
+
+
+                setError(
+                    err?.response?.data?.detail
+                    || err?.message
+                    || "Unable to investigate incident."
+                );
+
+
+            } finally {
+
+                setInvestigatingId(
+                    ""
+                );
+            }
+        };
+
+
+    // ============================================================
+    // RENDER
+    // ============================================================
+
+    return (
+        <div>
+
+            <div className="page-heading">
+
+                <div>
+
+                    <h2>
+                        Incidents
+                    </h2>
+
+                    <p>
+                        Unified detection, correlation,
+                        and persistent SENTINEL-X SOC incidents.
+                    </p>
+
+                </div>
+
+
+                <div className="incident-count">
+
+                    {filteredIncidents.length}
+
+                    {" "}
+
+                    incidents
+
+                </div>
+
+            </div>
+
+
+            <section className="filter-panel">
+
+                <div className="filter-group">
+
+                    <label>
+                        Risk Level
+                    </label>
+
+
+                    <select
+                        value={riskLevel}
+                        onChange={
+                            (event) =>
+                                setRiskLevel(
+                                    event.target.value
+                                )
+                        }
+                    >
+
+                        <option value="">
+                            All
+                        </option>
+
+                        <option value="CRITICAL">
+                            Critical
+                        </option>
+
+                        <option value="HIGH">
+                            High
+                        </option>
+
+                        <option value="MEDIUM">
+                            Medium
+                        </option>
+
+                        <option value="LOW">
+                            Low
+                        </option>
+
+                    </select>
+
+                </div>
+
+
+                <div className="filter-group">
+
+                    <label>
+                        Lifecycle Status
+                    </label>
+
+
+                    <select
+                        value={status}
+                        onChange={
+                            (event) =>
+                                setStatus(
+                                    event.target.value
+                                )
+                        }
+                    >
+
+                        <option value="">
+                            All
+                        </option>
+
+                        <option value="DETECTED_ONLY">
+                            Detected / Not Investigated
+                        </option>
+
+                        <option value="AWAITING_ANALYST_REVIEW">
+                            Awaiting Review
+                        </option>
+
+                        <option value="APPROVED">
+                            Approved
+                        </option>
+
+                        <option value="REJECTED">
+                            Rejected
+                        </option>
+
+                        <option value="RESOLVED">
+                            Resolved
+                        </option>
+
+                    </select>
+
+                </div>
+
+
+                <div className="filter-group">
+
+                    <label>
+                        Minimum Risk Score
+                    </label>
+
+
+                    <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        placeholder="0"
+                        value={minRisk}
+                        onChange={
+                            (event) =>
+                                setMinRisk(
+                                    event.target.value
+                                )
+                        }
+                    />
+
+                </div>
+
+
+                <div className="filter-actions">
+
+                    <button
+                        className="primary-button"
+                        onClick={
+                            loadIncidents
+                        }
+                    >
+                        Refresh
+                    </button>
+
+
+                    <button
+                        className="secondary-button"
+                        onClick={
+                            clearFilters
+                        }
+                    >
+                        Clear
+                    </button>
+
+                </div>
+
+            </section>
+
+
+            {loading && (
+
+                <div className="message-card">
+                    Loading incidents...
+                </div>
+            )}
+
+
+            {error && (
+
+                <div className="message-card error">
+                    {error}
+                </div>
+            )}
+
+
+            {!loading
+                && filteredIncidents.length === 0
+                && (
+
+                    <div className="message-card">
+
+                        No incidents match
+                        the selected filters.
+
+                    </div>
+                )}
+
+
+            {!loading
+                && filteredIncidents.length > 0
+                && (
+
+                    <div className="table-container">
+
+                        <table className="soc-table">
+
+                            <thead>
+
+                                <tr>
+
+                                    <th>
+                                        Incident
+                                    </th>
+
+                                    <th>
+                                        Source
+                                    </th>
+
+                                    <th>
+                                        Correlation
+                                    </th>
+
+                                    <th>
+                                        Risk / Severity
+                                    </th>
+
+                                    <th>
+                                        Events
+                                    </th>
+
+                                    <th>
+                                        SOC Status
+                                    </th>
+
+                                    <th>
+                                        Approval
+                                    </th>
+
+                                    <th>
+                                        Mitigation
+                                    </th>
+
+                                    <th>
+                                        Created
+                                    </th>
+
+                                    <th>
+                                        Action
+                                    </th>
+
+                                </tr>
+
+                            </thead>
+
+
+                            <tbody>
+
+                                {filteredIncidents.map(
+                                    (incident) => {
+
+                                        const incidentId =
+                                            incident.incident_id;
+
+
+                                        const riskLabel =
+                                            incident.risk_level
+                                            || incident.severity
+                                            || "UNKNOWN";
+
+
+                                        return (
+
+                                            <tr
+                                                key={
+                                                    incidentId
+                                                }
+                                            >
+
+                                                <td className="incident-id-cell">
+
+                                                    <div>
+                                                        {incidentId}
+                                                    </div>
+
+                                                    {incident.title
+                                                        && incident.title !== incidentId
+                                                        && (
+
+                                                            <small>
+                                                                {incident.title}
+                                                            </small>
+                                                        )}
+
+                                                </td>
+
+
+                                                <td>
+
+                                                    <span className="badge neutral">
+                                                        {incident.source}
+                                                    </span>
+
+                                                </td>
+
+
+                                                <td>
+                                                    {formatCorrelation(
+                                                        incident.correlation_score
+                                                    )}
+                                                </td>
+
+
+                                                <td>
+
+                                                    <span
+                                                        className={
+                                                            getRiskClass(
+                                                                riskLabel
+                                                            )
+                                                        }
+                                                    >
+                                                        {riskLabel}
+                                                    </span>
+
+                                                    {incident.risk_score !== null
+                                                        && incident.risk_score !== undefined
+                                                        && (
+
+                                                            <>
+                                                                {" "}
+                                                                <strong>
+                                                                    {incident.risk_score}
+                                                                </strong>
+                                                            </>
+                                                        )}
+
+                                                </td>
+
+
+                                                <td>
+                                                    {incident.event_count ?? 0}
+                                                </td>
+
+
+                                                <td>
+
+                                                    <span className="badge neutral">
+
+                                                        {
+                                                            incident.soc_case_exists
+                                                                ? formatStatus(
+                                                                    incident.soc_case_status
+                                                                    || incident.case_status,
+                                                                    "SOC CASE"
+                                                                )
+                                                                : "NOT CREATED"
+                                                        }
+
+                                                    </span>
+
+                                                </td>
+
+
+                                                <td>
+
+                                                    <span className="badge neutral">
+
+                                                        {
+                                                            incident.soc_case_exists
+                                                                ? formatStatus(
+                                                                    incident.approval_status,
+                                                                    "PENDING"
+                                                                )
+                                                                : "-"
+                                                        }
+
+                                                    </span>
+
+                                                </td>
+
+
+                                                <td>
+
+                                                    <span className="badge neutral">
+
+                                                        {
+                                                            incident.soc_case_exists
+                                                                ? formatStatus(
+                                                                    incident.mitigation_status,
+                                                                    "NOT VERIFIED"
+                                                                )
+                                                                : "-"
+                                                        }
+
+                                                    </span>
+
+                                                </td>
+
+
+                                                <td>
+                                                    {formatDate(
+                                                        incident.created_at
+                                                    )}
+                                                </td>
+
+
+                                                <td>
+
+                                                    {incident.soc_case_exists
+                                                        ? (
+
+                                                            <button
+                                                                className="table-action-button"
+                                                                onClick={
+                                                                    () =>
+                                                                        viewIncident(
+                                                                            incidentId
+                                                                        )
+                                                                }
+                                                            >
+                                                                View
+                                                            </button>
+
+                                                        )
+                                                        : (
+
+                                                            <button
+                                                                className="table-action-button"
+                                                                disabled={
+                                                                    investigatingId
+                                                                    === incidentId
+                                                                }
+                                                                onClick={
+                                                                    () =>
+                                                                        investigateIncident(
+                                                                            incident
+                                                                        )
+                                                                }
+                                                            >
+                                                                {
+                                                                    investigatingId
+                                                                    === incidentId
+                                                                        ? "Investigating..."
+                                                                        : "Investigate"
+                                                                }
+                                                            </button>
+                                                        )}
+
+                                                </td>
+
+                                            </tr>
+                                        );
+                                    }
+                                )}
+
+                            </tbody>
+
+                        </table>
+
+                    </div>
+                )}
+
+        </div>
+    );
+}
+
+
+export default Incidents;

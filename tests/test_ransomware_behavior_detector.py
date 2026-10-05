@@ -1,301 +1,103 @@
-import sys
-from pathlib import Path
-
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-
-if str(PROJECT_ROOT) not in sys.path:
-
-    sys.path.insert(
-        0,
-        str(PROJECT_ROOT),
-    )
-
-
-from detection.behavior.ransomware_behavior_detector import (
-    RansomwareBehaviorDetector,
-)
-
-
-def separator():
-
-    print(
-        "\n"
-        + "=" * 72
-    )
-
-
-def main():
-
-    separator()
-
-    print(
-        "SENTINEL-X RANSOMWARE BEHAVIOR TEST"
-    )
-
-    separator()
-
-    print(
-        "\nNo files are modified by this test."
-    )
-
-    print(
-        "Only synthetic metadata is analyzed."
-    )
-
-    detector = (
-        RansomwareBehaviorDetector(
-
-            modification_threshold=5,
-
-            rename_threshold=5,
-
-            extension_change_threshold=5,
-
-            ransomware_score_threshold=70,
-
-            alert_cooldown_seconds=0,
-        )
-    )
-
-    base_time = (
-        1_700_200_000.0
-    )
-
-    detected_types = set()
-
-    # ============================================================
-    # FILE MODIFICATION BURST
-    # ============================================================
-
-    print(
-        "\nTesting rapid file modifications..."
-    )
-
-    for index in range(
-        6
-    ):
-
-        event = {
-
-            "event_type":
-                "file_modify",
-
-            "process_id":
-                8000,
-
-            "process_name":
-                "synthetic_file_test.exe",
-
-            "file_path":
-                f"C:/synthetic/document_{index}.txt",
-        }
-
-        detections = (
-            detector.analyze(
-                event,
-                current_time=
-                    base_time
-                    + index,
-            )
-        )
-
-        for detection in detections:
-
-            detected_types.add(
-                detection[
-                    "detection_type"
-                ]
-            )
-
-            print(
-                "\nDETECTION:",
-                detection[
-                    "detection_type"
-                ],
-            )
-
-            print(
-                "Severity:",
-                detection[
-                    "severity"
-                ],
-            )
-
-            print(
-                "Risk:",
-                detection[
-                    "risk_score"
-                ],
-            )
-
-            print(
-                "Reason:",
-                detection[
-                    "reason"
-                ],
-            )
-
-    # ============================================================
-    # MASS RENAMES + EXTENSION CHANGES
-    # ============================================================
-
-    print(
-        "\nTesting synthetic rename activity..."
-    )
-
-    rename_base = (
-        base_time
-        + 50
-    )
-
-    for index in range(
-        6
-    ):
-
-        event = {
-
-            "event_type":
-                "file_rename",
-
-            "process_id":
-                8000,
-
-            "process_name":
-                "synthetic_file_test.exe",
-
-            "old_path":
-                f"C:/synthetic/report_{index}.docx",
-
-            "new_path":
-                f"C:/synthetic/report_{index}.changed",
-        }
-
-        detections = (
-            detector.analyze(
-                event,
-                current_time=
-                    rename_base
-                    + index,
-            )
-        )
-
-        for detection in detections:
-
-            detected_types.add(
-                detection[
-                    "detection_type"
-                ]
-            )
-
-            print(
-                "\nDETECTION:",
-                detection[
-                    "detection_type"
-                ],
-            )
-
-            print(
-                "Severity:",
-                detection[
-                    "severity"
-                ],
-            )
-
-            print(
-                "Risk:",
-                detection[
-                    "risk_score"
-                ],
-            )
-
-            print(
-                "Confidence:",
-                detection[
-                    "confidence"
-                ],
-            )
-
-            print(
-                "Reason:",
-                detection[
-                    "reason"
-                ],
-            )
-
-    # ============================================================
-    # VALIDATION
-    # ============================================================
-
-    separator()
-
-    print(
-        "Detected types:"
-    )
-
-    for item in sorted(
-        detected_types
-    ):
-
-        print(
-            " -",
-            item,
-        )
-
-    required = {
-
-        "FILE_MODIFICATION_BURST",
-
-        "MASS_FILE_RENAME",
-
-        "EXTENSION_CHANGE_BURST",
-
-        "POSSIBLE_RANSOMWARE_BEHAVIOR",
-    }
-
-    missing = (
-        required
-        - detected_types
-    )
-
-    if missing:
-
-        raise AssertionError(
-            "Missing detections: "
-            + str(
-                sorted(
-                    missing
-                )
-            )
-        )
-
-    separator()
-
-    print(
-        "FILE MODIFICATION BURST: PASS"
-    )
-
-    print(
-        "MASS FILE RENAME: PASS"
-    )
-
-    print(
-        "EXTENSION CHANGE BURST: PASS"
-    )
-
-    print(
-        "POSSIBLE RANSOMWARE BEHAVIOR: PASS"
-    )
-
-    separator()
-
-    print(
-        "ALL RANSOMWARE BEHAVIOR TESTS PASSED"
-    )
-
-    separator()
-
-
-if __name__ == "__main__":
-
-    main()
+"""No files, live telemetry, model loading or external services required."""
+import pytest
+from detection.behavior.ransomware_behavior_detector import RansomwareBehaviorDetector
+
+
+def detector():
+    return RansomwareBehaviorDetector(modification_threshold=3, rename_threshold=3,
+                                      extension_change_threshold=3,
+                                      alert_cooldown_seconds=30)
+
+
+def file_event(n, pid=None, folder='work'):
+    return {'event_type': 'file_modify', 'process_id': pid,
+            'file_path': f'C:/sandbox/{folder}/doc{n}.txt'}
+
+
+def rename_event(n, pid=None, folder='work'):
+    return {'event_type': 'file_rename', 'process_id': pid,
+            'file_path': f'C:/sandbox/{folder}/doc{n}.locked',
+            'old_path': f'C:/sandbox/{folder}/doc{n}.txt',
+            'new_path': f'C:/sandbox/{folder}/doc{n}.locked'}
+
+
+def test_unknown_process_reports_low_evidence_not_high_ransomware():
+    d = detector()
+    found = []
+    for i in range(4):
+        found += d.analyze(file_event(i), current_time=100+i)
+        found += d.analyze(rename_event(i), current_time=110+i)
+    assert {'FILE_MODIFICATION_BURST', 'MASS_FILE_RENAME', 'EXTENSION_CHANGE_BURST'} <= {
+        x['detection_type'] for x in found}
+    assert all(x['severity'] == 'LOW' for x in found)
+    assert not any(x['detection_type'] == 'POSSIBLE_RANSOMWARE_BEHAVIOR' for x in found)
+    assert all(x['attribution_status'] == 'UNKNOWN' for x in found)
+
+
+def test_unknown_process_scoped_by_directory():
+    d = detector()
+    findings = []
+    for i in range(2):
+        findings.extend(d.analyze(file_event(i, folder='one'), 100+i))
+        findings.extend(d.analyze(file_event(i, folder='two'), 100+i))
+    assert findings == []
+
+
+def test_single_rename_behavior_cannot_manufacture_combined_result():
+    d = detector()
+    found = []
+    for i in range(4):
+        found.extend(d.analyze(rename_event(i, pid=1001), 100+i))
+    kinds = {x['detection_type'] for x in found}
+    assert 'MASS_FILE_RENAME' in kinds and 'EXTENSION_CHANGE_BURST' in kinds
+    assert 'POSSIBLE_RANSOMWARE_BEHAVIOR' not in kinds
+
+
+def test_independent_modification_plus_extension_corrob_in_same_pid():
+    d = detector()
+    found = []
+    for i in range(4):
+        found.extend(d.analyze(file_event(i, pid=1001), 100+i))
+    for i in range(4):
+        found.extend(d.analyze(rename_event(i, pid=1001), 110+i))
+    combined = [x for x in found if x['detection_type'] == 'POSSIBLE_RANSOMWARE_BEHAVIOR']
+    assert len(combined) == 1
+    assert combined[0]['severity'] == 'HIGH'
+    assert combined[0]['process_id'] == 1001
+    assert 'FILE_MODIFICATION_BURST' in combined[0]['signals']
+
+
+def test_different_processes_do_not_combine():
+    d = detector()
+    results = []
+    for i in range(4):
+        results += d.analyze(file_event(i, pid=1001), 100+i)
+        results += d.analyze(rename_event(i, pid=2002), 110+i)
+    assert not any(x['detection_type'] == 'POSSIBLE_RANSOMWARE_BEHAVIOR' for x in results)
+
+
+def test_unknown_pid_zero_not_trusted():
+    d = detector()
+    results = []
+    for i in range(4):
+        results.extend(d.analyze(file_event(i, pid=0), 100+i))
+    assert any(x['attribution_status'] == 'UNKNOWN' for x in results)
+
+
+def test_duplicate_modifications_not_counted_as_distinct_files():
+    d = detector()
+    results = []
+    for i in range(8):
+        results.extend(d.analyze(file_event(0, pid=1001), 100+i))
+    assert not results
+
+
+def test_invalid_timestamp_and_missing_path_fail_closed():
+    d = detector()
+    assert d.analyze(file_event(0), current_time=float('nan')) == []
+    assert d.analyze({'event_type':'file_modify'}, 100) == []
+
+
+def test_bad_settings_rejected():
+    with pytest.raises(ValueError):
+        RansomwareBehaviorDetector(modification_threshold=0)

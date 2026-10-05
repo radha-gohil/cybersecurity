@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+import time
 from pathlib import Path
 
 from typing import (
@@ -602,6 +604,7 @@ class FusionV3ProcessMonitor(
         except (
             TypeError,
             ValueError,
+            OverflowError,
         ):
 
             create_time_value = None
@@ -655,6 +658,28 @@ class FusionV3ProcessMonitor(
             )
         )
 
+
+        # Defense in depth: a direct caller must not persist a Fusion
+        # V3 AI verdict for Windows PID 0, PID 4 with epoch-zero
+        # creation time, or any other invalid process identity.
+        try:
+            create_time = float(identity["create_time"])
+            identity_valid = (
+                identity["pid"] > 0
+                and math.isfinite(create_time)
+                and 0.0 < create_time <= time.time() + 60.0
+            )
+        except (TypeError, ValueError, OverflowError, KeyError):
+            identity_valid = False
+
+        if not identity_valid:
+            return {
+                "available": False,
+                "state": "INVALID_PROCESS_FEATURE_IDENTITY",
+                "operating_mode": self.fusion_v3_operating_mode,
+                "should_alert": False,
+                "result_id": None,
+            }
 
         fusion_result = (
             self.fusion_v3_engine.calculate(

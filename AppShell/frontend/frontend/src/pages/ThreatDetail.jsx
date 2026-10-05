@@ -1,1176 +1,1195 @@
+
+import { useEffect, useState } from "react";
 import {
-    Box,
-    Typography,
-    Card,
-    CardContent,
-    Button,
-    Chip,
-    LinearProgress,
-    Stack,
-    Divider,
-    Accordion,
-    AccordionSummary,
-    AccordionDetails,
+  useLocation,
+  useNavigate,
+  useParams,
+} from "react-router-dom";
+
+import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Chip,
+  CircularProgress,
+  Divider,
+  LinearProgress,
+  Stack,
+  Typography,
 } from "@mui/material";
 
 import {
-    ArrowBackRounded,
-    WarningAmberRounded,
-    PsychologyRounded,
-    TimelineRounded,
-    ShieldRounded,
-    ScienceRounded,
-    ExpandMoreRounded,
-    CheckCircleRounded,
-    ComputerRounded,
-    InsertDriveFileRounded,
-    LanguageRounded,
-    SettingsRounded,
+  ArrowBackRounded,
+  ExpandMoreRounded,
+  PsychologyRounded,
+  ScienceRounded,
+  ShieldRounded,
+  TimelineRounded,
+  WarningAmberRounded,
 } from "@mui/icons-material";
 
-import {
-    useNavigate,
-    useParams,
-} from "react-router-dom";
+import api, {
+  getLiveDetections,
+} from "../api/sentinelApi";
 
+const INCIDENT_LIMIT = 1000;
 
-function ThreatDetail() {
+function show(value, fallback = "Not reported") {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+    return fallback;
+  }
+  if (typeof value === "object") {
+    return JSON.stringify(value);
+  }
+  return String(value);
+}
 
-    const navigate = useNavigate();
+function formatTime(value) {
+  if (!value) return "Not reported";
 
-    const { threatId } = useParams();
+  if (
+    typeof value === "string" &&
+    !/[zZ]$|[+-]\d\d:\d\d$/.test(value)
+  ) {
+    return `${value} (timezone unspecified)`;
+  }
 
+  const date = new Date(value);
 
-    // ============================================================
-    // TEMPORARY FRONTEND DATA
-    // Later this will come from:
-    // /api/v1/incidents/{id}/full
-    // ============================================================
+  return Number.isNaN(date.getTime())
+    ? String(value)
+    : date.toLocaleString();
+}
 
-    const threat = {
-        id: threatId || "THREAT-001",
+function key(value) {
+  return String(value ?? "").trim().toLowerCase();
+}
 
-        title:
-            "Suspicious Multi-Stage Activity",
+function reasonsOf(value) {
+  if (Array.isArray(value)) {
+    return value
+      .filter(Boolean)
+      .map((item) =>
+        typeof item === "string"
+          ? item.replace(/_/g, " ")
+          : JSON.stringify(item)
+      );
+  }
 
-        severity:
-            "CRITICAL",
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return reasonsOf(parsed);
+    } catch {
+      // The stored reason may be plain text.
+    }
 
-        riskScore:
-            96,
+    return value ? [value.replace(/_/g, " ")] : [];
+  }
 
-        confidence:
-            97,
+  return [];
+}
 
-        status:
-            "AI Investigation Complete",
+function numeric(value) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
 
-        device:
-            "Personal Laptop",
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
 
-        detectedAt:
-            "2 minutes ago",
+function severityColor(severity) {
+  switch (String(severity || "").toUpperCase()) {
+    case "CRITICAL": return "#ef4444";
+    case "HIGH": return "#f97316";
+    case "MEDIUM": return "#f59e0b";
+    case "LOW": return "#3b82f6";
+    default: return "#94a3b8";
+  }
+}
 
-        summary:
-            "Sentinel-X detected several suspicious activities occurring together on your device.",
+function eventMatchesIncident(eventId, incident) {
+  return (
+    Boolean(eventId) &&
+    Array.isArray(incident?.event_ids) &&
+    incident.event_ids.some((id) => key(id) === key(eventId))
+  );
+}
 
-        recommendedAction:
-            "Targeted Full Remediation",
+async function getIncidents() {
+  const response = await api.get("/detected-incidents", {
+    params: { limit: INCIDENT_LIMIT },
+  });
 
-        residualRisk:
-            0,
+  const incidents = response.data?.incidents;
 
-        systemImpact:
-            "MEDIUM",
-    };
+  return {
+    incidents: Array.isArray(incidents) ? incidents : [],
+    truncated:
+      Array.isArray(incidents) && incidents.length >= INCIDENT_LIMIT,
+  };
+}
 
+function getExplanation(detection) {
+  const process = detection.process_evidence || {};
+  const scores = detection.model_scores || {};
+  const forest = process.isolation_forest || {};
+  const encoder = process.autoencoder || {};
 
-    const timeline = [
-        {
-            icon:
-                <ComputerRounded />,
+  const statements = [];
 
-            title:
-                "Suspicious process started",
+  if (forest.available === true && forest.model_outlier === true) {
+    statements.push(
+      "Isolation Forest classified the recorded process features as anomalous."
+    );
+  }
 
-            description:
-                "An application showed behavior that differed from normal system activity.",
+  if (
+    encoder.available === true &&
+    (encoder.anomaly_label ||
+      numeric(encoder.reconstruction_error) !== null)
+  ) {
+    statements.push(
+      `Autoencoder result: ${show(
+        encoder.anomaly_label,
+        "Anomaly measure recorded"
+      )}.`
+    );
+  }
 
-            time:
-                "10:24 AM",
-        },
+  if (scores.ai_agreement) {
+    statements.push(
+      `Reported model agreement: ${show(scores.ai_agreement)}.`
+    );
+  }
 
-        {
-            icon:
-                <InsertDriveFileRounded />,
+  if (!statements.length) {
+    statements.push(
+      "A detection was recorded, but the available API evidence does not explain its underlying model contributions."
+    );
+  }
 
-            title:
-                "Unexpected file activity",
+  return statements;
+}
 
-            description:
-                "Sentinel-X detected suspicious file modification behavior.",
+function DetailField({ label, value }) {
+  return (
+    <Box sx={{ py: 1.1 }}>
+      <Typography sx={{ color: "#94a3b8", fontSize: 12 }}>
+        {label}
+      </Typography>
+      <Typography
+        sx={{
+          mt: 0.35,
+          fontSize: 13,
+          overflowWrap: "anywhere",
+        }}
+      >
+        {show(value)}
+      </Typography>
+      <Divider sx={{ mt: 1.1 }} />
+    </Box>
+  );
+}
 
-            time:
-                "10:25 AM",
-        },
+function ModelCard({ title, model, modelType }) {
+  const available = model?.available === true;
 
-        {
-            icon:
-                <LanguageRounded />,
-
-            title:
-                "External network communication",
-
-            description:
-                "The application attempted to communicate with an external network address.",
-
-            time:
-                "10:26 AM",
-        },
-
-        {
-            icon:
-                <SettingsRounded />,
-
-            title:
-                "Startup configuration changed",
-
-            description:
-                "A persistence-related system configuration change was detected.",
-
-            time:
-                "10:27 AM",
-        },
-
-        {
-            icon:
-                <PsychologyRounded />,
-
-            title:
-                "AI investigation completed",
-
-            description:
-                "Sentinel-X AI agents classified the combined activity as high-risk.",
-
-            time:
-                "10:28 AM",
-        },
-    ];
-
-
+  if (!available) {
     return (
+      <Card variant="outlined">
+        <CardContent>
+          <Typography sx={{ fontWeight: 700 }}>{title}</Typography>
+          <Typography sx={{ color: "#94a3b8", mt: 1 }}>
+            No model details available in this record.
+          </Typography>
+        </CardContent>
+      </Card>
+    );
+  }
 
+  const reportedScore = numeric(model.anomaly_confidence);
+
+  return (
+    <Card
+      variant="outlined"
+      sx={{ borderColor: "rgba(139,92,246,0.35)" }}
+    >
+      <CardContent sx={{ p: 2.5 }}>
+        <Stack
+          direction="row"
+          justifyContent="space-between"
+          alignItems="flex-start"
+          spacing={1}
+        >
+          <Typography sx={{ fontWeight: 700 }}>
+            {title}
+          </Typography>
+
+          <Chip
+            size="small"
+            label={show(model.anomaly_label, "Result recorded")}
+            variant="outlined"
+          />
+        </Stack>
+
+        <Typography sx={{ color: "#94a3b8", fontSize: 12, mt: 1.5 }}>
+          Reported anomaly measure
+        </Typography>
+
+        <Typography sx={{ fontSize: 24, fontWeight: 750 }}>
+          {reportedScore === null
+            ? "Not reported"
+            : reportedScore}
+        </Typography>
+
+        {reportedScore !== null && (
+          <LinearProgress
+            variant="determinate"
+            value={Math.max(0, Math.min(100, reportedScore))}
+            sx={{
+              mt: 1,
+              height: 7,
+              borderRadius: 2,
+              background: "#1e293b",
+            }}
+          />
+        )}
+
+        <Typography
+          sx={{ color: "#64748b", fontSize: 11, mt: 1 }}
+        >
+          Model-reported anomaly measure, not a calibrated
+          probability of malicious activity.
+        </Typography>
+
+        <DetailField
+          label="Model version"
+          value={model.model_version}
+        />
+
+        {modelType === "forest" ? (
+          <>
+            <DetailField
+              label="Model outlier"
+              value={
+                model.model_outlier === undefined
+                  ? null
+                  : String(model.model_outlier)
+              }
+            />
+            <DetailField
+              label="Decision score"
+              value={model.decision_score}
+            />
+          </>
+        ) : (
+          <>
+            <DetailField
+              label="Reconstruction error"
+              value={model.reconstruction_error}
+            />
+            <DetailField
+              label="Reconstruction region"
+              value={model.reconstruction_region}
+            />
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function FeatureEvidence({ forest, encoder }) {
+  const deviations = Array.isArray(forest?.feature_deviations)
+    ? forest.feature_deviations
+    : [];
+
+  const reconstruction = Array.isArray(
+    encoder?.feature_reconstruction_errors
+  )
+    ? encoder.feature_reconstruction_errors
+    : [];
+
+  if (!deviations.length && !reconstruction.length) {
+    return (
+      <Alert severity="info">
+        No individual feature explanations were saved for
+        this detection.
+      </Alert>
+    );
+  }
+
+  return (
+    <Stack spacing={2}>
+      {deviations.length > 0 && (
         <Box>
+          <Typography sx={{ fontWeight: 700, mb: 1 }}>
+            Isolation Forest feature deviations
+          </Typography>
 
-            {/* ================================================= */}
-            {/* BACK */}
-            {/* ================================================= */}
+          <Typography
+            sx={{ color: "#94a3b8", fontSize: 12, mb: 1.5 }}
+          >
+            These values describe deviations from the model's
+            reference distribution, not malicious actions.
+          </Typography>
 
-            <Button
-                startIcon={
-                    <ArrowBackRounded />
-                }
-                onClick={
-                    () =>
-                        navigate(
-                            "/threats"
-                        )
-                }
-                sx={{
-                    mb: 2,
-                    color: "#94a3b8",
-                }}
-            >
-                Back to Threats
-            </Button>
-
-
-            {/* ================================================= */}
-            {/* HEADER */}
-            {/* ================================================= */}
-
+          {deviations.slice(0, 5).map((item, index) => (
             <Box
-                sx={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "flex-start",
-                    gap: 2,
-                    flexWrap: "wrap",
-                    mb: 3,
-                }}
+              key={`${item.feature}-${index}`}
+              sx={{
+                p: 1.5,
+                mb: 1,
+                background: "#0f172a",
+                borderRadius: 2,
+              }}
             >
+              <Typography sx={{ fontWeight: 650 }}>
+                {show(item.feature).replace(/_/g, " ")}
+              </Typography>
 
-                <Box>
-
-                    <Box
-                        sx={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 1.5,
-                            mb: 1,
-                        }}
-                    >
-
-                        <WarningAmberRounded
-                            sx={{
-                                color: "#ef4444",
-                                fontSize: 34,
-                            }}
-                        />
-
-
-                        <Typography
-                            variant="h4"
-                        >
-                            {threat.title}
-                        </Typography>
-
-                    </Box>
-
-
-                    <Typography
-                        sx={{
-                            color: "#94a3b8",
-                        }}
-                    >
-                        {threat.summary}
-                    </Typography>
-
-
-                    <Stack
-                        direction="row"
-                        spacing={1}
-                        sx={{
-                            mt: 2,
-                            flexWrap: "wrap",
-                            rowGap: 1,
-                        }}
-                    >
-
-                        <Chip
-                            label={
-                                threat.severity
-                            }
-                            sx={{
-                                color: "#ef4444",
-                                background:
-                                    "rgba(239,68,68,0.12)",
-                                fontWeight: 700,
-                            }}
-                        />
-
-                        <Chip
-                            label={
-                                threat.status
-                            }
-                            sx={{
-                                color: "#22c55e",
-                                background:
-                                    "rgba(34,197,94,0.10)",
-                            }}
-                        />
-
-                        <Chip
-                            label={
-                                threat.device
-                            }
-                            variant="outlined"
-                        />
-
-                    </Stack>
-
-                </Box>
-
-
-                <Button
-                    variant="contained"
-                    startIcon={
-                        <ShieldRounded />
-                    }
-                    onClick={
-                        () =>
-                            navigate(
-                                "/response-simulator"
-                            )
-                    }
-                    sx={{
-                        background: "#22c55e",
-                        color: "#04120a",
-
-                        "&:hover": {
-                            background: "#16a34a",
-                        },
-                    }}
-                >
-                    Review Recommended Action
-                </Button>
-
+              <Typography
+                sx={{ color: "#94a3b8", fontSize: 12, mt: 0.4 }}
+              >
+                Observed: {show(item.value)}
+                {" · "}
+                Reference mean: {show(item.baseline_mean)}
+                {" · "}
+                Deviation: {show(item.deviation_std)} SD
+              </Typography>
             </Box>
-
-
-            {/* ================================================= */}
-            {/* RISK OVERVIEW */}
-            {/* ================================================= */}
-
-            <Box
-                sx={{
-                    display: "grid",
-
-                    gridTemplateColumns:
-                        {
-                            xs: "1fr",
-                            lg: "1.4fr 1fr",
-                        },
-
-                    gap: 2,
-
-                    mb: 3,
-                }}
-            >
-
-                <Card>
-
-                    <CardContent
-                        sx={{
-                            p: 3,
-                        }}
-                    >
-
-                        <Typography
-                            variant="h6"
-                            sx={{
-                                mb: 2,
-                            }}
-                        >
-                            Threat Risk
-                        </Typography>
-
-
-                        <Box
-                            sx={{
-                                display: "flex",
-                                alignItems: "baseline",
-                                gap: 1,
-                                mb: 1.5,
-                            }}
-                        >
-
-                            <Typography
-                                sx={{
-                                    fontSize: 52,
-                                    fontWeight: 800,
-                                    color: "#ef4444",
-                                }}
-                            >
-                                {threat.riskScore}
-                            </Typography>
-
-
-                            <Typography
-                                sx={{
-                                    color: "#64748b",
-                                }}
-                            >
-                                / 100
-                            </Typography>
-
-                        </Box>
-
-
-                        <LinearProgress
-                            variant="determinate"
-                            value={
-                                threat.riskScore
-                            }
-                            sx={{
-                                height: 10,
-                                borderRadius: 10,
-                                background: "#1e293b",
-
-                                "& .MuiLinearProgress-bar":
-                                {
-                                    background:
-                                        "#ef4444",
-                                },
-                            }}
-                        />
-
-
-                        <Typography
-                            sx={{
-                                mt: 2,
-                                color: "#94a3b8",
-                                fontSize: 13,
-                            }}
-                        >
-                            This threat received a critical
-                            risk assessment because several
-                            suspicious behaviors occurred
-                            together.
-                        </Typography>
-
-                    </CardContent>
-
-                </Card>
-
-
-                <Card>
-
-                    <CardContent
-                        sx={{
-                            p: 3,
-                        }}
-                    >
-
-                        <Typography
-                            variant="h6"
-                            sx={{
-                                mb: 2,
-                            }}
-                        >
-                            AI Confidence
-                        </Typography>
-
-
-                        <Box
-                            sx={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 2,
-                                mb: 2,
-                            }}
-                        >
-
-                            <Box
-                                sx={{
-                                    width: 52,
-                                    height: 52,
-                                    borderRadius: "14px",
-
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-
-                                    color: "#8b5cf6",
-                                    background:
-                                        "rgba(139,92,246,0.12)",
-                                }}
-                            >
-
-                                <PsychologyRounded />
-
-                            </Box>
-
-
-                            <Typography
-                                sx={{
-                                    fontSize: 38,
-                                    fontWeight: 800,
-                                }}
-                            >
-                                {threat.confidence}%
-                            </Typography>
-
-                        </Box>
-
-
-                        <Typography
-                            sx={{
-                                color: "#94a3b8",
-                                fontSize: 13,
-                            }}
-                        >
-                            Multiple Sentinel-X detection
-                            and investigation components
-                            independently identified suspicious
-                            activity.
-                        </Typography>
-
-                    </CardContent>
-
-                </Card>
-
-            </Box>
-
-
-            {/* ================================================= */}
-            {/* WHAT HAPPENED */}
-            {/* ================================================= */}
-
-            <Card
-                sx={{
-                    mb: 3,
-                }}
-            >
-
-                <CardContent
-                    sx={{
-                        p: 3,
-                    }}
-                >
-
-                    <Box
-                        sx={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 1.2,
-                            mb: 3,
-                        }}
-                    >
-
-                        <TimelineRounded
-                            sx={{
-                                color: "#3b82f6",
-                            }}
-                        />
-
-
-                        <Typography
-                            variant="h6"
-                        >
-                            What Happened?
-                        </Typography>
-
-                    </Box>
-
-
-                    <Stack
-                        spacing={0}
-                    >
-
-                        {
-                            timeline.map(
-                                (
-                                    event,
-                                    index,
-                                ) => (
-
-                                    <TimelineItem
-                                        key={
-                                            event.title
-                                        }
-                                        {...event}
-                                        last={
-                                            index
-                                            ===
-                                            timeline.length
-                                            - 1
-                                        }
-                                    />
-
-                                )
-                            )
-                        }
-
-                    </Stack>
-
-                </CardContent>
-
-            </Card>
-
-
-            {/* ================================================= */}
-            {/* AI EXPLANATION */}
-            {/* ================================================= */}
-
-            <Card
-                sx={{
-                    mb: 3,
-                    borderColor:
-                        "rgba(139,92,246,0.30)",
-                }}
-            >
-
-                <CardContent
-                    sx={{
-                        p: 3,
-                    }}
-                >
-
-                    <Box
-                        sx={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 1.5,
-                            mb: 2,
-                        }}
-                    >
-
-                        <PsychologyRounded
-                            sx={{
-                                color: "#8b5cf6",
-                                fontSize: 30,
-                            }}
-                        />
-
-
-                        <Box>
-
-                            <Typography
-                                variant="h6"
-                            >
-                                Why Sentinel-X Flagged This
-                            </Typography>
-
-
-                            <Typography
-                                sx={{
-                                    color: "#64748b",
-                                    fontSize: 13,
-                                }}
-                            >
-                                Plain-language AI explanation
-                            </Typography>
-
-                        </Box>
-
-                    </Box>
-
-
-                    <Typography
-                        sx={{
-                            color: "#cbd5e1",
-                            mb: 2,
-                            lineHeight: 1.7,
-                        }}
-                    >
-                        Sentinel-X identified this as a serious
-                        threat because several unusual activities
-                        occurred close together and appear to be
-                        related.
-                    </Typography>
-
-
-                    <Stack
-                        spacing={1.2}
-                    >
-
-                        <ReasonItem
-                            text="An application showed suspicious behavior."
-                        />
-
-                        <ReasonItem
-                            text="Unexpected file changes were detected."
-                        />
-
-                        <ReasonItem
-                            text="The application contacted an external network address."
-                        />
-
-                        <ReasonItem
-                            text="A startup persistence mechanism was observed."
-                        />
-
-                    </Stack>
-
-
-                    <Accordion
-                        sx={{
-                            mt: 2,
-                            background: "#0f172a",
-                            backgroundImage: "none",
-                        }}
-                    >
-
-                        <AccordionSummary
-                            expandIcon={
-                                <ExpandMoreRounded />
-                            }
-                        >
-
-                            <Typography
-                                sx={{
-                                    fontWeight: 600,
-                                }}
-                            >
-                                Advanced Technical Details
-                            </Typography>
-
-                        </AccordionSummary>
-
-
-                        <AccordionDetails>
-
-                            <Typography
-                                sx={{
-                                    color: "#94a3b8",
-                                    fontSize: 13,
-                                    lineHeight: 1.8,
-                                }}
-                            >
-                                Technical details will later show
-                                Fusion-v3 evidence, behavioral AI,
-                                temporal analysis, correlation data,
-                                detection engine scores and related
-                                security events from the Sentinel-X
-                                backend.
-                            </Typography>
-
-                        </AccordionDetails>
-
-                    </Accordion>
-
-                </CardContent>
-
-            </Card>
-
-
-            {/* ================================================= */}
-            {/* RECOMMENDATION */}
-            {/* ================================================= */}
-
-            <Card
-                sx={{
-                    background:
-                        "linear-gradient(135deg, #11241b, #111827)",
-                    borderColor:
-                        "rgba(34,197,94,0.30)",
-                }}
-            >
-
-                <CardContent
-                    sx={{
-                        p: 3,
-                    }}
-                >
-
-                    <Box
-                        sx={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            gap: 3,
-                            flexWrap: "wrap",
-                        }}
-                    >
-
-                        <Box
-                            sx={{
-                                flex: 1,
-                                minWidth: 260,
-                            }}
-                        >
-
-                            <Typography
-                                sx={{
-                                    color: "#22c55e",
-                                    fontSize: 12,
-                                    fontWeight: 700,
-                                    letterSpacing: 1,
-                                    mb: 1,
-                                }}
-                            >
-                                RECOMMENDED RESPONSE
-                            </Typography>
-
-
-                            <Typography
-                                variant="h5"
-                            >
-                                {threat.recommendedAction}
-                            </Typography>
-
-
-                            <Typography
-                                sx={{
-                                    color: "#94a3b8",
-                                    mt: 1,
-                                    maxWidth: 620,
-                                }}
-                            >
-                                Sentinel-X recommends this response
-                                because it is predicted to reduce
-                                the threat while limiting impact
-                                to your device.
-                            </Typography>
-
-
-                            <Stack
-                                spacing={1}
-                                sx={{
-                                    mt: 2,
-                                }}
-                            >
-
-                                <ReasonItem
-                                    text="Stop suspicious activity"
-                                />
-
-                                <ReasonItem
-                                    text="Quarantine suspicious files"
-                                />
-
-                                <ReasonItem
-                                    text="Block suspicious network activity"
-                                />
-
-                                <ReasonItem
-                                    text="Remove persistence mechanisms"
-                                />
-
-                            </Stack>
-
-                        </Box>
-
-
-                        <Box
-                            sx={{
-                                minWidth: 230,
-                            }}
-                        >
-
-                            <RiskComparison
-                                before={
-                                    threat.riskScore
-                                }
-                                after={
-                                    threat.residualRisk
-                                }
-                            />
-
-
-                            <Typography
-                                sx={{
-                                    mt: 2,
-                                    color: "#94a3b8",
-                                    fontSize: 13,
-                                }}
-                            >
-                                System impact:
-                                {" "}
-                                <Box
-                                    component="span"
-                                    sx={{
-                                        color: "#f59e0b",
-                                        fontWeight: 700,
-                                    }}
-                                >
-                                    {threat.systemImpact}
-                                </Box>
-                            </Typography>
-
-
-                            <Button
-                                fullWidth
-                                variant="contained"
-                                startIcon={
-                                    <ScienceRounded />
-                                }
-                                onClick={
-                                    () =>
-                                        navigate(
-                                            "/response-simulator"
-                                        )
-                                }
-                                sx={{
-                                    mt: 2,
-                                    background: "#22c55e",
-                                    color: "#04120a",
-
-                                    "&:hover":
-                                    {
-                                        background: "#16a34a",
-                                    },
-                                }}
-                            >
-                                Open Response Simulator
-                            </Button>
-
-                        </Box>
-
-                    </Box>
-
-                </CardContent>
-
-            </Card>
-
+          ))}
         </Box>
+      )}
 
-    );
+      {reconstruction.length > 0 && (
+        <Box>
+          <Typography sx={{ fontWeight: 700, mb: 1 }}>
+            Autoencoder reconstruction differences
+          </Typography>
 
+          {reconstruction.slice(0, 5).map((item, index) => (
+            <Box
+              key={`${item.feature}-${index}`}
+              sx={{
+                p: 1.5,
+                mb: 1,
+                background: "#0f172a",
+                borderRadius: 2,
+              }}
+            >
+              <Typography sx={{ fontWeight: 650 }}>
+                {show(item.feature).replace(/_/g, " ")}
+              </Typography>
+
+              <Typography
+                sx={{ color: "#94a3b8", fontSize: 12, mt: 0.4 }}
+              >
+                Actual: {show(item.actual_value)}
+                {" · "}
+                Reconstructed: {show(item.reconstructed_value)}
+              </Typography>
+            </Box>
+          ))}
+        </Box>
+      )}
+    </Stack>
+  );
 }
 
+function TimelineEntry({ item, index }) {
+  const event =
+    item && typeof item === "object"
+      ? item
+      : { description: String(item) };
 
-/* ================================================================ */
-/* TIMELINE ITEM */
-/* ================================================================ */
+  const title = (
+    event.title ||
+    event.event_type ||
+    event.category ||
+    event.type ||
+    "Recorded event"
+  ).toString().replace(/_/g, " ");
 
-function TimelineItem({
-    icon,
-    title,
-    description,
-    time,
-    last,
-}) {
+  const description =
+    event.description ||
+    event.message ||
+    event.reason ||
+    event.event_id ||
+    "No further event description was recorded.";
 
-    return (
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        gap: 2,
+        pb: 2,
+        mb: 1,
+        borderBottom: "1px solid #1e293b",
+      }}
+    >
+      <TimelineRounded sx={{ color: "#60a5fa", mt: 0.3 }} />
 
-        <Box
-            sx={{
-                display: "flex",
-                gap: 2,
-            }}
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography sx={{ fontWeight: 650 }}>
+          {title}
+        </Typography>
+
+        <Typography
+          sx={{
+            fontSize: 12,
+            color: "#94a3b8",
+            mt: 0.5,
+            overflowWrap: "anywhere",
+          }}
         >
+          {show(description)}
+        </Typography>
 
-            <Box
-                sx={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                }}
-            >
-
-                <Box
-                    sx={{
-                        width: 42,
-                        height: 42,
-
-                        borderRadius: "50%",
-
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-
-                        background:
-                            "rgba(59,130,246,0.10)",
-
-                        color:
-                            "#3b82f6",
-                    }}
-                >
-                    {icon}
-                </Box>
-
-
-                {
-                    !last
-                    && (
-
-                        <Box
-                            sx={{
-                                width: 2,
-                                flex: 1,
-                                minHeight: 45,
-                                background:
-                                    "#1e293b",
-                            }}
-                        />
-
-                    )
-                }
-
-            </Box>
-
-
-            <Box
-                sx={{
-                    pb: last
-                        ? 0
-                        : 3,
-
-                    flex: 1,
-                }}
-            >
-
-                <Box
-                    sx={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        gap: 2,
-                        flexWrap: "wrap",
-                    }}
-                >
-
-                    <Typography
-                        sx={{
-                            fontWeight: 600,
-                        }}
-                    >
-                        {title}
-                    </Typography>
-
-
-                    <Typography
-                        sx={{
-                            color: "#64748b",
-                            fontSize: 12,
-                        }}
-                    >
-                        {time}
-                    </Typography>
-
-                </Box>
-
-
-                <Typography
-                    sx={{
-                        mt: 0.5,
-                        color: "#64748b",
-                        fontSize: 13,
-                    }}
-                >
-                    {description}
-                </Typography>
-
-            </Box>
-
-        </Box>
-
-    );
-
+        <Typography
+          sx={{ fontSize: 11, color: "#64748b", mt: 0.5 }}
+        >
+          {formatTime(event.timestamp || event.time)}
+        </Typography>
+      </Box>
+    </Box>
+  );
 }
 
+export default function ThreatDetail() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { threatId } = useParams();
 
-/* ================================================================ */
-/* REASON ITEM */
-/* ================================================================ */
+  const requestedId = String(threatId || "").replace(
+    /^detection-/,
+    ""
+  );
 
-function ReasonItem({
-    text,
-}) {
+  const stateDetection = location.state?.detection;
+  const matchingStateDetection =
+    String(stateDetection?.detection_id ?? "") === requestedId
+      ? stateDetection
+      : null;
 
+  const stateIncident = location.state?.incident;
+
+  const [detection, setDetection] = useState(
+    matchingStateDetection
+  );
+  const [incidents, setIncidents] = useState(
+    stateIncident ? [stateIncident] : []
+  );
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [incidentError, setIncidentError] = useState("");
+  const [incidentTruncated, setIncidentTruncated] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    async function load() {
+      setLoading(true);
+
+      const [detResult, incResult] = await Promise.allSettled([
+        getLiveDetections(100),
+        getIncidents(),
+      ]);
+
+      if (!active) return;
+
+      let resolved = matchingStateDetection;
+
+      if (detResult.status === "fulfilled") {
+        const records = Array.isArray(
+          detResult.value?.detections
+        )
+          ? detResult.value.detections
+          : [];
+
+        const latest = records.find(
+          (item) => String(item.detection_id) === requestedId
+        );
+
+        if (latest) resolved = latest;
+        setError("");
+      } else {
+        setError(
+          detResult.reason?.message ||
+          "Unable to refresh the detection."
+        );
+      }
+
+      setDetection(resolved || null);
+
+      if (incResult.status === "fulfilled") {
+        const allIncidents = incResult.value.incidents;
+
+        const matches = allIncidents.filter(
+          (item) =>
+            eventMatchesIncident(resolved?.event_id, item) ||
+            (
+              resolved?.incident_id &&
+              String(item.incident_id) ===
+              String(resolved.incident_id)
+            )
+        );
+
+        const verifiedStateIncident =
+          stateIncident &&
+          (
+            eventMatchesIncident(resolved?.event_id, stateIncident) ||
+            (
+              resolved?.incident_id &&
+              String(stateIncident.incident_id) ===
+              String(resolved.incident_id)
+            )
+          )
+            ? stateIncident
+            : null;
+
+        setIncidents(
+          matches.length
+            ? matches
+            : verifiedStateIncident
+              ? [verifiedStateIncident]
+              : []
+        );
+
+        setIncidentTruncated(incResult.value.truncated);
+        setIncidentError("");
+      } else {
+        setIncidentError(
+          incResult.reason?.message ||
+          "Unable to refresh incident information."
+        );
+      }
+
+      setLoading(false);
+    }
+
+    load();
+
+    return () => {
+      active = false;
+    };
+  }, [
+    requestedId,
+    matchingStateDetection,
+    stateIncident,
+  ]);
+
+  if (loading && !detection) {
     return (
+      <Box sx={{ textAlign: "center", py: 5 }}>
+        <CircularProgress />
+        <Typography sx={{ mt: 2 }}>
+          Loading detection evidence...
+        </Typography>
+      </Box>
+    );
+  }
 
-        <Box
-            sx={{
-                display: "flex",
-                alignItems: "center",
-                gap: 1,
-            }}
+  if (!detection) {
+    return (
+      <Box>
+        <Button
+          startIcon={<ArrowBackRounded />}
+          onClick={() => navigate("/threats")}
+          sx={{ mb: 2 }}
         >
+          Back to Threats
+        </Button>
 
-            <CheckCircleRounded
-                sx={{
-                    color: "#22c55e",
-                    fontSize: 18,
-                }}
+        <Alert severity="warning">
+          Detection #{requestedId} was not found in the
+          latest 100 API results. Older direct links will need
+          an ID-based read endpoint.
+        </Alert>
+      </Box>
+    );
+  }
+
+  const process = detection.process_evidence || {};
+  const scores = detection.model_scores || {};
+  const forest = process.isolation_forest || {};
+  const encoder = process.autoencoder || {};
+
+  const incident = incidents[0] || null;
+  const incidentId =
+    incident?.incident_id ||
+    detection.incident_id ||
+    null;
+
+  const processName =
+    detection.process_name ||
+    process.process_name ||
+    null;
+
+  const title = processName
+    ? `Behavioral AI alert — ${processName}`
+    : detection.display_title ||
+      show(detection.threat_type, "Security detection")
+        .replace(/_/g, " ");
+
+  const severity = String(
+    detection.severity || "UNKNOWN"
+  ).toUpperCase();
+
+  const color = severityColor(severity);
+  const risk = numeric(detection.risk_score);
+
+  const reasons = reasonsOf(
+    detection.detection_reason ?? process.fusion_reasons
+  );
+
+  const timeline = Array.isArray(incident?.timeline)
+    ? incident.timeline
+    : [];
+
+  const explanations = getExplanation(detection);
+
+  const processAgeFlag =
+    processName?.toLowerCase() === "system" &&
+    (
+      numeric(process.create_time) === 0 ||
+      (numeric(process.pid) === 4)
+    );
+
+  return (
+    <Box>
+      <Button
+        startIcon={<ArrowBackRounded />}
+        onClick={() => navigate("/threats")}
+        sx={{ mb: 2 }}
+      >
+        Back to Threats
+      </Button>
+
+      {error && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
+
+      {incidentError && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Incident lookup: {incidentError}
+        </Alert>
+      )}
+
+      {incidentTruncated && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Only the most recent 1,000 incident records were
+          checked. Older relationships may not appear here.
+        </Alert>
+      )}
+
+      {/* HEADER */}
+
+      <Stack
+        direction={{ xs: "column", md: "row" }}
+        justifyContent="space-between"
+        alignItems={{ xs: "flex-start", md: "center" }}
+        spacing={2}
+        sx={{ mb: 3 }}
+      >
+        <Box>
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            <WarningAmberRounded sx={{ color, fontSize: 32 }} />
+
+            <Typography variant="h4" sx={{ fontWeight: 750 }}>
+              {title}
+            </Typography>
+          </Stack>
+
+          <Typography
+            sx={{ color: "#94a3b8", mt: 1, fontSize: 13 }}
+          >
+            Detection #{show(detection.detection_id)}
+            {" · "}
+            PID {show(detection.pid ?? process.pid)}
+            {" · "}
+            {show(detection.device_id)}
+          </Typography>
+
+          <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
+            <Chip label={severity} sx={{ color }} variant="outlined" />
+
+            <Chip
+              label={
+                incidentId
+                  ? "Incident Linked"
+                  : "Link Not Verified"
+              }
+              color={incidentId ? "success" : "default"}
+              variant="outlined"
             />
 
-
-            <Typography
-                sx={{
-                    color: "#cbd5e1",
-                    fontSize: 13,
-                }}
-            >
-                {text}
-            </Typography>
-
+            {incident && (
+              <Chip
+                label={show(incident.status, "Unknown status")}
+                variant="outlined"
+              />
+            )}
+          </Stack>
         </Box>
 
-    );
-
-}
-
-
-/* ================================================================ */
-/* RISK COMPARISON */
-/* ================================================================ */
-
-function RiskComparison({
-    before,
-    after,
-}) {
-
-    return (
-
-        <Box
-            sx={{
-                p: 2.5,
-
-                borderRadius: "14px",
-
-                background:
-                    "#0f172a",
-
-                border:
-                    "1px solid #1e293b",
-            }}
+        <Button
+          variant="contained"
+          disabled={!incidentId}
+          startIcon={<ShieldRounded />}
+          onClick={() =>
+            navigate("/response-simulator", {
+              state: { incidentId },
+            })
+          }
         >
+          Review Response Workflow
+        </Button>
+      </Stack>
 
-            <Typography
-                sx={{
-                    color: "#64748b",
-                    fontSize: 12,
-                    mb: 1.5,
-                }}
-            >
-                Predicted risk change
+      {/* OVERVIEW */}
+
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: {
+            xs: "1fr",
+            md: "repeat(2,1fr)",
+          },
+          gap: 2,
+          mb: 3,
+        }}
+      >
+        <Card>
+          <CardContent sx={{ p: 3 }}>
+            <Typography variant="h6">
+              Detection Risk
             </Typography>
 
-
-            <Box
-                sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 2,
-                }}
+            <Typography
+              sx={{ fontSize: 46, fontWeight: 800, color, mt: 1 }}
             >
+              {risk === null ? "—" : risk}
+              <Typography
+                component="span"
+                sx={{ fontSize: 15, color: "#94a3b8" }}
+              >
+                {risk === null ? "" : " / 100"}
+              </Typography>
+            </Typography>
 
-                <Box>
+            {risk !== null && (
+              <LinearProgress
+                variant="determinate"
+                value={Math.max(0, Math.min(100, risk))}
+                sx={{
+                  height: 9,
+                  borderRadius: 2,
+                  background: "#1e293b",
+                }}
+              />
+            )}
 
-                    <Typography
-                        sx={{
-                            color: "#64748b",
-                            fontSize: 11,
-                        }}
-                    >
-                        Before
-                    </Typography>
+            <Typography
+              sx={{ color: "#94a3b8", fontSize: 12, mt: 1.5 }}
+            >
+              Stored fusion risk measure. Not a probability
+              that this process is malicious.
+            </Typography>
+          </CardContent>
+        </Card>
 
-                    <Typography
-                        sx={{
-                            fontSize: 28,
-                            fontWeight: 800,
-                            color: "#ef4444",
-                        }}
-                    >
-                        {before}
-                    </Typography>
+        <Card>
+          <CardContent sx={{ p: 3 }}>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <PsychologyRounded sx={{ color: "#a78bfa" }} />
+              <Typography variant="h6">
+                Evidence Confidence
+              </Typography>
+            </Stack>
 
-                </Box>
+            <Typography sx={{ fontSize: 28, fontWeight: 750, mt: 2 }}>
+              {show(
+                process.fusion_confidence ??
+                  scores.evidence_confidence
+              )}
+            </Typography>
 
+            <Typography
+              sx={{ color: "#94a3b8", mt: 1, fontSize: 13 }}
+            >
+              Model agreement:
+              {" "}
+              {show(scores.ai_agreement)}
+            </Typography>
 
-                <Typography
-                    sx={{
-                        color: "#64748b",
-                        fontSize: 24,
-                    }}
-                >
-                    →
-                </Typography>
+            <Typography
+              sx={{ color: "#64748b", mt: 1, fontSize: 12 }}
+            >
+              Model agreement and overall evidence confidence
+              measure different things.
+            </Typography>
+          </CardContent>
+        </Card>
+      </Box>
 
+      {/* WHAT HAPPENED */}
 
-                <Box>
+      <Card sx={{ mb: 3 }}>
+        <CardContent sx={{ p: 3 }}>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <TimelineRounded sx={{ color: "#60a5fa" }} />
+            <Typography variant="h6">
+              What Happened?
+            </Typography>
+          </Stack>
 
-                    <Typography
-                        sx={{
-                            color: "#64748b",
-                            fontSize: 11,
-                        }}
-                    >
-                        After
-                    </Typography>
+          <Typography sx={{ mt: 2, lineHeight: 1.8 }}>
+            Sentinel-X recorded a detection for
+            {" "}
+            <strong>{show(processName, "an endpoint event")}</strong>
+            {" "}
+            using the
+            {" "}
+            <strong>{show(detection.engine)}</strong>
+            {" "}
+            detection engine.
+          </Typography>
 
-                    <Typography
-                        sx={{
-                            fontSize: 28,
-                            fontWeight: 800,
-                            color: "#22c55e",
-                        }}
-                    >
-                        {after}
-                    </Typography>
+          <DetailField
+            label="Original event"
+            value={detection.event_id}
+          />
 
-                </Box>
+          <DetailField
+            label="Event type"
+            value={detection.event_type}
+          />
 
+          <DetailField
+            label="Timestamp"
+            value={formatTime(detection.timestamp)}
+          />
+
+          <DetailField
+            label="Parent process"
+            value={
+              detection.parent_process_name ??
+              process.parent_process_name
+            }
+          />
+
+          <DetailField
+            label="Detection reason"
+            value={
+              reasons.length
+                ? reasons.join(", ")
+                : "No specific reason recorded"
+            }
+          />
+
+          {incident && (
+            <Alert severity="info" sx={{ mt: 2 }}>
+              This event is associated with recorded incident
+              {" "}
+              {incident.incident_id}.
+              {" "}
+              Its current status is
+              {" "}
+              {show(incident.status)}.
+            </Alert>
+          )}
+
+          <Typography sx={{ fontWeight: 700, mt: 3, mb: 1.5 }}>
+            Recorded Incident Timeline
+          </Typography>
+
+          {timeline.length ? (
+            timeline.map((item, index) => (
+              <TimelineEntry
+                key={index}
+                item={item}
+                index={index}
+              />
+            ))
+          ) : (
+            <Alert severity="info">
+              No detailed incident timeline was available
+              in the retrieved incident record.
+            </Alert>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* AI EXPLANATION */}
+
+      <Card sx={{ mb: 3 }}>
+        <CardContent sx={{ p: 3 }}>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <PsychologyRounded sx={{ color: "#a78bfa" }} />
+            <Typography variant="h6">
+              Why Sentinel-X Flagged This
+            </Typography>
+          </Stack>
+
+          <Stack spacing={1.5} sx={{ mt: 2 }}>
+            {explanations.map((text, index) => (
+              <Typography key={index} sx={{ color: "#cbd5e1" }}>
+                • {text}
+              </Typography>
+            ))}
+          </Stack>
+
+          <Alert severity="warning" sx={{ mt: 2 }}>
+            Attack classification not established. A model
+            anomaly alone does not confirm malware,
+            ransomware or another specific attack.
+          </Alert>
+
+          {processAgeFlag && (
+            <Alert severity="info" sx={{ mt: 2 }}>
+              This is the Windows System process. Its PID or
+              stored creation time requires special handling
+              when interpreting process-age features.
+              Check the feature calculation before treating
+              a high anomaly score as malicious evidence.
+            </Alert>
+          )}
+
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: {
+                xs: "1fr",
+                md: "1fr 1fr",
+              },
+              gap: 2,
+              mt: 3,
+            }}
+          >
+            <ModelCard
+              title="Isolation Forest"
+              model={forest}
+              modelType="forest"
+            />
+            <ModelCard
+              title="Autoencoder"
+              model={encoder}
+              modelType="encoder"
+            />
+          </Box>
+
+          <Typography variant="h6" sx={{ mt: 3, mb: 1.5 }}>
+            Features Behind the Alert
+          </Typography>
+
+          <FeatureEvidence forest={forest} encoder={encoder} />
+        </CardContent>
+      </Card>
+
+      {/* ADVANCED DETAILS */}
+
+      <Accordion sx={{ mb: 3 }}>
+        <AccordionSummary expandIcon={<ExpandMoreRounded />}>
+          <Typography sx={{ fontWeight: 700 }}>
+            Advanced Technical Details
+          </Typography>
+        </AccordionSummary>
+
+        <AccordionDetails>
+          <DetailField
+            label="Detection ID"
+            value={detection.detection_id}
+          />
+          <DetailField
+            label="Event ID"
+            value={detection.event_id}
+          />
+          <DetailField
+            label="Device ID"
+            value={detection.device_id}
+          />
+          <DetailField
+            label="Process"
+            value={processName}
+          />
+          <DetailField
+            label="PID"
+            value={detection.pid ?? process.pid}
+          />
+          <DetailField
+            label="Parent PID"
+            value={process.ppid}
+          />
+          <DetailField
+            label="Parent process"
+            value={process.parent_process_name}
+          />
+          <DetailField
+            label="Thread count"
+            value={process.num_threads}
+          />
+          <DetailField
+            label="Handle count"
+            value={process.num_handles}
+          />
+          <DetailField
+            label="CPU percent"
+            value={process.cpu_percent}
+          />
+          <DetailField
+            label="Memory percent"
+            value={process.memory_percent}
+          />
+          <DetailField
+            label="Stored fusion version"
+            value={process.fusion_version}
+          />
+          <DetailField
+            label="Rule score"
+            value={scores.rule_score}
+          />
+          <DetailField
+            label="Statistical score"
+            value={scores.statistical_score}
+          />
+          <DetailField
+            label="Isolation Forest score"
+            value={scores.isolation_forest_score}
+          />
+          <DetailField
+            label="Autoencoder score"
+            value={scores.autoencoder_score}
+          />
+          <DetailField
+            label="AI consensus score"
+            value={scores.ai_consensus_score}
+          />
+          <DetailField
+            label="Critical allowed"
+            value={
+              scores.critical_allowed === undefined ||
+              scores.critical_allowed === null
+                ? null
+                : String(scores.critical_allowed)
+            }
+          />
+          <DetailField
+            label="Feature record ID"
+            value={scores.feature_record_id}
+          />
+          <DetailField
+            label="Incident ID"
+            value={incidentId}
+          />
+          <DetailField
+            label="Incident status"
+            value={incident?.status}
+          />
+          <DetailField
+            label="Correlated event count"
+            value={
+              incident?.event_count ??
+              incident?.event_ids?.length
+            }
+          />
+          <DetailField
+            label="SOC case status"
+            value={incident?.soc_case_status}
+          />
+          <DetailField
+            label="Mitigation status"
+            value={incident?.mitigation_status}
+          />
+
+          <Alert severity="info" sx={{ mt: 2 }}>
+            The engine and fusion version are displayed
+            exactly as stored. Model provenance should be
+            verified separately before relabeling old results.
+          </Alert>
+        </AccordionDetails>
+      </Accordion>
+
+      {/* RESPONSE WORKFLOW */}
+
+      <Card
+        sx={{
+          background:
+            "linear-gradient(135deg,#11241b,#111827)",
+          borderColor: "rgba(34,197,94,0.3)",
+        }}
+      >
+        <CardContent sx={{ p: 3 }}>
+          <Stack
+            direction={{ xs: "column", md: "row" }}
+            justifyContent="space-between"
+            alignItems={{ xs: "flex-start", md: "center" }}
+            spacing={2}
+          >
+            <Box>
+              <Typography variant="h6">
+                Existing Response Workflow
+              </Typography>
+
+              <Typography
+                sx={{ mt: 1, color: "#94a3b8" }}
+              >
+                {incident
+                  ? `Recorded incident status: ${show(
+                      incident.status
+                    )}`
+                  : "Incident relationship not verified"}
+              </Typography>
+
+              <Typography
+                sx={{
+                  color: "#64748b",
+                  fontSize: 12,
+                  mt: 1,
+                  overflowWrap: "anywhere",
+                }}
+              >
+                Incident ID: {show(incidentId)}
+              </Typography>
             </Box>
 
-        </Box>
+            <Button
+              variant="contained"
+              startIcon={<ScienceRounded />}
+              disabled={!incidentId}
+              onClick={() =>
+                navigate("/response-simulator", {
+                  state: { incidentId },
+                })
+              }
+            >
+              Open Response Simulator
+            </Button>
+          </Stack>
 
-    );
-
+          <Typography
+            sx={{ color: "#94a3b8", fontSize: 12, mt: 2 }}
+          >
+            This button only navigates to the existing page.
+            It does not execute a response or initiate
+            an investigation. The simulator must independently
+            validate the incident context.
+          </Typography>
+        </CardContent>
+      </Card>
+    </Box>
+  );
 }
-
-
-export default ThreatDetail;

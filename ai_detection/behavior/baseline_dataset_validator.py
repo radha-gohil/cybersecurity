@@ -324,7 +324,33 @@ def calculate_feature_statistics(
             unique_values <= 1,
     }
 
+def is_epoch_process_age_artifact(vector) -> bool:
+    """
+    Identify the historical zero-create-time artifact.
 
+    This is a training-data quality rule, not a
+    live security detection rule.
+    """
+    import math
+
+    try:
+        age_index = PROCESS_FEATURE_NAMES.index(
+            "process_age_seconds"
+        )
+        age = float(vector[age_index])
+
+        return (
+            math.isfinite(age)
+            and age > 1_000_000_000
+        )
+
+    except (
+        TypeError,
+        ValueError,
+        IndexError,
+        KeyError,
+    ):
+        return False
 # ================================================================
 # MAIN VALIDATOR
 # ================================================================
@@ -613,7 +639,10 @@ class BaselineDatasetValidator:
                 invalid_vector_count += 1
 
                 continue
-
+            # Exclude historical epoch artifacts from
+            # candidate baseline statistics.
+            if is_epoch_process_age_artifact(vector):
+                continue
 
             valid_vectors.append(
                 vector

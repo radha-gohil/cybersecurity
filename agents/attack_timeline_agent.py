@@ -387,36 +387,9 @@ class AttackTimelineAgent:
         )
 
 
-        malware_probability = (
-            file_data.get(
-                "malware_probability"
-            )
-        )
-
-
-        if malware_probability is not None:
-
-            try:
-
-                probability = float(
-                    malware_probability
-                )
-
-
-                if probability >= 0.70:
-
-                    description += (
-                        f" | Elevated malware probability "
-                        f"{probability:.2f}"
-                    )
-
-            except (
-                TypeError,
-                ValueError,
-            ):
-
-                pass
-
+        # Legacy malware probabilities are not authoritative while
+        # the incompatible malware model is disabled. Keep raw
+        # values in evidence, but do not narrate them as findings.
 
         return description
 
@@ -948,6 +921,12 @@ class AttackTimelineAgent:
 
             "attack_stages":
                 attack_stages,
+
+            # Compatibility field: these are heuristic stage labels,
+            # not confirmed malicious behavior or causal attribution.
+            "attack_stages_verified": False,
+            "timeline_interpretation": "HEURISTIC_UNVERIFIED",
+            "causal_relationship_verified": False,
 
             "timeline":
                 timeline,

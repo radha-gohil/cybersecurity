@@ -1,6 +1,7 @@
 from collections import defaultdict, deque
 from datetime import datetime, timezone
 from statistics import mean, pstdev
+import math
 from typing import Dict, List, Optional, Tuple
 
 
@@ -1060,6 +1061,29 @@ class NetworkBehaviorTracker:
 
         detections = []
 
+        # Never turn unattributed socket observations into a process threat.
+        if not isinstance(connection, dict):
+            return detections
+        pid = connection.get("pid")
+        if isinstance(pid, bool):
+            return detections
+        try:
+            pid = int(pid)
+        except (TypeError, ValueError, OverflowError):
+            return detections
+        if pid <= 0 or not connection.get("remote_ip"):
+            return detections
+
+        # Reject malformed explicit timestamps rather than corrupting rolling
+        # histories. Normal collection uses the UTC clock below.
+        if current_time is not None:
+            try:
+                current_time = float(current_time)
+            except (TypeError, ValueError, OverflowError):
+                return detections
+            if not math.isfinite(current_time):
+                return detections
+
         # --------------------------------------------------------
         # NORMAL RUNTIME:
         #
@@ -1076,6 +1100,12 @@ class NetworkBehaviorTracker:
             current_time = (
                 self.now_timestamp()
             )
+
+        if str(connection.get("status") or "").upper() in {
+            "TIME_WAIT", "CLOSE_WAIT", "LAST_ACK", "FIN_WAIT1",
+            "FIN_WAIT2", "CLOSING", "CLOSED",
+        }:
+            return detections
 
         # --------------------------------------------------------
         # CONNECTION BURST

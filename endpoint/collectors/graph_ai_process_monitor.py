@@ -73,63 +73,46 @@ class GraphAIProcessMonitor(
     # EXTRACT PROCESS IDENTITY
     # ============================================================
 
-    def resolve_process_identity(
-        self,
-        process_info,
-    ):
+    def resolve_graph_process_identity(self, process_info):
+        """Normalize the PID supplied to the graph model.
 
-        process_info = (
-            process_info
-            or {}
-        )
+        PID 0 is a pseudo-process and is never a reliable provenance
+        identity. PID 4 remains eligible for *shadow* graph inspection:
+        its system-owned activity can be security-relevant.
+        """
+        if not isinstance(process_info, dict):
+            process_info = {}
 
+        raw_pid = process_info.get("pid")
+        try:
+            # bool is an int subclass, but is not a valid process ID.
+            if isinstance(raw_pid, bool):
+                raise ValueError("Boolean PID")
+            pid = int(raw_pid)
+            if pid <= 0 or str(raw_pid).strip() != str(pid):
+                raise ValueError("PID must be a positive integer")
+        except (TypeError, ValueError, OverflowError):
+            pid = None
 
-        pid = (
-            process_info.get(
-                "pid"
-            )
-        )
-
-
-        process_name = (
-
-            process_info.get(
-                "name"
-            )
-
-            or
-
-            process_info.get(
-                "process_name"
-            )
-        )
-
-
-        device_id = (
-
-            process_info.get(
-                "device_id"
-            )
-
-            or
-
-            process_info.get(
-                "hostname"
-            )
-        )
-
-
+        name = process_info.get("name") or process_info.get("process_name")
+        if not isinstance(name, str) or not name.strip():
+            name = "UNKNOWN"
+        device_id = process_info.get("device_id") or process_info.get("hostname")
         return {
-            "pid":
-                pid,
-
-            "process_name":
-                process_name,
-
-            "device_id":
-                device_id,
+            "pid": pid,
+            "process_name": name.strip(),
+            "device_id": device_id,
         }
 
+    @staticmethod
+    def safe_graph_score(value):
+        """A malformed score must not turn a persisted result into an error."""
+        import math
+        try:
+            value = float(value)
+            return value if math.isfinite(value) else 0.0
+        except (TypeError, ValueError, OverflowError):
+            return 0.0
 
     # ============================================================
     # GRAPH-AI INFERENCE
@@ -143,7 +126,7 @@ class GraphAIProcessMonitor(
     ):
 
         identity = (
-            self.resolve_process_identity(
+            self.resolve_graph_process_identity(
                 process_info
             )
         )
@@ -194,6 +177,20 @@ class GraphAIProcessMonitor(
                 )
             )
 
+
+            if not isinstance(result, dict):
+                return {
+                    "available": False,
+                    "state": "GRAPH_INVALID_PREDICTOR_RESULT",
+                    "pid": pid,
+                    "graph_anomaly_score": None,
+                    "operating_mode": self.GRAPH_AI_MODE,
+                }
+
+            # Model output is evidence only; do not silently promote
+            # it to an authoritative SOC alert.
+            result = dict(result)
+            result.setdefault("operating_mode", self.GRAPH_AI_MODE)
 
             # ====================================================
             # PERSIST ONLY COMPLETE INFERENCE
@@ -251,11 +248,8 @@ class GraphAIProcessMonitor(
                         "process_name"
                     ),
 
-                    float(
-                        result.get(
-                            "graph_anomaly_score",
-                            0.0,
-                        )
+                    self.safe_graph_score(
+                        result.get("graph_anomaly_score")
                     ),
 
                     result.get(
@@ -350,12 +344,9 @@ class GraphAIProcessMonitor(
         )
 
 
-        if not isinstance(
-            ai_result,
-            dict,
-        ):
-
-            ai_result = {}
+        if not isinstance(ai_result, dict):
+            # Preserve the parent result rather than masking its failure.
+            return ai_result
 
 
         # ========================================================
@@ -410,7 +401,10 @@ class GraphAIProcessMonitor(
 
         return {
             "available":
-                True,
+                bool(
+                    getattr(self.graph_ai_predictor, "available", False)
+                    or getattr(self.graph_ai_predictor, "checkpoint", None)
+                ),
 
             "predictor":
                 "process_graph_anomaly",

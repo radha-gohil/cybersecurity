@@ -1,5 +1,6 @@
 from collections import defaultdict, deque
 from datetime import datetime, timezone
+import math
 from typing import List
 
 from detection.fusion.entity_linker import (
@@ -96,18 +97,30 @@ class EventCorrelator:
             event
         )
 
-        if (
-            "timestamp_unix"
-            not in normalized
-            or normalized.get(
-                "timestamp_unix"
-            )
-            is None
-        ):
-
-            normalized[
-                "timestamp_unix"
-            ] = self.now_timestamp()
+        # Prefer the SecurityEvent ISO timestamp over ingestion time.
+        # An invalid supplied timestamp is not replaced by "now", because
+        # that would invent temporal proximity between unrelated events.
+        value = normalized.get("timestamp_unix")
+        if value is None:
+            original = normalized.get("timestamp")
+            if isinstance(original, str) and original.strip():
+                try:
+                    value = datetime.fromisoformat(
+                        original.strip().replace("Z", "+00:00")
+                    )
+                    if value.tzinfo is None:
+                        value = value.replace(tzinfo=timezone.utc)
+                    value = value.timestamp()
+                except (ValueError, OverflowError):
+                    value = float("nan")
+            else:
+                # Legacy events lacking either timestamp use ingestion time.
+                value = self.now_timestamp()
+        try:
+            value = float(value)
+        except (TypeError, ValueError, OverflowError):
+            value = float("nan")
+        normalized["timestamp_unix"] = value
 
 
         normalized.setdefault(
@@ -157,74 +170,70 @@ class EventCorrelator:
     # EXTRACT PID
     # ============================================================
 
-    def extract_pid(
-        self,
-        event: dict,
-    ):
-
-        process = (
-            event.get(
-                "process"
-            )
-            or {}
-        )
-
-        network = (
-            event.get(
-                "network"
-            )
-            or {}
-        )
-
-        registry = (
-            event.get(
-                "registry"
-            )
-            or {}
-        )
-
-        metadata = (
-            event.get(
-                "metadata"
-            )
-            or {}
-        )
-
-
-        pid = process.get(
-            "pid"
-        )
-
-        if pid is not None:
-            return pid
-
-
-        pid = network.get(
-            "pid"
-        )
-
-        if pid is not None:
-            return pid
-
-
-        pid = registry.get(
-            "pid"
-        )
-
-        if pid is not None:
-            return pid
-
-
-        pid = metadata.get(
-            "pid"
-        )
-
-        if pid is not None:
-            return pid
-
-
+    def extract_pid(self, event: dict):
+        """Return a usable positive PID; PID 0 is not an entity identity."""
+        for field in ("process", "network", "registry", "metadata"):
+            evidence = event.get(field) or {}
+            if not isinstance(evidence, dict):
+                continue
+            raw_pid = evidence.get("pid")
+            if isinstance(raw_pid, bool):
+                continue
+            try:
+                pid = int(raw_pid)
+            except (TypeError, ValueError, OverflowError):
+                continue
+            if pid > 0:
+                return pid
         return None
 
+    def is_correlation_evidence(self, event: dict) -> bool:
+        """Do not promote informational, shadow, or simulated observations.
+
+        These events still enter ordinary telemetry and provenance. This
+        filter only controls incident-corroborating correlation evidence.
+        """
+        metadata = event.get("metadata") or {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        if event.get("simulation_mode") is True or metadata.get("simulation_mode") is True:
+            return False
+        for value in (
+            event.get("operating_mode"),
+            metadata.get("operating_mode"),
+            metadata.get("detection_mode"),
+            metadata.get("network_detection_mode"),
+            metadata.get("ransomware_detection_mode"),
+        ):
+            if "SHADOW" in str(value or "").upper():
+                return False
+        event_type = str(event.get("event_type") or "").lower()
+        severity = str(event.get("severity") or "INFO").upper()
+        if event_type == "network_connect" and severity == "INFO":
+            return False
+        if event_type == "process_fusion_detection":
+            process = event.get("process") or {}
+            if isinstance(process, dict) and self.extract_pid(event) is None:
+                return False
+        return True
+
+    def same_device(self, first: dict, second: dict) -> bool:
+        """Never join identified endpoints using just PID/IP/hash/path."""
+        def device(event):
+            metadata = event.get("metadata") or {}
+            if not isinstance(metadata, dict):
+                metadata = {}
+            return str(event.get("device_id") or metadata.get("device_id") or "").strip()
+        left, right = device(first), device(second)
+        return left == right if (left or right) else True
+
+    def has_authoritative_signal(self, events: list) -> bool:
+        """INFO-only telemetry cannot create an attack incident by itself."""
+        return any(
+            self.is_correlation_evidence(item)
+            and str(item.get("severity") or "INFO").upper() in {"MEDIUM", "HIGH", "CRITICAL"}
+            for item in events
+        )
 
     # ============================================================
     # EXTRACT SHA256
@@ -395,10 +404,9 @@ class EventCorrelator:
             timestamp_b = 0.0
 
 
-        difference = abs(
-            timestamp_a
-            - timestamp_b
-        )
+        if not math.isfinite(timestamp_a) or not math.isfinite(timestamp_b):
+            return False
+        difference = abs(timestamp_a - timestamp_b)
 
 
         return (
@@ -538,6 +546,16 @@ class EventCorrelator:
 
             return
 
+        if not self.same_device(current_event, candidate):
+            return
+
+        if (current_event.get("event_id") and
+                candidate.get("event_id") == current_event.get("event_id")):
+            return
+
+        if not self.is_correlation_evidence(candidate):
+            return
+
 
         candidate_id = (
             candidate.get(
@@ -661,6 +679,11 @@ class EventCorrelator:
         self,
         event: dict,
     ) -> List[dict]:
+
+        # An excluded observation stays indexed for telemetry, but
+        # cannot itself initiate incident correlation.
+        if not self.is_correlation_evidence(event):
+            return []
 
         related = []
 
@@ -1511,9 +1534,17 @@ class EventCorrelator:
 
 
         correlated = (
-            correlation_score
-            >= 35
+            correlation_score >= 35
+            and bool(related_events)
+            and self.is_correlation_evidence(event)
+            and self.has_authoritative_signal([event, *related_events])
         )
+
+        # This field describes *correlated incident severity*, not the
+        # underlying raw event's severity. Do not expose a HIGH correlation
+        # classification when evidence is not authoritative.
+        if not correlated:
+            severity = "INFO"
 
 
         entity_links = (

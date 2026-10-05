@@ -626,3 +626,16 @@ def main():
 if __name__ == "__main__":
 
     main()
+
+# Pytest opt-in. These exercises require trained model artifacts and
+# initialize runtime components; regular unit-test runs should stay fast.
+def test_integration_entrypoint():
+    import os
+    import pytest
+
+    if os.environ.get("SENTINEL_RUN_MODEL_INTEGRATION") != "1":
+        pytest.skip(
+            "Model integration is opt-in: set "
+            "SENTINEL_RUN_MODEL_INTEGRATION=1"
+        )
+    main()

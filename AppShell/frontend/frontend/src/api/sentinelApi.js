@@ -2,7 +2,8 @@ import axios from "axios";
 
 
 const API_BASE_URL =
-    "http://127.0.0.1:8003/api/v1";
+  import.meta.env.VITE_SENTINEL_API_BASE_URL ||
+  "http://127.0.0.1:8003/api/v1";
 
 
 const api = axios.create({

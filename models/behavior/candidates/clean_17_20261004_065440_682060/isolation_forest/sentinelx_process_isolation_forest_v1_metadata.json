@@ -1,0 +1,293 @@
+{
+    "model_name": "sentinelx_process_isolation_forest",
+    "model_version": "v1",
+    "model_type": "IsolationForest",
+    "purpose": "SENTINEL-X personalized endpoint process behavior anomaly detection",
+    "trained_at": "2026-10-04T06:54:47.719676+00:00",
+    "feature_schema_version": "process_behavior_v1",
+    "feature_count": 17,
+    "feature_names": [
+        "cpu_percent",
+        "memory_percent",
+        "rss_mb",
+        "num_threads",
+        "num_handles",
+        "process_age_seconds",
+        "child_process_count",
+        "network_connection_count",
+        "unique_remote_ip_count",
+        "recent_event_count",
+        "command_line_length",
+        "command_arg_count",
+        "executable_path_depth",
+        "is_user_profile_path",
+        "is_system_path",
+        "is_script_interpreter",
+        "parent_is_script_interpreter"
+    ],
+    "training_samples": 42835,
+    "training_features": 17,
+    "dataset_fingerprint_sha256": "cd8dfa39ffe5715e851acadc5305e99c84ca02fbd8e7cb15f668382992368935",
+    "model_parameters": {
+        "n_estimators": 300,
+        "max_samples": "auto",
+        "contamination": "auto",
+        "max_features": 1.0,
+        "bootstrap": false,
+        "random_state": 42
+    },
+    "preprocessing": {
+        "scaler": "StandardScaler",
+        "scaler_required": true
+    },
+    "training_score_statistics": {
+        "sample_count": 42835,
+        "normal_count": 39417,
+        "anomaly_count": 3418,
+        "anomaly_percent": 7.9795,
+        "decision_score_min": -0.26948718705425045,
+        "decision_score_max": 0.17805218562432867,
+        "decision_score_mean": 0.11274582171059064,
+        "decision_score_std": 0.0736843388579404,
+        "raw_score_min": -0.7694871870542505,
+        "raw_score_max": -0.3219478143756713,
+        "raw_score_mean": -0.38725417828940933,
+        "percentiles": {
+            "p01": -0.1289814756465267,
+            "p02": -0.103732206256758,
+            "p05": -0.03618335907913921,
+            "p10": 0.010238007336065853,
+            "p25": 0.07760523335463326,
+            "p50": 0.14776378540081547,
+            "p75": 0.16472218886084034,
+            "p90": 0.17237529801009085,
+            "p95": 0.1750771896416078,
+            "p99": 0.17710531630562537
+        }
+    },
+    "feature_summary": {
+        "cpu_percent": {
+            "mean": 0.6834901365705613,
+            "std": 11.11319262894111,
+            "min": 0.0,
+            "max": 1315.6,
+            "median": 0.0
+        },
+        "memory_percent": {
+            "mean": 0.24880470642325742,
+            "std": 0.5743748498590974,
+            "min": 4.867004242080897e-05,
+            "max": 10.199294089704729,
+            "median": 0.0797701995277059
+        },
+        "rss_mb": {
+            "mean": 39.93787990982841,
+            "std": 92.197951364508,
+            "min": 0.0078125,
+            "max": 1637.1875,
+            "median": 12.8046875
+        },
+        "num_threads": {
+            "mean": 13.612489786389634,
+            "std": 16.254894993559528,
+            "min": 0.0,
+            "max": 415.0,
+            "median": 8.0
+        },
+        "num_handles": {
+            "mean": 467.4276176024279,
+            "std": 514.6159764160454,
+            "min": 0.0,
+            "max": 7523.0,
+            "median": 346.0
+        },
+        "process_age_seconds": {
+            "mean": 78978.24049312358,
+            "std": 46503.65214643206,
+            "min": 0.0,
+            "max": 176484.703417,
+            "median": 81159.235992
+        },
+        "child_process_count": {
+            "mean": 0.15442978872417415,
+            "std": 2.746133659283356,
+            "min": 0.0,
+            "max": 128.0,
+            "median": 0.0
+        },
+        "network_connection_count": {
+            "mean": 0.26345278393836813,
+            "std": 3.2352959442216034,
+            "min": 0.0,
+            "max": 183.0,
+            "median": 0.0
+        },
+        "unique_remote_ip_count": {
+            "mean": 0.08168553752772266,
+            "std": 0.8024589021132038,
+            "min": 0.0,
+            "max": 42.0,
+            "median": 0.0
+        },
+        "recent_event_count": {
+            "mean": 2.0528306291583984,
+            "std": 4.357475257741913,
+            "min": 0.0,
+            "max": 185.0,
+            "median": 1.0
+        },
+        "command_line_length": {
+            "mean": 225.23382747753007,
+            "std": 412.3811076397993,
+            "min": 0.0,
+            "max": 1951.0,
+            "median": 29.0
+        },
+        "command_arg_count": {
+            "mean": 5.766522703396755,
+            "std": 9.467882952394856,
+            "min": 0.0,
+            "max": 48.0,
+            "median": 1.0
+        },
+        "executable_path_depth": {
+            "mean": 5.104260534609549,
+            "std": 1.6950574781251808,
+            "min": 0.0,
+            "max": 11.0,
+            "median": 4.0
+        },
+        "is_user_profile_path": {
+            "mean": 0.04701762577331621,
+            "std": 0.21167656610961125,
+            "min": 0.0,
+            "max": 1.0,
+            "median": 0.0
+        },
+        "is_system_path": {
+            "mean": 0.8144974903700245,
+            "std": 0.38870468038210754,
+            "min": 0.0,
+            "max": 1.0,
+            "median": 1.0
+        },
+        "is_script_interpreter": {
+            "mean": 0.03193650052527139,
+            "std": 0.17583105658407086,
+            "min": 0.0,
+            "max": 1.0,
+            "median": 0.0
+        },
+        "parent_is_script_interpreter": {
+            "mean": 0.023975720789074353,
+            "std": 0.15297348006016828,
+            "min": 0.0,
+            "max": 1.0,
+            "median": 0.0
+        }
+    },
+    "process_summary": {
+        "unique_process_names": 153,
+        "top_processes": [
+            {
+                "process_name": "svchost.exe",
+                "sample_count": 11874
+            },
+            {
+                "process_name": "msedgewebview2.exe",
+                "sample_count": 2899
+            },
+            {
+                "process_name": "chrome.exe",
+                "sample_count": 2057
+            },
+            {
+                "process_name": "code.exe",
+                "sample_count": 1761
+            },
+            {
+                "process_name": "loom.exe",
+                "sample_count": 1137
+            },
+            {
+                "process_name": "conhost.exe",
+                "sample_count": 1058
+            },
+            {
+                "process_name": "runtimebroker.exe",
+                "sample_count": 1029
+            },
+            {
+                "process_name": "postgres.exe",
+                "sample_count": 913
+            },
+            {
+                "process_name": "msedge.exe",
+                "sample_count": 639
+            },
+            {
+                "process_name": "python.exe",
+                "sample_count": 618
+            },
+            {
+                "process_name": "steamwebhelper.exe",
+                "sample_count": 510
+            },
+            {
+                "process_name": "openconsole.exe",
+                "sample_count": 509
+            },
+            {
+                "process_name": "powershell.exe",
+                "sample_count": 455
+            },
+            {
+                "process_name": "nvcontainer.exe",
+                "sample_count": 393
+            },
+            {
+                "process_name": "rtkauduservice64.exe",
+                "sample_count": 391
+            },
+            {
+                "process_name": "wmiprvse.exe",
+                "sample_count": 317
+            },
+            {
+                "process_name": "cmd.exe",
+                "sample_count": 295
+            },
+            {
+                "process_name": "wudfhost.exe",
+                "sample_count": 276
+            },
+            {
+                "process_name": "csrss.exe",
+                "sample_count": 276
+            },
+            {
+                "process_name": "fontdrvhost.exe",
+                "sample_count": 274
+            }
+        ]
+    },
+    "validation_summary": {
+        "total_records": 43097,
+        "valid_records": 42832,
+        "unique_processes": 153,
+        "duplicate_percent": 0.01,
+        "network_coverage_percent": 3.24,
+        "ready_for_training": true
+    },
+    "runtime": {
+        "python_version": "3.12.4 (tags/v3.12.4:8e8a4ba, Jun  6 2024, 19:30:16) [MSC v.1940 64 bit (AMD64)]",
+        "platform": "Windows-11-10.0.26200-SP0",
+        "numpy_version": "2.5.3",
+        "scikit_learn_version": "1.9.1",
+        "joblib_version": "1.6.0"
+    },
+    "artifact_security": {
+        "trusted_local_artifact_only": true,
+        "warning": "Do not load untrusted joblib/pickle model files."
+    }
+}

@@ -47,6 +47,9 @@ from sklearn.preprocessing import (
     StandardScaler,
 )
 
+from ai_detection.behavior.baseline_dataset_validator import (
+    is_epoch_process_age_artifact,
+)
 
 from ai_detection.behavior.behavior_feature_store import (
     BehaviorFeatureStore,
@@ -735,7 +738,24 @@ class ProcessAutoencoderV2Trainer:
                 ] += 1
 
                 continue
+            # Reject historical epoch-timestamp artifacts.
+            # Autoencoder uses the Isolation Forest selected
+            # feature order, not the full 25-feature schema.
 
+            features = record.get("features") or {}
+
+            age = features.get("process_age_seconds")
+
+            try:
+                age = float(age)
+            except (TypeError, ValueError):
+                age = None
+
+            if age is not None and age > 1_000_000_000:
+                rejection_counter[
+                    "invalid_process_age"
+                ] += 1
+                continue
 
             accepted.append(
                 {
