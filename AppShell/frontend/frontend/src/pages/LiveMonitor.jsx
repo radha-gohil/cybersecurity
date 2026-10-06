@@ -18,6 +18,7 @@ import {
     RefreshRounded,
     CheckCircleRounded,
     ErrorRounded,
+    WarningAmberRounded,
 } from "@mui/icons-material";
 
 import {
@@ -54,139 +55,295 @@ const SUMMARY_REFRESH_INTERVAL = 10000;
 
 const MAX_CHART_POINTS = 20;
 
+/*
+    Do not declare the collectors offline because of one
+    temporary request failure.
+
+    Three consecutive failures means approximately:
+
+        3 * 2 seconds = 6 seconds
+*/
+const MAX_CONSECUTIVE_FAILURES = 3;
+
 
 /* ============================================================ */
 /* HELPERS */
 /* ============================================================ */
 
 function asCount(value) {
-    const number = Number(value ?? 0);
 
-    return Number.isFinite(number)
-        ? Math.max(0, number)
+    const number = Number(
+        value ?? 0
+    );
+
+    return Number.isFinite(
+        number
+    )
+        ? Math.max(
+            0,
+            number
+        )
         : 0;
 }
 
 
-function getCategoryCount(counts, category) {
+function getCategoryCount(
+    counts,
+    category
+) {
+
     return asCount(
         counts?.[category] ??
-        counts?.[category.toLowerCase()] ??
+        counts?.[
+            category.toLowerCase()
+        ] ??
         0
     );
 }
 
 
-function normalizeCounts(counts = {}) {
+function normalizeCounts(
+    counts = {}
+) {
+
     return {
-        process: getCategoryCount(counts, "PROCESS"),
-        file: getCategoryCount(counts, "FILE"),
-        network: getCategoryCount(counts, "NETWORK"),
+
+        process:
+            getCategoryCount(
+                counts,
+                "PROCESS"
+            ),
+
+        file:
+            getCategoryCount(
+                counts,
+                "FILE"
+            ),
+
+        network:
+            getCategoryCount(
+                counts,
+                "NETWORK"
+            ),
+
         system:
-            getCategoryCount(counts, "REGISTRY") +
-            getCategoryCount(counts, "SYSTEM") +
-            getCategoryCount(counts, "STARTUP") +
-            getCategoryCount(counts, "SECURITY") +
-            getCategoryCount(counts, "RESPONSE"),
+            getCategoryCount(
+                counts,
+                "REGISTRY"
+            ) +
+            getCategoryCount(
+                counts,
+                "SYSTEM"
+            ) +
+            getCategoryCount(
+                counts,
+                "STARTUP"
+            ) +
+            getCategoryCount(
+                counts,
+                "SECURITY"
+            ) +
+            getCategoryCount(
+                counts,
+                "RESPONSE"
+            ),
     };
 }
 
 
-function calculateDelta(current, previous) {
-    // A counter can decrease when the backend restarts.
-    // Never display negative event activity.
+function calculateDelta(
+    current,
+    previous
+) {
 
-    if (current < previous) {
+    /*
+        Runtime counters can reset after the backend
+        restarts.
+
+        Never show negative activity.
+    */
+
+    if (
+        current < previous
+    ) {
+
         return 0;
     }
 
-    return current - previous;
-}
-
-
-function getShortTime() {
-    return new Date().toLocaleTimeString(
-        [],
-        {
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-        }
+    return (
+        current -
+        previous
     );
 }
 
 
-function getCollectorStatus(collector) {
-    if (collector === true) {
+function getShortTime() {
+
+    return (
+        new Date()
+            .toLocaleTimeString(
+                [],
+                {
+                    hour:
+                        "2-digit",
+
+                    minute:
+                        "2-digit",
+
+                    second:
+                        "2-digit",
+                }
+            )
+    );
+}
+
+
+function getCollectorStatus(
+    collector
+) {
+
+    /*
+        Current backend returns booleans:
+
+            true  -> running
+            false -> offline
+
+        This helper also supports future object/string
+        responses.
+    */
+
+    if (
+        collector === true
+    ) {
+
         return "ACTIVE";
     }
 
-    if (collector === false) {
+
+    if (
+        collector === false
+    ) {
+
         return "OFFLINE";
     }
 
+
     if (
-        typeof collector === "string"
+        typeof collector ===
+        "string"
     ) {
-        return collector.toUpperCase();
+
+        return (
+            collector
+                .toUpperCase()
+        );
     }
+
 
     if (
         collector &&
-        typeof collector === "object"
+        typeof collector ===
+        "object"
     ) {
-        if (collector.status) {
+
+        if (
+            collector.status
+        ) {
+
             return String(
                 collector.status
             ).toUpperCase();
         }
 
-        if (collector.healthy === true) {
+
+        if (
+            collector.healthy ===
+            true
+        ) {
+
             return "ACTIVE";
         }
 
-        if (collector.healthy === false) {
+
+        if (
+            collector.healthy ===
+            false
+        ) {
+
             return "OFFLINE";
         }
     }
+
 
     return "UNKNOWN";
 }
 
 
-function getHighestActivityCategory(eventCounts) {
+function getHighestActivityCategory(
+    eventCounts
+) {
+
     const categories = [
+
         {
-            name: "Process",
-            value: eventCounts.process,
+            name:
+                "Process",
+
+            value:
+                eventCounts.process,
         },
+
         {
-            name: "File",
-            value: eventCounts.file,
+            name:
+                "File",
+
+            value:
+                eventCounts.file,
         },
+
         {
-            name: "Network",
-            value: eventCounts.network,
+            name:
+                "Network",
+
+            value:
+                eventCounts.network,
         },
+
         {
-            name: "System",
-            value: eventCounts.system,
+            name:
+                "System",
+
+            value:
+                eventCounts.system,
         },
     ];
 
+
     categories.sort(
-        (a, b) => b.value - a.value
+        (
+            a,
+            b
+        ) =>
+            b.value -
+            a.value
     );
+
 
     if (
         categories.every(
-            (item) => item.value === 0
+            (item) =>
+                item.value === 0
         )
     ) {
+
         return "None";
     }
 
-    return categories[0].name;
+
+    return (
+        categories[0]
+            .name
+    );
 }
 
 
@@ -200,425 +357,1083 @@ function LiveMonitor() {
     /* STATE */
     /* ======================================================== */
 
+    const [
+        runtime,
+        setRuntime,
+    ] = useState(
+        null
+    );
 
-    const [runtime, setRuntime] =
-        useState(null);
 
-    const [live, setLive] =
-        useState(null);
+    const [
+        live,
+        setLive,
+    ] = useState(
+        null
+    );
 
-    const [chartData, setChartData] =
-        useState([]);
 
-    const [loading, setLoading] =
-        useState(true);
+    const [
+        chartData,
+        setChartData,
+    ] = useState(
+        []
+    );
 
-    const [refreshing, setRefreshing] =
-        useState(false);
 
-    const [error, setError] =
-        useState(null);
+    const [
+        loading,
+        setLoading,
+    ] = useState(
+        true
+    );
 
-    const [lastUpdated, setLastUpdated] =
-        useState(null);
+
+    const [
+        refreshing,
+        setRefreshing,
+    ] = useState(
+        false
+    );
+
+
+    const [
+        error,
+        setError,
+    ] = useState(
+        null
+    );
+
+
+    const [
+        lastUpdated,
+        setLastUpdated,
+    ] = useState(
+        null
+    );
 
 
     /* ======================================================== */
     /* REFS */
     /* ======================================================== */
 
-    const previousCounts = useRef(null);
-
-    const previousTimestamp = useRef(null);
-
-    const pollingInProgress = useRef(false);
-
-    const lastSummaryFetch = useRef(0);
-
-    const mountedRef = useRef(false);
+    const previousCounts =
+        useRef(
+            null
+        );
 
 
-    /* ======================================================== */
-    /* UPDATE CHART FROM LIVE RUNTIME COUNTERS */
-    /* ======================================================== */
+    const previousTimestamp =
+        useRef(
+            null
+        );
 
-    const updateChart = useCallback(
-        (liveData) => {
 
-            const currentCounts = normalizeCounts(
-                liveData?.runtime_counts || {}
-            );
+    const pollingInProgress =
+        useRef(
+            false
+        );
 
-            const timestamp =
-                liveData?.timestamp || null;
 
-            const previous =
-                previousCounts.current;
+    const lastSummaryFetch =
+        useRef(
+            0
+        );
 
-            const previousTime =
-                previousTimestamp.current;
 
-            // First snapshot establishes the baseline.
-            // Historical events are not mistaken for new activity.
+    const mountedRef =
+        useRef(
+            false
+        );
 
-            if (previous === null) {
 
-                previousCounts.current = currentCounts;
-                previousTimestamp.current = timestamp;
+    /*
+        Prevent one temporary HTTP failure from making the
+        dashboard rapidly switch:
 
-                setChartData([
-                    {
-                        time: getShortTime(),
-                        process: 0,
-                        file: 0,
-                        network: 0,
-                        system: 0,
-                    },
-                ]);
-
-                return;
-            }
-
-            // Detect backend/session restart using its timestamp
-            // and cumulative counters where possible.
-
-            const countersReset = [
-                "process",
-                "file",
-                "network",
-                "system",
-            ].some(
-                (key) =>
-                    currentCounts[key] < previous[key]
-            );
-
-            const timeWentBackwards =
-                Boolean(
-                    timestamp &&
-                    previousTime &&
-                    Date.parse(timestamp) <
-                    Date.parse(previousTime)
-                );
-
-            if (
-                countersReset ||
-                timeWentBackwards
-            ) {
-
-                previousCounts.current = currentCounts;
-                previousTimestamp.current = timestamp;
-
-                setChartData([
-                    {
-                        time: getShortTime(),
-                        process: 0,
-                        file: 0,
-                        network: 0,
-                        system: 0,
-                    },
-                ]);
-
-                return;
-            }
-
-            const newPoint = {
-                time: getShortTime(),
-
-                process: calculateDelta(
-                    currentCounts.process,
-                    previous.process
-                ),
-
-                file: calculateDelta(
-                    currentCounts.file,
-                    previous.file
-                ),
-
-                network: calculateDelta(
-                    currentCounts.network,
-                    previous.network
-                ),
-
-                system: calculateDelta(
-                    currentCounts.system,
-                    previous.system
-                ),
-            };
-
-            previousCounts.current = currentCounts;
-            previousTimestamp.current = timestamp;
-
-            setChartData(
-                (previousChart) => [
-                    ...previousChart,
-                    newPoint,
-                ].slice(-MAX_CHART_POINTS)
-            );
-        },
-        []
-    );
+            ACTIVE
+              ↓
+            OFFLINE
+              ↓
+            ACTIVE
+    */
+    const consecutiveLiveFailures =
+        useRef(
+            0
+        );
 
 
     /* ======================================================== */
-    /* LOAD REAL BACKEND DATA */
-    /* ======================================================== */
+    /* UPDATE CHART */
+/* ======================================================== */
 
-    const loadLiveData = useCallback(
-        async (
-            initialLoad = false,
-            forceSummary = false
-        ) => {
+    const updateChart =
+        useCallback(
+            (
+                liveData
+            ) => {
 
-            if (pollingInProgress.current) {
-                return;
-            }
+                const currentCounts =
+                    normalizeCounts(
+                        liveData
+                            ?.runtime_counts
+                        ||
+                        {}
+                    );
 
-            pollingInProgress.current = true;
 
-            try {
+                const timestamp =
+                    liveData
+                        ?.timestamp
+                    ||
+                    null;
+
+
+                const previous =
+                    previousCounts
+                        .current;
+
+
+                const previousTime =
+                    previousTimestamp
+                        .current;
+
+
+                /* ============================================ */
+                /* FIRST SNAPSHOT */
+                /* ============================================ */
 
                 if (
-                    mountedRef.current &&
-                    initialLoad
+                    previous ===
+                    null
                 ) {
-                    setLoading(true);
-                }
 
-                if (
-                    mountedRef.current &&
-                    forceSummary
-                ) {
-                    setRefreshing(true);
-                }
+                    previousCounts
+                        .current =
+                        currentCounts;
 
-                const now = Date.now();
 
-                const shouldRefreshSummary =
-                    initialLoad ||
-                    forceSummary ||
-                    now - lastSummaryFetch.current >=
-                        SUMMARY_REFRESH_INTERVAL;
+                    previousTimestamp
+                        .current =
+                        timestamp;
 
-                // Live telemetry is always polled.
-                // Historical queries are less frequent.
 
-                const livePromise =
-                    getLiveTelemetry();
+                    setChartData(
+                        [
+                            {
+                                time:
+                                    getShortTime(),
 
-                let runtimePromise = null;
+                                process:
+                                    0,
 
-                if (shouldRefreshSummary) {
-                    runtimePromise =
-                        getSecurityRuntime();
-                }
+                                file:
+                                    0,
 
-                const liveResponse =
-                    await livePromise;
+                                network:
+                                    0,
 
-                if (!mountedRef.current) {
+                                system:
+                                    0,
+                            },
+                        ]
+                    );
+
+
                     return;
                 }
 
-                setLive(liveResponse);
 
-                updateChart(liveResponse);
+                /* ============================================ */
+                /* BACKEND RESTART / COUNTER RESET */
+                /* ============================================ */
 
-                setLastUpdated(new Date());
+                const countersReset =
+                    [
+                        "process",
+                        "file",
+                        "network",
+                        "system",
+                    ]
+                    .some(
+                        (
+                            key
+                        ) =>
+                            currentCounts[
+                                key
+                            ]
+                            <
+                            previous[
+                                key
+                            ]
+                    );
 
-                setError(null);
 
-                // Supplemental summary failures do not
-                // invalidate successfully fetched live data.
+                const currentParsedTime =
+                    timestamp
+                        ? Date.parse(
+                            timestamp
+                        )
+                        : NaN;
 
-                if (shouldRefreshSummary) {
 
-                    const results =
-                        await Promise.allSettled([
-                            runtimePromise,
-                        ]);
+                const previousParsedTime =
+                    previousTime
+                        ? Date.parse(
+                            previousTime
+                        )
+                        : NaN;
 
-                    if (!mountedRef.current) {
-                        return;
-                    }
+
+                const timeWentBackwards =
+                    Boolean(
+                        Number.isFinite(
+                            currentParsedTime
+                        )
+                        &&
+                        Number.isFinite(
+                            previousParsedTime
+                        )
+                        &&
+                        currentParsedTime
+                        <
+                        previousParsedTime
+                    );
+
+
+                if (
+                    countersReset
+                    ||
+                    timeWentBackwards
+                ) {
+
+                    previousCounts
+                        .current =
+                        currentCounts;
+
+
+                    previousTimestamp
+                        .current =
+                        timestamp;
+
+
+                    setChartData(
+                        [
+                            {
+                                time:
+                                    getShortTime(),
+
+                                process:
+                                    0,
+
+                                file:
+                                    0,
+
+                                network:
+                                    0,
+
+                                system:
+                                    0,
+                            },
+                        ]
+                    );
+
+
+                    return;
+                }
+
+
+                /* ============================================ */
+                /* NEW ACTIVITY */
+                /* ============================================ */
+
+                const newPoint = {
+
+                    time:
+                        getShortTime(),
+
+
+                    process:
+                        calculateDelta(
+                            currentCounts
+                                .process,
+
+                            previous
+                                .process
+                        ),
+
+
+                    file:
+                        calculateDelta(
+                            currentCounts
+                                .file,
+
+                            previous
+                                .file
+                        ),
+
+
+                    network:
+                        calculateDelta(
+                            currentCounts
+                                .network,
+
+                            previous
+                                .network
+                        ),
+
+
+                    system:
+                        calculateDelta(
+                            currentCounts
+                                .system,
+
+                            previous
+                                .system
+                        ),
+                };
+
+
+                previousCounts
+                    .current =
+                    currentCounts;
+
+
+                previousTimestamp
+                    .current =
+                    timestamp;
+
+
+                setChartData(
+                    (
+                        previousChart
+                    ) => [
+
+                        ...previousChart,
+
+                        newPoint,
+
+                    ].slice(
+                        -MAX_CHART_POINTS
+                    )
+                );
+
+            },
+            []
+        );
+
+
+    /* ======================================================== */
+    /* LOAD LIVE BACKEND DATA */
+    /* ======================================================== */
+
+    const loadLiveData =
+        useCallback(
+
+            async (
+                initialLoad =
+                    false,
+
+                forceSummary =
+                    false
+            ) => {
+
+                /*
+                    Prevent overlapping polling requests.
+
+                    Example:
+
+                    request takes 3 sec
+                    poll interval = 2 sec
+
+                    Without this protection multiple HTTP
+                    requests would overlap.
+                */
+
+                if (
+                    pollingInProgress
+                        .current
+                ) {
+
+                    return;
+                }
+
+
+                pollingInProgress
+                    .current =
+                    true;
+
+
+                try {
 
                     if (
-                        results[1].status === "fulfilled"
+                        mountedRef
+                            .current
+                        &&
+                        initialLoad
                     ) {
-                        setRuntime(
-                            results[1].value
+
+                        setLoading(
+                            true
                         );
                     }
 
-                    lastSummaryFetch.current =
+
+                    if (
+                        mountedRef
+                            .current
+                        &&
+                        forceSummary
+                    ) {
+
+                        setRefreshing(
+                            true
+                        );
+                    }
+
+
+                    /* ======================================== */
+                    /* 1. LIVE TELEMETRY */
+                    /* ======================================== */
+
+                    let liveResponse =
+                        null;
+
+
+                    try {
+
+                        liveResponse =
+                            await (
+                                getLiveTelemetry()
+                            );
+
+
+                        /*
+                            Reject malformed successful HTTP
+                            responses.
+                        */
+
+                        if (
+                            !liveResponse
+                            ||
+                            typeof liveResponse
+                            !==
+                            "object"
+                        ) {
+
+                            throw new Error(
+                                "Invalid live telemetry response."
+                            );
+                        }
+
+
+                        if (
+                            !mountedRef
+                                .current
+                        ) {
+
+                            return;
+                        }
+
+
+                        /*
+                            Successful live telemetry request.
+
+                            Reset transient failure counter.
+                        */
+
+                        consecutiveLiveFailures
+                            .current =
+                            0;
+
+
+                        setLive(
+                            liveResponse
+                        );
+
+
+                        updateChart(
+                            liveResponse
+                        );
+
+
+                        setLastUpdated(
+                            new Date()
+                        );
+
+
+                        /*
+                            Clear connection error after a valid
+                            telemetry snapshot arrives.
+                        */
+
+                        setError(
+                            null
+                        );
+
+                    }
+                    catch (
+                        liveError
+                    ) {
+
+                        console.error(
+                            "Live telemetry request failed:",
+                            liveError
+                        );
+
+
+                        consecutiveLiveFailures
+                            .current += 1;
+
+
+                        if (
+                            !mountedRef
+                                .current
+                        ) {
+
+                            return;
+                        }
+
+
+                        /*
+                            IMPORTANT
+
+                            One failed poll does NOT mean the
+                            collectors stopped.
+
+                            This also makes the UI tolerate the
+                            very small restart window produced by
+                            uvicorn --reload.
+
+                            We require three consecutive failures
+                            before displaying OFFLINE.
+                        */
+
+                        if (
+                            consecutiveLiveFailures
+                                .current
+                            >=
+                            MAX_CONSECUTIVE_FAILURES
+                        ) {
+
+                            setLive(
+                                null
+                            );
+
+
+                            previousCounts
+                                .current =
+                                null;
+
+
+                            previousTimestamp
+                                .current =
+                                null;
+
+
+                            setError(
+                                liveError
+                                    ?.response
+                                    ?.data
+                                    ?.detail
+                                ||
+                                liveError
+                                    ?.response
+                                    ?.data
+                                    ?.message
+                                ||
+                                liveError
+                                    ?.message
+                                ||
+                                (
+                                    "Unable to load "
+                                    +
+                                    "Sentinel-X telemetry."
+                                )
+                            );
+                        }
+
+
+                        /*
+                            Do not continue into supplemental
+                            runtime requests if the main telemetry
+                            call itself failed.
+                        */
+
+                        return;
+                    }
+
+
+                    /* ======================================== */
+                    /* 2. SECURITY RUNTIME */
+                    /* ======================================== */
+
+                    const now =
                         Date.now();
+
+
+                    const shouldRefreshSummary =
+                        initialLoad
+                        ||
+                        forceSummary
+                        ||
+                        (
+                            now
+                            -
+                            lastSummaryFetch
+                                .current
+                            >=
+                            SUMMARY_REFRESH_INTERVAL
+                        );
+
+
+                    if (
+                        shouldRefreshSummary
+                    ) {
+
+                        /*
+                            IMPORTANT FIX
+
+                            Previously the code used:
+
+                                Promise.allSettled([
+                                    runtimePromise
+                                ])
+
+                            but then read:
+
+                                results[1].status
+
+                            Only results[0] exists.
+
+                            That caused:
+
+                            Cannot read properties of undefined
+                            (reading 'status')
+
+                            Runtime fetch is isolated now so it
+                            can never invalidate healthy live
+                            telemetry.
+                        */
+
+                        try {
+
+                            const runtimeResponse =
+                                await (
+                                    getSecurityRuntime()
+                                );
+
+
+                            if (
+                                mountedRef
+                                    .current
+                                &&
+                                runtimeResponse
+                                &&
+                                typeof runtimeResponse
+                                ===
+                                "object"
+                            ) {
+
+                                setRuntime(
+                                    runtimeResponse
+                                );
+                            }
+
+                        }
+                        catch (
+                            runtimeError
+                        ) {
+
+                            /*
+                                Runtime summary failure does NOT
+                                mean collectors are offline.
+                            */
+
+                            console.warn(
+                                "Security runtime refresh failed:",
+                                runtimeError
+                            );
+                        }
+
+
+                        lastSummaryFetch
+                            .current =
+                            Date.now();
+                    }
+
                 }
+                catch (
+                    unexpectedError
+                ) {
 
-            } catch (err) {
+                    /*
+                        Defensive final catch.
 
-                console.error(
-                    "Live Monitor backend error:",
-                    err
-                );
+                        Do not destroy valid live state because
+                        of a frontend programming/render issue.
+                    */
 
-                if (mountedRef.current) {
-
-                    setError(
-                        err?.response?.data?.detail ||
-                        err?.response?.data?.message ||
-                        err?.message ||
-                        "Unable to load Sentinel-X telemetry."
+                    console.error(
+                        "Unexpected Live Monitor error:",
+                        unexpectedError
                     );
 
-                    // Prevent a stale ACTIVE indicator when
-                    // the live endpoint becomes unavailable.
 
-                    setLive(null);
-                    previousCounts.current = null;
-                    previousTimestamp.current = null;
+                    if (
+                        mountedRef
+                            .current
+                    ) {
+
+                        setError(
+                            unexpectedError
+                                ?.message
+                            ||
+                            (
+                                "Unexpected "
+                                +
+                                "Live Monitor error."
+                            )
+                        );
+                    }
+
                 }
+                finally {
 
-            } finally {
+                    pollingInProgress
+                        .current =
+                        false;
 
-                pollingInProgress.current = false;
 
-                if (mountedRef.current) {
-                    setLoading(false);
-                    setRefreshing(false);
+                    if (
+                        mountedRef
+                            .current
+                    ) {
+
+                        setLoading(
+                            false
+                        );
+
+
+                        setRefreshing(
+                            false
+                        );
+                    }
                 }
-            }
+            },
+
+            [
+                updateChart,
+            ]
+        );
+
+
+    /* ======================================================== */
+    /* POLLING */
+    /* ======================================================== */
+
+    useEffect(
+        () => {
+
+            mountedRef
+                .current =
+                true;
+
+
+            /*
+                Immediate first load.
+            */
+
+            loadLiveData(
+                true,
+                true
+            );
+
+
+            /*
+                Continuous 2-second polling.
+            */
+
+            const interval =
+                setInterval(
+
+                    () => {
+
+                        loadLiveData(
+                            false,
+                            false
+                        );
+
+                    },
+
+                    LIVE_POLL_INTERVAL
+                );
+
+
+            return () => {
+
+                mountedRef
+                    .current =
+                    false;
+
+
+                clearInterval(
+                    interval
+                );
+            };
+
         },
-        [updateChart]
+        [
+            loadLiveData,
+        ]
     );
 
 
     /* ======================================================== */
-    /* INITIAL LOAD AND CONTINUOUS POLLING */
-    /* ======================================================== */
-
-    useEffect(() => {
-
-        mountedRef.current = true;
-
-        loadLiveData(true, true);
-
-        const interval = setInterval(
-            () => {
-                loadLiveData(false, false);
-            },
-            LIVE_POLL_INTERVAL
-        );
-
-        return () => {
-
-            mountedRef.current = false;
-
-            clearInterval(interval);
-        };
-
-    }, [loadLiveData]);
-
-
-    /* ======================================================== */
-    /* LOADING */
+    /* INITIAL LOADING */
     /* ======================================================== */
 
     if (
-        loading &&
-        !live 
+        loading
+        &&
+        !live
     ) {
 
         return (
+
             <Box
                 sx={{
-                    minHeight: "65vh",
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 2,
+                    minHeight:
+                        "65vh",
+
+                    display:
+                        "flex",
+
+                    flexDirection:
+                        "column",
+
+                    alignItems:
+                        "center",
+
+                    justifyContent:
+                        "center",
+
+                    gap:
+                        2,
                 }}
             >
+
                 <CircularProgress
                     sx={{
-                        color: "#22c55e",
+                        color:
+                            "#22c55e",
                     }}
                 />
 
+
                 <Typography
                     sx={{
-                        color: "#94a3b8",
+                        color:
+                            "#94a3b8",
                     }}
                 >
                     Loading live Sentinel-X telemetry...
                 </Typography>
+
             </Box>
         );
     }
 
 
-
     /* ======================================================== */
-    /* REAL LIVE RUNTIME COUNTS */
+    /* LIVE COUNTS */
     /* ======================================================== */
 
     const eventCounts =
         normalizeCounts(
-            live?.runtime_counts || {}
+            live
+                ?.runtime_counts
+            ||
+            {}
         );
 
 
     const totalEvents =
         asCount(
-            live?.runtime_event_count
+            live
+                ?.runtime_event_count
+            ??
+            live
+                ?.total
         );
 
 
     /* ======================================================== */
-    /* ACTUAL COLLECTOR STATUS */
+    /* COLLECTOR STATUS */
     /* ======================================================== */
 
     const collectorInfo =
-        live?.collectors || {};
+        live
+            ?.collectors
+        ||
+        {};
+
 
     const processStatus =
         getCollectorStatus(
-            collectorInfo.process
+            collectorInfo
+                .process
         );
+
 
     const fileStatus =
         getCollectorStatus(
-            collectorInfo.file
+            collectorInfo
+                .file
         );
+
 
     const networkStatus =
         getCollectorStatus(
-            collectorInfo.network
+            collectorInfo
+                .network
         );
+
 
     const registryStatus =
         getCollectorStatus(
-            collectorInfo.registry
+            collectorInfo
+                .registry
         );
+
+
+    const liveStatus =
+        String(
+            live
+                ?.status
+            ||
+            "OFFLINE"
+        )
+        .toUpperCase();
+
 
     const collectorsHealthy =
         Boolean(
-            live?.agent_running &&
-            live?.all_collectors_healthy
+            live
+                ?.agent_running
+            &&
+            live
+                ?.all_collectors_healthy
+            &&
+            liveStatus
+            ===
+            "ACTIVE"
         );
 
+
+    const collectorsDegraded =
+        Boolean(
+            live
+                ?.agent_running
+            &&
+            liveStatus
+            ===
+            "DEGRADED"
+        );
+
+
     const runtimeStatus =
-        runtime?.status ||
-        "UNKNOWN";
+        String(
+            runtime
+                ?.status
+            ||
+            "UNKNOWN"
+        )
+        .toUpperCase();
+
 
     const runtimeHealthy =
-        runtimeStatus === "HEALTHY";
+        runtimeStatus
+        ===
+        "HEALTHY";
+
 
     const highActivitySource =
         getHighestActivityCategory(
-            normalizeCounts(
-                live?.runtime_counts || {}
-            )
+            eventCounts
         );
+
+
+    /* ======================================================== */
+    /* HEADER STATUS */
+    /* ======================================================== */
+
+    let monitorStatusLabel =
+        "COLLECTORS OFFLINE";
+
+
+    let monitorStatusColor =
+        "#ef4444";
+
+
+    let monitorStatusBackground =
+        "rgba(239,68,68,0.10)";
+
+
+    let monitorStatusBorder =
+        "1px solid rgba(239,68,68,0.25)";
+
+
+    let monitorStatusIcon =
+        <ErrorRounded />;
+
+
+    if (
+        collectorsHealthy
+    ) {
+
+        monitorStatusLabel =
+            "LIVE MONITORING ACTIVE";
+
+
+        monitorStatusColor =
+            "#22c55e";
+
+
+        monitorStatusBackground =
+            "rgba(34,197,94,0.10)";
+
+
+        monitorStatusBorder =
+            "1px solid rgba(34,197,94,0.25)";
+
+
+        monitorStatusIcon =
+            <CheckCircleRounded />;
+    }
+    else if (
+        collectorsDegraded
+    ) {
+
+        monitorStatusLabel =
+            "MONITORING DEGRADED";
+
+
+        monitorStatusColor =
+            "#f59e0b";
+
+
+        monitorStatusBackground =
+            "rgba(245,158,11,0.10)";
+
+
+        monitorStatusBorder =
+            "1px solid rgba(245,158,11,0.25)";
+
+
+        monitorStatusIcon =
+            <WarningAmberRounded />;
+    }
 
 
     /* ======================================================== */
@@ -638,11 +1453,17 @@ function LiveMonitor() {
 
                     <Alert
                         severity="error"
+
                         sx={{
-                            mb: 2,
+                            mb:
+                                2,
                         }}
                     >
-                        {error}
+
+                        {
+                            error
+                        }
+
                     </Alert>
                 )
             }
@@ -654,25 +1475,42 @@ function LiveMonitor() {
 
             <Box
                 sx={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    gap: 2,
-                    flexWrap: "wrap",
-                    mb: 3,
+                    display:
+                        "flex",
+
+                    justifyContent:
+                        "space-between",
+
+                    alignItems:
+                        "center",
+
+                    gap:
+                        2,
+
+                    flexWrap:
+                        "wrap",
+
+                    mb:
+                        3,
                 }}
             >
 
                 <Box>
 
-                    <Typography variant="h4">
+                    <Typography
+                        variant="h4"
+                    >
                         Live Monitor
                     </Typography>
 
+
                     <Typography
                         sx={{
-                            color: "#94a3b8",
-                            mt: 0.5,
+                            color:
+                                "#94a3b8",
+
+                            mt:
+                                0.5,
                         }}
                     >
                         Continuous protection activity for this PC.
@@ -683,34 +1521,25 @@ function LiveMonitor() {
 
                 <Chip
                     icon={
-                        collectorsHealthy
-                            ? <CheckCircleRounded />
-                            : <ErrorRounded />
+                        monitorStatusIcon
                     }
 
                     label={
-                        collectorsHealthy
-                            ? "LIVE MONITORING ACTIVE"
-                            : "COLLECTORS OFFLINE"
+                        monitorStatusLabel
                     }
 
                     sx={{
                         color:
-                            collectorsHealthy
-                                ? "#22c55e"
-                                : "#ef4444",
+                            monitorStatusColor,
 
                         background:
-                            collectorsHealthy
-                                ? "rgba(34,197,94,0.10)"
-                                : "rgba(239,68,68,0.10)",
+                            monitorStatusBackground,
 
                         border:
-                            collectorsHealthy
-                                ? "1px solid rgba(34,197,94,0.25)"
-                                : "1px solid rgba(239,68,68,0.25)",
+                            monitorStatusBorder,
 
-                        fontWeight: 700,
+                        fontWeight:
+                            700,
                     }}
                 />
 
@@ -723,44 +1552,88 @@ function LiveMonitor() {
 
             <Box
                 sx={{
-                    display: "grid",
+                    display:
+                        "grid",
 
                     gridTemplateColumns: {
-                        xs: "1fr",
-                        sm: "repeat(2, 1fr)",
-                        lg: "repeat(4, 1fr)",
+                        xs:
+                            "1fr",
+
+                        sm:
+                            "repeat(2, 1fr)",
+
+                        lg:
+                            "repeat(4, 1fr)",
                     },
 
-                    gap: 2,
-                    mb: 3,
+                    gap:
+                        2,
+
+                    mb:
+                        3,
                 }}
             >
 
                 <MetricCard
                     title="Process Events"
-                    value={eventCounts.process}
-                    icon={<MemoryRounded />}
+
+                    value={
+                        eventCounts
+                            .process
+                    }
+
+                    icon={
+                        <MemoryRounded />
+                    }
+
                     color="#3b82f6"
                 />
 
+
                 <MetricCard
                     title="File Events"
-                    value={eventCounts.file}
-                    icon={<FolderRounded />}
+
+                    value={
+                        eventCounts
+                            .file
+                    }
+
+                    icon={
+                        <FolderRounded />
+                    }
+
                     color="#22c55e"
                 />
 
+
                 <MetricCard
                     title="Network Events"
-                    value={eventCounts.network}
-                    icon={<LanguageRounded />}
+
+                    value={
+                        eventCounts
+                            .network
+                    }
+
+                    icon={
+                        <LanguageRounded />
+                    }
+
                     color="#f59e0b"
                 />
 
+
                 <MetricCard
                     title="System Events"
-                    value={eventCounts.system}
-                    icon={<SettingsRounded />}
+
+                    value={
+                        eventCounts
+                            .system
+                    }
+
+                    icon={
+                        <SettingsRounded />
+                    }
+
                     color="#8b5cf6"
                 />
 
@@ -768,47 +1641,67 @@ function LiveMonitor() {
 
 
             {/* ================================================= */}
-            {/* LIVE LINE CHART */}
+            {/* ACTIVITY CHART */}
             {/* ================================================= */}
 
             <Card
                 sx={{
-                    mb: 3,
+                    mb:
+                        3,
                 }}
             >
 
                 <CardContent
                     sx={{
-                        p: 3,
+                        p:
+                            3,
                     }}
                 >
 
                     <Box
                         sx={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                            gap: 2,
-                            flexWrap: "wrap",
-                            mb: 2,
+                            display:
+                                "flex",
+
+                            justifyContent:
+                                "space-between",
+
+                            alignItems:
+                                "center",
+
+                            gap:
+                                2,
+
+                            flexWrap:
+                                "wrap",
+
+                            mb:
+                                2,
                         }}
                     >
 
                         <Box>
 
-                            <Typography variant="h6">
+                            <Typography
+                                variant="h6"
+                            >
                                 Continuous Activity Monitoring
                             </Typography>
 
+
                             <Typography
                                 sx={{
-                                    color: "#64748b",
-                                    fontSize: 13,
-                                    mt: 0.4,
+                                    color:
+                                        "#64748b",
+
+                                    fontSize:
+                                        13,
+
+                                    mt:
+                                        0.4,
                                 }}
                             >
-                                Real telemetry activity updates
-                                automatically every 2 seconds.
+                                Real telemetry activity updates automatically every 2 seconds.
                             </Typography>
 
                         </Box>
@@ -819,7 +1712,9 @@ function LiveMonitor() {
                                 refreshing
                                     ? (
                                         <CircularProgress
-                                            size={16}
+                                            size={
+                                                16
+                                            }
                                         />
                                     )
                                     : (
@@ -827,13 +1722,16 @@ function LiveMonitor() {
                                     )
                             }
 
-                            disabled={refreshing}
+                            disabled={
+                                refreshing
+                            }
 
-                            onClick={() =>
-                                loadLiveData(
-                                    false,
-                                    true
-                                )
+                            onClick={
+                                () =>
+                                    loadLiveData(
+                                        false,
+                                        true
+                                    )
                             }
 
                             variant="outlined"
@@ -846,80 +1744,155 @@ function LiveMonitor() {
 
                     <Box
                         sx={{
-                            width: "100%",
-                            height: 360,
+                            width:
+                                "100%",
+
+                            height:
+                                360,
                         }}
                     >
 
                         <ResponsiveContainer>
 
                             <LineChart
-                                data={chartData}
+                                data={
+                                    chartData
+                                }
                             >
 
                                 <CartesianGrid
                                     strokeDasharray="3 3"
+
                                     stroke="#1e293b"
                                 />
 
+
                                 <XAxis
                                     dataKey="time"
+
                                     stroke="#64748b"
                                 />
+
 
                                 <YAxis
                                     stroke="#64748b"
-                                    allowDecimals={false}
+
+                                    allowDecimals={
+                                        false
+                                    }
                                 />
+
 
                                 <Tooltip
                                     contentStyle={{
-                                        background: "#0f172a",
-                                        border: "1px solid #1e293b",
-                                        borderRadius: "10px",
+                                        background:
+                                            "#0f172a",
+
+                                        border:
+                                            (
+                                                "1px solid "
+                                                +
+                                                "#1e293b"
+                                            ),
+
+                                        borderRadius:
+                                            "10px",
                                     }}
                                 />
 
+
                                 <Legend />
 
+
                                 <Line
                                     type="monotone"
+
                                     dataKey="process"
+
                                     stroke="#3b82f6"
-                                    strokeWidth={2}
-                                    dot={false}
+
+                                    strokeWidth={
+                                        2
+                                    }
+
+                                    dot={
+                                        false
+                                    }
+
                                     name="Process"
-                                    isAnimationActive={false}
+
+                                    isAnimationActive={
+                                        false
+                                    }
                                 />
+
 
                                 <Line
                                     type="monotone"
+
                                     dataKey="file"
+
                                     stroke="#22c55e"
-                                    strokeWidth={2}
-                                    dot={false}
+
+                                    strokeWidth={
+                                        2
+                                    }
+
+                                    dot={
+                                        false
+                                    }
+
                                     name="File"
-                                    isAnimationActive={false}
+
+                                    isAnimationActive={
+                                        false
+                                    }
                                 />
+
 
                                 <Line
                                     type="monotone"
+
                                     dataKey="network"
+
                                     stroke="#f59e0b"
-                                    strokeWidth={2}
-                                    dot={false}
+
+                                    strokeWidth={
+                                        2
+                                    }
+
+                                    dot={
+                                        false
+                                    }
+
                                     name="Network"
-                                    isAnimationActive={false}
+
+                                    isAnimationActive={
+                                        false
+                                    }
                                 />
+
 
                                 <Line
                                     type="monotone"
+
                                     dataKey="system"
+
                                     stroke="#8b5cf6"
-                                    strokeWidth={2}
-                                    dot={false}
+
+                                    strokeWidth={
+                                        2
+                                    }
+
+                                    dot={
+                                        false
+                                    }
+
                                     name="System"
-                                    isAnimationActive={false}
+
+                                    isAnimationActive={
+                                        false
+                                    }
                                 />
 
                             </LineChart>
@@ -934,16 +1907,24 @@ function LiveMonitor() {
 
                             <Typography
                                 sx={{
-                                    color: "#64748b",
-                                    fontSize: 12,
-                                    mt: 1.5,
+                                    color:
+                                        "#64748b",
+
+                                    fontSize:
+                                        12,
+
+                                    mt:
+                                        1.5,
                                 }}
                             >
+
                                 Last updated:{" "}
+
                                 {
                                     lastUpdated
                                         .toLocaleTimeString()
                                 }
+
                             </Typography>
                         )
                     }
@@ -954,19 +1935,24 @@ function LiveMonitor() {
 
 
             {/* ================================================= */}
-            {/* MODULE STATUS + SUMMARY */}
+            {/* MODULES + SUMMARY */}
             {/* ================================================= */}
 
             <Box
                 sx={{
-                    display: "grid",
+                    display:
+                        "grid",
 
                     gridTemplateColumns: {
-                        xs: "1fr",
-                        lg: "1.1fr 1fr",
+                        xs:
+                            "1fr",
+
+                        lg:
+                            "1.1fr 1fr",
                     },
 
-                    gap: 2,
+                    gap:
+                        2,
                 }}
             >
 
@@ -978,48 +1964,110 @@ function LiveMonitor() {
 
                     <CardContent
                         sx={{
-                            p: 3,
+                            p:
+                                3,
                         }}
                     >
 
                         <Typography
                             variant="h6"
+
                             sx={{
-                                mb: 2,
+                                mb:
+                                    2,
                             }}
                         >
                             Monitoring Modules
                         </Typography>
 
 
-                        <Stack spacing={1.5}>
+                        <Stack
+                            spacing={
+                                1.5
+                            }
+                        >
 
                             <MonitorRow
-                                icon={<MemoryRounded />}
+                                icon={
+                                    <MemoryRounded />
+                                }
+
                                 title="Process Monitoring"
-                                description="Watching running applications for suspicious behavior."
-                                status={processStatus}
+
+                                description={
+                                    (
+                                        "Watching running applications "
+                                        +
+                                        "for suspicious behavior."
+                                    )
+                                }
+
+                                status={
+                                    processStatus
+                                }
                             />
 
+
                             <MonitorRow
-                                icon={<FolderRounded />}
+                                icon={
+                                    <FolderRounded />
+                                }
+
                                 title="File Monitoring"
-                                description="Watching suspicious file changes and file actions."
-                                status={fileStatus}
+
+                                description={
+                                    (
+                                        "Watching suspicious file "
+                                        +
+                                        "changes and file actions."
+                                    )
+                                }
+
+                                status={
+                                    fileStatus
+                                }
                             />
 
+
                             <MonitorRow
-                                icon={<LanguageRounded />}
+                                icon={
+                                    <LanguageRounded />
+                                }
+
                                 title="Network Monitoring"
-                                description="Watching live communication and suspicious connections."
-                                status={networkStatus}
+
+                                description={
+                                    (
+                                        "Watching live communication "
+                                        +
+                                        "and suspicious connections."
+                                    )
+                                }
+
+                                status={
+                                    networkStatus
+                                }
                             />
 
+
                             <MonitorRow
-                                icon={<SettingsRounded />}
+                                icon={
+                                    <SettingsRounded />
+                                }
+
                                 title="System Monitoring"
-                                description="Watching important configuration and startup changes."
-                                status={registryStatus}
+
+                                description={
+                                    (
+                                        "Watching important configuration "
+                                        +
+                                        "and startup changes."
+                                    )
+                                }
+
+                                status={
+                                    registryStatus
+                                }
                             />
 
                         </Stack>
@@ -1037,14 +2085,17 @@ function LiveMonitor() {
 
                     <CardContent
                         sx={{
-                            p: 3,
+                            p:
+                                3,
                         }}
                     >
 
                         <Typography
                             variant="h6"
+
                             sx={{
-                                mb: 2,
+                                mb:
+                                    2,
                             }}
                         >
                             Live Summary
@@ -1053,48 +2104,134 @@ function LiveMonitor() {
 
                         <SummaryRow
                             label="Live events this runtime"
-                            value={totalEvents.toLocaleString()}
+
+                            value={
+                                totalEvents
+                                    .toLocaleString()
+                            }
                         />
+
 
                         <SummaryRow
                             label="Process events"
-                            value={eventCounts.process.toLocaleString()}
+
+                            value={
+                                eventCounts
+                                    .process
+                                    .toLocaleString()
+                            }
                         />
+
 
                         <SummaryRow
                             label="File events"
-                            value={eventCounts.file.toLocaleString()}
+
+                            value={
+                                eventCounts
+                                    .file
+                                    .toLocaleString()
+                            }
                         />
+
 
                         <SummaryRow
                             label="Network events"
-                            value={eventCounts.network.toLocaleString()}
+
+                            value={
+                                eventCounts
+                                    .network
+                                    .toLocaleString()
+                            }
                         />
+
 
                         <SummaryRow
                             label="System / registry events"
-                            value={eventCounts.system.toLocaleString()}
+
+                            value={
+                                eventCounts
+                                    .system
+                                    .toLocaleString()
+                            }
                         />
+
 
                         <SummaryRow
                             label="High activity source"
-                            value={highActivitySource}
+
+                            value={
+                                highActivitySource
+                            }
                         />
+
+
+                        <SummaryRow
+                            label="Backend telemetry"
+
+                            value={
+                                liveStatus
+                            }
+
+                            safe={
+                                collectorsHealthy
+                            }
+                        />
+
 
                         <SummaryRow
                             label="Runtime status"
-                            value={runtimeStatus}
-                            safe={runtimeHealthy}
+
+                            value={
+                                runtimeStatus
+                            }
+
+                            safe={
+                                runtimeHealthy
+                            }
                         />
+
+
+                        <SummaryRow
+                            label="Healthy collectors"
+
+                            value={
+                                `${
+                                    asCount(
+                                        live
+                                            ?.healthy_collector_count
+                                    )
+                                } / ${
+                                    asCount(
+                                        live
+                                            ?.expected_collector_count
+                                    )
+                                    ||
+                                    4
+                                }`
+                            }
+
+                            safe={
+                                collectorsHealthy
+                            }
+                        />
+
 
                         <SummaryRow
                             label="Current device"
+
                             value="This PC"
                         />
 
+
                         <SummaryRow
                             label="Mode"
-                            value="Continuous Monitoring"
+
+                            value={
+                                live
+                                    ?.collection_mode
+                                ||
+                                "Continuous Monitoring"
+                            }
                         />
 
                     </CardContent>
@@ -1125,16 +2262,24 @@ function MetricCard({
 
             <CardContent
                 sx={{
-                    p: 2.5,
+                    p:
+                        2.5,
                 }}
             >
 
                 <Box
                     sx={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "flex-start",
-                        gap: 2,
+                        display:
+                            "flex",
+
+                        justifyContent:
+                            "space-between",
+
+                        alignItems:
+                            "flex-start",
+
+                        gap:
+                            2,
                     }}
                 >
 
@@ -1142,24 +2287,38 @@ function MetricCard({
 
                         <Typography
                             sx={{
-                                color: "#64748b",
-                                fontSize: 12,
+                                color:
+                                    "#64748b",
+
+                                fontSize:
+                                    12,
                             }}
                         >
-                            {title}
+                            {
+                                title
+                            }
                         </Typography>
+
 
                         <Typography
                             sx={{
-                                mt: 0.5,
-                                fontSize: 30,
-                                fontWeight: 800,
+                                mt:
+                                    0.5,
+
+                                fontSize:
+                                    30,
+
+                                fontWeight:
+                                    800,
                             }}
                         >
                             {
                                 Number(
-                                    value ?? 0
-                                ).toLocaleString()
+                                    value
+                                    ??
+                                    0
+                                )
+                                .toLocaleString()
                             }
                         </Typography>
 
@@ -1168,17 +2327,34 @@ function MetricCard({
 
                     <Box
                         sx={{
-                            width: 42,
-                            height: 42,
-                            borderRadius: "12px",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            color: color,
-                            background: `${color}15`,
+                            width:
+                                42,
+
+                            height:
+                                42,
+
+                            borderRadius:
+                                "12px",
+
+                            display:
+                                "flex",
+
+                            alignItems:
+                                "center",
+
+                            justifyContent:
+                                "center",
+
+                            color:
+                                color,
+
+                            background:
+                                `${color}15`,
                         }}
                     >
-                        {icon}
+                        {
+                            icon
+                        }
                     </Box>
 
                 </Box>
@@ -1201,58 +2377,118 @@ function MonitorRow({
     status,
 }) {
 
-    const active = [
-        "ACTIVE",
-        "RUNNING",
-        "HEALTHY",
-    ].includes(
-        String(status).toUpperCase()
-    );
+    const normalizedStatus =
+        String(
+            status
+            ||
+            "UNKNOWN"
+        )
+        .toUpperCase();
+
+
+    const active =
+        [
+            "ACTIVE",
+            "RUNNING",
+            "HEALTHY",
+        ]
+        .includes(
+            normalizedStatus
+        );
+
+
+    const degraded =
+        normalizedStatus
+        ===
+        "DEGRADED";
 
 
     const statusColor =
         active
             ? "#22c55e"
-            : "#ef4444";
+
+            : degraded
+                ? "#f59e0b"
+
+                : "#ef4444";
 
 
     return (
 
         <Box
             sx={{
-                p: 1.7,
-                borderRadius: "12px",
-                background: "#0f172a",
-                border: "1px solid #1e293b",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: 2,
-                flexWrap: "wrap",
+                p:
+                    1.7,
+
+                borderRadius:
+                    "12px",
+
+                background:
+                    "#0f172a",
+
+                border:
+                    "1px solid #1e293b",
+
+                display:
+                    "flex",
+
+                justifyContent:
+                    "space-between",
+
+                alignItems:
+                    "center",
+
+                gap:
+                    2,
+
+                flexWrap:
+                    "wrap",
             }}
         >
 
             <Box
                 sx={{
-                    display: "flex",
-                    gap: 1.5,
-                    alignItems: "center",
+                    display:
+                        "flex",
+
+                    gap:
+                        1.5,
+
+                    alignItems:
+                        "center",
                 }}
             >
 
                 <Box
                     sx={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: "10px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        color: "#3b82f6",
-                        background: "rgba(59,130,246,0.10)",
+                        width:
+                            40,
+
+                        height:
+                            40,
+
+                        borderRadius:
+                            "10px",
+
+                        display:
+                            "flex",
+
+                        alignItems:
+                            "center",
+
+                        justifyContent:
+                            "center",
+
+                        color:
+                            "#3b82f6",
+
+                        background:
+                            "rgba(59,130,246,0.10)",
                     }}
                 >
-                    {icon}
+                    {
+                        icon
+                    }
                 </Box>
 
 
@@ -1260,20 +2496,31 @@ function MonitorRow({
 
                     <Typography
                         sx={{
-                            fontWeight: 600,
+                            fontWeight:
+                                600,
                         }}
                     >
-                        {title}
+                        {
+                            title
+                        }
                     </Typography>
+
 
                     <Typography
                         sx={{
-                            color: "#64748b",
-                            fontSize: 12,
-                            mt: 0.3,
+                            color:
+                                "#64748b",
+
+                            fontSize:
+                                12,
+
+                            mt:
+                                0.3,
                         }}
                     >
-                        {description}
+                        {
+                            description
+                        }
                     </Typography>
 
                 </Box>
@@ -1282,12 +2529,21 @@ function MonitorRow({
 
 
             <Chip
-                label={status}
+                label={
+                    normalizedStatus
+                }
+
                 size="small"
+
                 sx={{
-                    color: statusColor,
-                    background: `${statusColor}15`,
-                    fontWeight: 700,
+                    color:
+                        statusColor,
+
+                    background:
+                        `${statusColor}15`,
+
+                    fontWeight:
+                        700,
                 }}
             />
 
@@ -1310,35 +2566,55 @@ function SummaryRow({
 
         <Box
             sx={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: 2,
-                py: 1.2,
-                borderBottom: "1px solid #1e293b",
+                display:
+                    "flex",
+
+                justifyContent:
+                    "space-between",
+
+                alignItems:
+                    "center",
+
+                gap:
+                    2,
+
+                py:
+                    1.2,
+
+                borderBottom:
+                    "1px solid #1e293b",
             }}
         >
 
             <Typography
                 sx={{
-                    color: "#94a3b8",
-                    fontSize: 13,
+                    color:
+                        "#94a3b8",
+
+                    fontSize:
+                        13,
                 }}
             >
-                {label}
+                {
+                    label
+                }
             </Typography>
 
 
             <Typography
                 sx={{
-                    fontWeight: 700,
+                    fontWeight:
+                        700,
+
                     color:
                         safe
                             ? "#22c55e"
                             : "#f8fafc",
                 }}
             >
-                {value}
+                {
+                    value
+                }
             </Typography>
 
         </Box>
