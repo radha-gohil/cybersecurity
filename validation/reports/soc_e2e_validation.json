@@ -1,0 +1,110 @@
+{
+  "suite": "SENTINEL-X PHASE 7 SOC E2E VALIDATION",
+  "api_base": "http://127.0.0.1:8003",
+  "incident_id": "27e3e58e-418b-4927-9d00-64f3fc0a770f",
+  "validation_mode": true,
+  "passed": 10,
+  "failed": 0,
+  "results": [
+    {
+      "scenario_id": "E2E-01",
+      "family": "SOC_E2E",
+      "scenario_name": "Authoritative validation detections correlate into one incident",
+      "observed": "id=27e3e58e-418b-4927-9d00-64f3fc0a770f;score=100;events=4;categories=FILE,NETWORK,PROCESS,REGISTRY",
+      "expected": "one incident / score>=80 / 4 cross-telemetry events",
+      "failure_layers": "",
+      "passed": true,
+      "notes": ""
+    },
+    {
+      "scenario_id": "E2E-02",
+      "family": "SOC_E2E",
+      "scenario_name": "Detected incident persists and reloads through API",
+      "observed": "http=200;id=27e3e58e-418b-4927-9d00-64f3fc0a770f;events=4;score=100",
+      "expected": "HTTP 200 and matching incident",
+      "failure_layers": "",
+      "passed": true,
+      "notes": ""
+    },
+    {
+      "scenario_id": "E2E-03",
+      "family": "SOC_E2E",
+      "scenario_name": "Detected incident completes AI multi-agent investigation",
+      "observed": "http=200;success=True;already_in_soc=False;agent_status=COMPLETED;case_status=AWAITING_ANALYST_REVIEW",
+      "expected": "investigation success / multi-agent COMPLETED",
+      "failure_layers": "",
+      "passed": true,
+      "notes": ""
+    },
+    {
+      "scenario_id": "E2E-04",
+      "family": "SOC_E2E",
+      "scenario_name": "Persistent SOC case and ticket reload correctly",
+      "observed": "http=200;status=AWAITING_ANALYST_REVIEW;ticket=TKT-4FBE2D274EDA;actions=0",
+      "expected": "persistent case + ticket + simulation safety",
+      "failure_layers": "",
+      "passed": true,
+      "notes": ""
+    },
+    {
+      "scenario_id": "E2E-05",
+      "family": "SOC_E2E",
+      "scenario_name": "Risk assessment is produced from persisted evidence",
+      "observed": "risk_score=20;risk_level=LOW",
+      "expected": "risk_score > 0 with valid risk level",
+      "failure_layers": "",
+      "passed": true,
+      "notes": ""
+    },
+    {
+      "scenario_id": "E2E-06",
+      "family": "SOC_E2E",
+      "scenario_name": "Digital Twin follows conservative response policy",
+      "observed": "http=200;risk=20;level=LOW;candidate_actions=0;decision=NO_RESPONSE_PLAN_AVAILABLE;best_plan=None;simulation=True",
+      "expected": "low/unverified risk => safe no-response plan; otherwise valid Digital Twin plan",
+      "failure_layers": "",
+      "passed": true,
+      "notes": ""
+    },
+    {
+      "scenario_id": "E2E-07",
+      "family": "SOC_E2E",
+      "scenario_name": "Response policy correctly controls analyst approval",
+      "observed": "http=200;actions=0;pending=0;ticket_approval=NOT_REQUIRED;decision=NO_RESPONSE_PLAN_AVAILABLE",
+      "expected": "safe low-risk case => NOT_REQUIRED; response case => PENDING analyst approval",
+      "failure_layers": "",
+      "passed": true,
+      "notes": ""
+    },
+    {
+      "scenario_id": "E2E-08",
+      "family": "SOC_E2E",
+      "scenario_name": "Approval contract respects current response policy",
+      "observed": "approval_not_required=True;route_exists=True;ticket_approval=NOT_REQUIRED;actions=0;pending=0",
+      "expected": "no forced approval for low-risk case; approval API remains registered",
+      "failure_layers": "",
+      "passed": true,
+      "notes": ""
+    },
+    {
+      "scenario_id": "E2E-09",
+      "family": "SOC_E2E",
+      "scenario_name": "Simulated mitigation is verified and persisted",
+      "observed": "post_http=200;status=SIMULATION_VERIFIED;persisted=True;get_http=200;verified=True",
+      "expected": "SIMULATION_VERIFIED and persisted",
+      "failure_layers": "",
+      "passed": true,
+      "notes": ""
+    },
+    {
+      "scenario_id": "E2E-10",
+      "family": "SOC_E2E",
+      "scenario_name": "Threat/SOC frontend API contract exposes complete incident state",
+      "observed": "full_route=True;tickets_route=True;full_http=200;dashboard_http=200;tickets_http=200;ticket_count=1;incident_visible=True",
+      "expected": "full incident + dashboard + ticket APIs all expose persisted workflow",
+      "failure_layers": "",
+      "passed": true,
+      "notes": ""
+    }
+  ]
+}

@@ -35,6 +35,14 @@ class NetworkBehaviorTracker:
         dos_window_seconds: int = 10,
         dos_connection_threshold: int = 30,
 
+        # ========================================================
+        # DISTRIBUTED DOS
+        # ========================================================
+
+        ddos_window_seconds: int = 10,
+        ddos_connection_threshold: int = 40,
+        ddos_min_sources: int = 5,
+
         beacon_min_connections: int = 5,
         beacon_history_seconds: int = 600,
         beacon_min_interval_seconds: float = 5.0,
@@ -79,7 +87,22 @@ class NetworkBehaviorTracker:
         self.dos_connection_threshold = (
             dos_connection_threshold
         )
+        
+        # ========================================================
+        # DISTRIBUTED DOS SETTINGS
+        # ========================================================
 
+        self.ddos_window_seconds = (
+            ddos_window_seconds
+        )
+
+        self.ddos_connection_threshold = (
+            ddos_connection_threshold
+        )
+
+        self.ddos_min_sources = (
+            ddos_min_sources
+        )
         # ========================================================
         # BEACONING SETTINGS
         # ========================================================
@@ -160,7 +183,34 @@ class NetworkBehaviorTracker:
         self.target_history = defaultdict(
             deque
         )
+                # ========================================================
+        # DISTRIBUTED TARGET HISTORY
+        #
+        # Unlike normal DoS history, this intentionally does NOT
+        # include PID in the key.
+        #
+        # key:
+        #     (
+        #         remote_ip,
+        #         remote_port,
+        #     )
+        #
+        # value:
+        #     deque[
+        #         (
+        #             timestamp,
+        #             pid,
+        #             process_name,
+        #         )
+        #     ]
+        #
+        # This allows multiple independent local processes /
+        # sources targeting the same destination to be correlated.
+        # ========================================================
 
+        self.distributed_target_history = defaultdict(
+            deque
+        )
         # ========================================================
         # BEACON HISTORY
         #
@@ -739,7 +789,320 @@ class NetworkBehaviorTracker:
             "detection_method":
                 "RULE_BASED_BEHAVIOR",
         }
+        # ============================================================
+    # DISTRIBUTED DOS
+    # ============================================================
 
+    def detect_distributed_dos(
+        self,
+        connection: Dict,
+        current_time: float,
+    ) -> Optional[Dict]:
+
+        pid = (
+            connection.get(
+                "pid"
+            )
+        )
+
+
+        process_name = (
+            connection.get(
+                "process_name"
+            )
+            or "unknown"
+        )
+
+
+        remote_ip = (
+            connection.get(
+                "remote_ip"
+            )
+        )
+
+
+        remote_port = (
+            connection.get(
+                "remote_port"
+            )
+        )
+
+
+        # ========================================================
+        # REQUIRE TARGET
+        # ========================================================
+
+        if (
+            remote_ip is None
+            or remote_port is None
+        ):
+
+            return None
+
+
+        # ========================================================
+        # TARGET-WIDE KEY
+        #
+        # Notice PID is deliberately NOT here.
+        # ========================================================
+
+        key = (
+            remote_ip,
+            remote_port,
+        )
+
+
+        history = (
+            self.distributed_target_history[
+                key
+            ]
+        )
+
+
+        # ========================================================
+        # RECORD CURRENT SOURCE
+        # ========================================================
+
+        history.append(
+            (
+                current_time,
+                pid,
+                process_name,
+            )
+        )
+
+
+        # ========================================================
+        # CLEAN OLD RECORDS
+        # ========================================================
+
+        cutoff = (
+            current_time
+            - self.ddos_window_seconds
+        )
+
+
+        while (
+            history
+            and history[0][0] < cutoff
+        ):
+
+            history.popleft()
+
+
+        # ========================================================
+        # CURRENT CONNECTION COUNT
+        # ========================================================
+
+        connection_count = (
+            len(
+                history
+            )
+        )
+
+
+        # ========================================================
+        # DISTINCT SOURCES
+        #
+        # PID + process name are used as the source identity.
+        # ========================================================
+
+        unique_sources = {
+
+            (
+                source_pid,
+                source_process,
+            )
+
+            for (
+                _,
+                source_pid,
+                source_process,
+            )
+            in history
+        }
+
+
+        source_count = (
+            len(
+                unique_sources
+            )
+        )
+
+
+        # ========================================================
+        # REQUIRE BOTH:
+        #
+        # 1. enough total target traffic
+        # 2. enough independent sources
+        #
+        # This prevents a single-process DoS from being mislabeled
+        # as DDoS.
+        # ========================================================
+
+        if (
+            connection_count
+            < self.ddos_connection_threshold
+        ):
+
+            return None
+
+
+        if (
+            source_count
+            < self.ddos_min_sources
+        ):
+
+            return None
+
+
+        # ========================================================
+        # ALERT COOLDOWN
+        # ========================================================
+
+        alert_key = (
+            "DISTRIBUTED_DOS_BEHAVIOR",
+            remote_ip,
+            remote_port,
+        )
+
+
+        if not self.should_emit_alert(
+            alert_key,
+            current_time,
+        ):
+
+            return None
+
+
+        # ========================================================
+        # CONFIDENCE
+        #
+        # Uses traffic volume and source diversity.
+        # Heuristic, not calibrated probability.
+        # ========================================================
+
+        volume_score = min(
+
+            1.0,
+
+            connection_count
+            / (
+                self.ddos_connection_threshold
+                * 2
+            ),
+        )
+
+
+        source_score = min(
+
+            1.0,
+
+            source_count
+            / (
+                self.ddos_min_sources
+                * 2
+            ),
+        )
+
+
+        confidence = round(
+
+            (
+                0.6
+                * volume_score
+            )
+
+            +
+
+            (
+                0.4
+                * source_score
+            ),
+
+            4,
+        )
+
+
+        # ========================================================
+        # RESULT
+        # ========================================================
+
+        return {
+
+            "engine":
+                "network_behavior",
+
+            "detection_type":
+                "DISTRIBUTED_DOS_BEHAVIOR",
+
+            "severity":
+                "CRITICAL",
+
+            "risk":
+                90,
+
+            "risk_score":
+                90,
+
+            "confidence":
+                confidence,
+
+            "reason":
+                (
+                    f"{connection_count} connections from "
+                    f"{source_count} distinct sources targeted "
+                    f"{remote_ip}:{remote_port} within "
+                    f"{self.ddos_window_seconds} seconds"
+                ),
+
+            "remote_ip":
+                remote_ip,
+
+            "remote_port":
+                remote_port,
+
+            "connection_count":
+                connection_count,
+
+            "unique_source_count":
+                source_count,
+
+            "unique_sources":
+                [
+
+                    {
+                        "pid":
+                            source_pid,
+
+                        "process_name":
+                            source_process,
+                    }
+
+                    for (
+                        source_pid,
+                        source_process,
+                    )
+                    in sorted(
+                        unique_sources,
+                        key=lambda value:
+                            str(
+                                value
+                            ),
+                    )
+                ],
+
+            "time_window_seconds":
+                self.ddos_window_seconds,
+
+            "detected_at":
+                self.iso_from_timestamp(
+                    current_time
+                ),
+
+            "detection_method":
+                "RULE_BASED_DISTRIBUTED_BEHAVIOR",
+        }
     # ============================================================
     # SUSPICIOUS BEACONING
     # ============================================================
@@ -1157,7 +1520,23 @@ class NetworkBehaviorTracker:
             detections.append(
                 possible_dos
             )
+                # --------------------------------------------------------
+        # DISTRIBUTED DOS
+        # --------------------------------------------------------
 
+        distributed_dos = (
+            self.detect_distributed_dos(
+                connection,
+                current_time,
+            )
+        )
+
+
+        if distributed_dos:
+
+            detections.append(
+                distributed_dos
+            )
         # --------------------------------------------------------
         # SUSPICIOUS BEACONING
         # --------------------------------------------------------

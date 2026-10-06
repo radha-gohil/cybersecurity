@@ -1,0 +1,97 @@
+{
+  "suite": "SENTINEL-X PHASE 4 REGISTRY VALIDATION",
+  "passed": 10,
+  "failed": 0,
+  "results": [
+    {
+      "scenario_id": "R1-01",
+      "family": "RUN_PERSISTENCE",
+      "scenario_name": "Unrelated benign registry preference",
+      "detections": "",
+      "expected": "NO_ALERT",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "R1-02",
+      "family": "RUN_PERSISTENCE",
+      "scenario_name": "Benign-looking Run key application",
+      "detections": "REGISTRY_AUTORUN_PERSISTENCE",
+      "expected": "REGISTRY_AUTORUN_PERSISTENCE",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "R1-03",
+      "family": "RUN_PERSISTENCE",
+      "scenario_name": "Suspicious Run key PowerShell payload",
+      "detections": "SUSPICIOUS_RUN_KEY_PERSISTENCE",
+      "expected": "SUSPICIOUS_RUN_KEY_PERSISTENCE",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "R1-04",
+      "family": "RUN_PERSISTENCE",
+      "scenario_name": "Run key deletion",
+      "detections": "",
+      "expected": "NO_ALERT",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "R2-01",
+      "family": "SERVICE_PERSISTENCE",
+      "scenario_name": "Normal service image path",
+      "detections": "SERVICE_PERSISTENCE_CHANGE",
+      "expected": "SERVICE_PERSISTENCE_CHANGE",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "R2-02",
+      "family": "SERVICE_PERSISTENCE",
+      "scenario_name": "Suspicious service image path",
+      "detections": "SUSPICIOUS_SERVICE_PERSISTENCE",
+      "expected": "SUSPICIOUS_SERVICE_PERSISTENCE",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "R2-03",
+      "family": "WINLOGON_PERSISTENCE",
+      "scenario_name": "Standard Winlogon shell",
+      "detections": "",
+      "expected": "NO_ALERT",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "R2-04",
+      "family": "WINLOGON_PERSISTENCE",
+      "scenario_name": "Nonstandard Winlogon shell",
+      "detections": "WINLOGON_PERSISTENCE_CHANGE",
+      "expected": "WINLOGON_PERSISTENCE_CHANGE",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "R3-01",
+      "family": "SECURITY_TAMPERING",
+      "scenario_name": "Defender realtime monitoring disabled",
+      "detections": "SECURITY_DEFENDER_TAMPERING",
+      "expected": "SECURITY_DEFENDER_TAMPERING",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "R3-02",
+      "family": "SECURITY_TAMPERING",
+      "scenario_name": "Incomplete registry event",
+      "detections": "",
+      "expected": "NO_ALERT",
+      "failure_layers": "",
+      "passed": true
+    }
+  ]
+}

@@ -1,28 +1,50 @@
-
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+
 import {
-  Alert, Box, Button, Card, CardContent, Chip,
-  CircularProgress, Divider, Stack, Typography,
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Chip,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Divider,
+  Stack,
+  TextField,
+  Typography,
 } from "@mui/material";
+
 import {
-  ApprovalRounded, WarningAmberRounded,
-  CheckCircleRounded, CancelRounded, ShieldRounded,
-  StopCircleRounded, LanguageRounded, FolderRounded,
-  SettingsRounded, DevicesRounded, RefreshRounded,
+  ApprovalRounded,
+  CancelRounded,
+  CheckCircleRounded,
+  RefreshRounded,
+  ScienceRounded,
+  PsychologyRounded,
+  ShieldRounded,
 } from "@mui/icons-material";
-import api from "../api/sentinelApi";
+
+import api, {
+  approveIncident,
+  rejectIncident,
+} from "../api/sentinelApi";
 
 function obj(value) {
-  return value && typeof value === "object" &&
-    !Array.isArray(value) ? value : {};
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value
+    : {};
 }
 
 function arr(value) {
   return Array.isArray(value) ? value : [];
 }
 
-function valueText(value, fallback = "Not available") {
+function text(value, fallback = "Not available") {
   if (value === null || value === undefined || value === "") {
     return fallback;
   }
@@ -32,40 +54,25 @@ function valueText(value, fallback = "Not available") {
   return String(value);
 }
 
-function errorText(error) {
+function apiError(error) {
   const detail = error?.response?.data?.detail;
-  return typeof detail === "string"
-    ? detail
-    : error?.message || "Request failed";
+  if (typeof detail === "string") return detail;
+  if (detail) return JSON.stringify(detail);
+  return error?.message || "Request failed.";
 }
 
-function normalizedStatus(status) {
-  const raw = String(status || "UNKNOWN").toUpperCase();
-  if (raw.includes("REJECT")) return "REJECTED";
-  if (raw.includes("APPROV")) return "APPROVED";
+function normalizeApproval(status) {
+  const value = String(status || "UNKNOWN").toUpperCase();
+  if (value.includes("APPROV")) return "APPROVED";
+  if (value.includes("REJECT")) return "REJECTED";
   if (
-    raw.includes("PENDING") ||
-    raw.includes("AWAIT") ||
-    raw.includes("REVIEW")
-  ) return "PENDING";
-  return raw;
-}
-
-function actionIcon(type) {
-  switch (String(type).toUpperCase()) {
-    case "TERMINATE_PROCESS":
-      return <StopCircleRounded />;
-    case "QUARANTINE_FILE":
-      return <FolderRounded />;
-    case "BLOCK_NETWORK":
-      return <LanguageRounded />;
-    case "REMEDIATE_PERSISTENCE":
-      return <SettingsRounded />;
-    case "ISOLATE_ENDPOINT":
-      return <DevicesRounded />;
-    default:
-      return <ApprovalRounded />;
+    value.includes("PENDING") ||
+    value.includes("AWAIT") ||
+    value.includes("REVIEW")
+  ) {
+    return "PENDING";
   }
+  return value;
 }
 
 function statusColor(status) {
@@ -75,37 +82,114 @@ function statusColor(status) {
   return "#94a3b8";
 }
 
-function impactColor(impact) {
-  const name = String(impact || "").toUpperCase();
-  if (name === "HIGH") return "#ef4444";
-  if (name === "MEDIUM") return "#f59e0b";
-  if (name === "LOW") return "#22c55e";
-  return "#94a3b8";
+function summarizeTarget(target) {
+  if (!target || typeof target !== "object") {
+    return text(target);
+  }
+
+  const processes = arr(target.processes);
+  if (processes.length) {
+    return processes
+      .map((process) => {
+        const name = process?.name || process?.process_name || "process";
+        const pid = process?.pid;
+        return pid ? `${name} (PID ${pid})` : name;
+      })
+      .join(", ");
+  }
+
+  const files = arr(target.files);
+  if (files.length) {
+    return files
+      .map((file) => file?.path || file?.name || "file")
+      .join(", ");
+  }
+
+  const network = arr(target.network || target.connections);
+  if (network.length) {
+    return network
+      .map((item) => {
+        const ip = item?.remote_ip || item?.ip || "network target";
+        const port = item?.remote_port || item?.port;
+        return port ? `${ip}:${port}` : ip;
+      })
+      .join(", ");
+  }
+
+  return JSON.stringify(target);
 }
 
-function SummaryCard({ title, count, color }) {
+function normalizeCase(caseData) {
+  const record = obj(caseData);
+  const ticket = obj(record.ticket);
+  const decision = obj(record.decision);
+  const bestPlan = obj(decision.best_plan);
+  const actions = arr(record.response_actions);
+
+  const approvalStatus = normalizeApproval(
+    ticket.approval_status ||
+      actions[0]?.approval_status ||
+      record.approval_status
+  );
+
+  return {
+    incidentId: String(record.incident_id || ""),
+    caseStatus: record.status,
+    ticketId: ticket.ticket_id,
+    ticketStatus: ticket.status,
+    priority: ticket.priority,
+    riskScore:
+      ticket.risk_score ?? decision.initial_risk_score ?? null,
+    riskLevel: ticket.risk_level,
+    selectedPlan:
+      ticket.selected_plan || bestPlan.plan_name || decision.selected_plan_name,
+    residualRisk:
+      ticket.predicted_residual_risk ??
+      bestPlan.predicted_residual_risk ??
+      null,
+    operationalImpact:
+      ticket.operational_impact ||
+      bestPlan?.operational_impact?.impact_level ||
+      null,
+    approvalStatus,
+    assignedAnalyst: ticket.assigned_analyst,
+    actions: actions.map((action) => ({
+      id: action?.action_id,
+      type: action?.action_type || "UNKNOWN_ACTION",
+      target: summarizeTarget(action?.target),
+      reason: action?.reason,
+      approvalStatus: normalizeApproval(action?.approval_status),
+      executionStatus: action?.execution_status,
+      policyDecision: action?.policy_decision,
+      riskLevel: action?.risk_level,
+    })),
+    simulationMode: record.simulation_mode !== false,
+    realResponseExecuted: record.real_response_executed === true,
+  };
+}
+
+function Metric({ label, value, color }) {
   return (
     <Card>
       <CardContent sx={{ p: 2.5 }}>
-        <Typography sx={{ color: "#64748b", fontSize: 13 }}>
-          {title}
+        <Typography sx={{ color: "#64748b", fontSize: 12 }}>
+          {label}
         </Typography>
-        <Typography
-          sx={{ fontSize: 30, fontWeight: 800, mt: 0.5, color }}
-        >
-          {count}
+        <Typography sx={{ mt: 0.5, fontSize: 29, fontWeight: 800, color }}>
+          {value}
         </Typography>
       </CardContent>
     </Card>
   );
 }
 
-function InfoBox({ label, value, color }) {
+function Info({ label, value }) {
   return (
     <Box
       sx={{
-        p: 1.5, borderRadius: "10px",
-        background: "#0f172a",
+        p: 1.5,
+        borderRadius: 2,
+        bgcolor: "#0f172a",
         border: "1px solid #1e293b",
       }}
     >
@@ -114,231 +198,174 @@ function InfoBox({ label, value, color }) {
       </Typography>
       <Typography
         sx={{
-          color: color || "#f8fafc", fontSize: 13,
-          fontWeight: 600, mt: 0.5,
+          mt: 0.4,
+          color: "#e2e8f0",
+          fontSize: 13,
+          fontWeight: 650,
           overflowWrap: "anywhere",
         }}
       >
-        {valueText(value)}
+        {text(value)}
       </Typography>
     </Box>
   );
 }
 
-/*
-  Normalize persisted records only. Never create an action
-  from a Digital Twin hypothetical preview.
-*/
-function normalizeAction(source, incidentId, position) {
-  const action = obj(source);
-  const details = obj(action.action);
-  const target = action.target ?? details.target;
-  const targetString =
-    target && typeof target === "object"
-      ? "[Structured target stored in SOC case]"
-      : valueText(target);
-
-  const type = String(
-    action.action_type ||
-    details.action_type ||
-    action.type ||
-    "UNKNOWN"
-  ).toUpperCase();
-
-  const approval = obj(action.approval);
-
-  const rawStatus =
-    approval.status ||
-    action.approval_status ||
-    action.status ||
-    "UNKNOWN";
-
-  return {
-    id: String(
-      action.action_id ||
-      action.id ||
-      `${incidentId}-ACTION-${position + 1}`
-    ),
-    incidentId: String(incidentId),
-    type,
-    title: type.replaceAll("_", " "),
-    description:
-      action.description ||
-      action.reason ||
-      "Persisted SOC response-action record.",
-    target: targetString,
-    impact:
-      String(
-        action.operational_impact?.impact_level ||
-        action.impact ||
-        "UNKNOWN"
-      ).toUpperCase(),
-    severity: String(action.severity || "UNSPECIFIED"),
-    reason:
-      action.reason ||
-      "See the linked SOC case for supporting evidence.",
-    status: normalizedStatus(rawStatus),
-    persistedApprovalStatus:
-      approval.status || action.approval_status || null,
-    source: "PERSISTED_SOC_CASE",
-  };
-}
-
-function ApprovalCard({ action, onOpenCase }) {
-  const status = action.status;
-  const color = statusColor(status);
+function CaseCard({ item, onDecision, onOpenInvestigation, onOpenSimulator }) {
+  const color = statusColor(item.approvalStatus);
+  const pending = item.approvalStatus === "PENDING";
 
   return (
     <Card
       sx={{
-        borderColor:
-          status === "PENDING"
-            ? "rgba(245,158,11,0.25)"
-            : "#1e293b",
+        borderColor: pending
+          ? "rgba(245,158,11,0.35)"
+          : "#1e293b",
       }}
     >
       <CardContent sx={{ p: 3 }}>
         <Stack
-          direction={{ xs: "column", md: "row" }}
+          direction={{ xs: "column", lg: "row" }}
           justifyContent="space-between"
           spacing={3}
         >
-          <Stack
-            direction="row"
-            spacing={2}
-            alignItems="flex-start"
-            sx={{ flex: 1, minWidth: 0 }}
-          >
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Stack direction="row" spacing={1} flexWrap="wrap" alignItems="center">
+              <ApprovalRounded sx={{ color }} />
+              <Typography variant="h6">
+                {text(item.selectedPlan, "SOC Response Review")}
+              </Typography>
+              <Chip
+                size="small"
+                label={item.approvalStatus}
+                sx={{
+                  color,
+                  border: `1px solid ${color}55`,
+                  bgcolor: `${color}12`,
+                }}
+              />
+              {item.priority && (
+                <Chip size="small" variant="outlined" label={item.priority} />
+              )}
+            </Stack>
+
+            <Typography
+              sx={{ color: "#94a3b8", fontSize: 12, mt: 1, overflowWrap: "anywhere" }}
+            >
+              Incident {item.incidentId}
+            </Typography>
+
             <Box
               sx={{
-                width: 50, height: 50, minWidth: 50,
-                borderRadius: "14px", display: "grid",
-                placeItems: "center", color,
-                background: `${color}12`,
+                display: "grid",
+                gridTemplateColumns: {
+                  xs: "1fr",
+                  sm: "repeat(2,1fr)",
+                  lg: "repeat(4,1fr)",
+                },
+                gap: 1.5,
+                mt: 2,
               }}
             >
-              {actionIcon(action.type)}
+              <Info label="Case status" value={item.caseStatus} />
+              <Info label="Ticket" value={item.ticketId} />
+              <Info
+                label="Investigation risk"
+                value={
+                  item.riskScore === null
+                    ? null
+                    : `${item.riskScore}${item.riskLevel ? ` ${item.riskLevel}` : ""}`
+                }
+              />
+              <Info label="Modeled residual risk" value={item.residualRisk} />
             </Box>
 
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Stack
-                direction="row"
-                gap={1}
-                flexWrap="wrap"
-                alignItems="center"
-                sx={{ mb: 1 }}
-              >
-                <Typography sx={{ fontSize: 18, fontWeight: 700 }}>
-                  {action.title}
-                </Typography>
-                <Chip size="small" label={action.severity} />
+            <Divider sx={{ my: 2 }} />
+
+            <Typography sx={{ fontWeight: 700, mb: 1 }}>
+              Persisted response actions
+            </Typography>
+
+            {item.actions.length ? (
+              <Stack spacing={1}>
+                {item.actions.map((action, index) => (
+                  <Box
+                    key={action.id || index}
+                    sx={{
+                      p: 1.5,
+                      bgcolor: "#0f172a",
+                      borderRadius: 2,
+                      border: "1px solid #1e293b",
+                    }}
+                  >
+                    <Stack
+                      direction={{ xs: "column", md: "row" }}
+                      justifyContent="space-between"
+                      spacing={1}
+                    >
+                      <Box>
+                        <Typography sx={{ fontWeight: 700 }}>
+                          {String(action.type).replaceAll("_", " ")}
+                        </Typography>
+                        <Typography sx={{ color: "#94a3b8", fontSize: 12, mt: 0.4 }}>
+                          Target: {text(action.target)}
+                        </Typography>
+                        <Typography sx={{ color: "#64748b", fontSize: 11, mt: 0.4 }}>
+                          {text(action.reason)}
+                        </Typography>
+                      </Box>
+
+                      <Stack direction="row" spacing={1} flexWrap="wrap">
+                        <Chip size="small" label={`Approval ${action.approvalStatus}`} />
+                        <Chip size="small" label={`Execution ${text(action.executionStatus)}`} />
+                      </Stack>
+                    </Stack>
+                  </Box>
+                ))}
               </Stack>
+            ) : (
+              <Alert severity="info">
+                No persisted response action was found for this case.
+              </Alert>
+            )}
+          </Box>
 
-              <Typography
-                sx={{ color: "#94a3b8", fontSize: 13 }}
-              >
-                {action.description}
-              </Typography>
-
-              <Typography
-                sx={{
-                  color: "#64748b", fontSize: 11,
-                  mt: 1, overflowWrap: "anywhere",
-                }}
-              >
-                Incident: {action.incidentId}
-              </Typography>
-
-              <Box
-                sx={{
-                  display: "grid",
-                  gridTemplateColumns: {
-                    xs: "1fr",
-                    md: "repeat(3,1fr)",
-                  },
-                  gap: 1.5,
-                  mt: 2,
-                }}
-              >
-                <InfoBox label="Target" value={action.target} />
-                <InfoBox
-                  label="Impact"
-                  value={action.impact}
-                  color={impactColor(action.impact)}
-                />
-                <InfoBox
-                  label="Approval state"
-                  value={action.persistedApprovalStatus}
-                />
-              </Box>
-
-              <Box
-                sx={{
-                  mt: 2, p: 1.5,
-                  borderRadius: "10px",
-                  background: "#0f172a",
-                }}
-              >
-                <Typography
-                  sx={{ color: "#64748b", fontSize: 11 }}
-                >
-                  Recorded justification
-                </Typography>
-                <Typography
-                  sx={{
-                    color: "#cbd5e1",
-                    fontSize: 13,
-                    mt: 0.4,
-                  }}
-                >
-                  {action.reason}
-                </Typography>
-              </Box>
-            </Box>
-          </Stack>
-
-          <Stack
-            alignItems={{
-              xs: "stretch",
-              md: "flex-end",
-            }}
-            spacing={1.5}
-          >
-            <Chip
-              label={status}
-              sx={{
-                color,
-                background: `${color}12`,
-                border: `1px solid ${color}30`,
-                fontWeight: 700,
-              }}
-            />
-            {status === "PENDING" && (
-              <Stack direction="row" spacing={1}>
-                <Button
-                  variant="outlined"
-                  color="error"
-                  startIcon={<CancelRounded />}
-                  disabled
-                >
-                  Reject
-                </Button>
+          <Stack spacing={1.2} sx={{ minWidth: { lg: 220 } }}>
+            {pending && (
+              <>
                 <Button
                   variant="contained"
                   color="success"
                   startIcon={<CheckCircleRounded />}
-                  disabled
+                  onClick={() => onDecision(item, "APPROVE")}
                 >
-                  Approve
+                  Approve Simulation
                 </Button>
-              </Stack>
+                <Button
+                  variant="outlined"
+                  color="error"
+                  startIcon={<CancelRounded />}
+                  onClick={() => onDecision(item, "REJECT")}
+                >
+                  Reject
+                </Button>
+              </>
             )}
+
             <Button
-              size="small"
               variant="outlined"
-              onClick={() => onOpenCase(action.incidentId)}
+              startIcon={<ScienceRounded />}
+              onClick={() => onOpenSimulator(item.incidentId)}
             >
-              View Incident
+              Response Simulator
+            </Button>
+
+            <Button
+              variant="text"
+              startIcon={<PsychologyRounded />}
+              onClick={() => onOpenInvestigation(item.incidentId)}
+            >
+              AI Investigation
             </Button>
           </Stack>
         </Stack>
@@ -349,14 +376,23 @@ function ApprovalCard({ action, onOpenCase }) {
 
 export default function Approvals() {
   const navigate = useNavigate();
+  const location = useLocation();
 
-  const [actions, setActions] = useState([]);
-  const [caseCount, setCaseCount] = useState(0);
+  const incomingIncidentId = String(location.state?.incidentId || "");
+
+  const [cases, setCases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [warnings, setWarnings] = useState([]);
+  const [success, setSuccess] = useState("");
 
-  const loadApprovals = useCallback(async () => {
+  const [dialog, setDialog] = useState(null);
+  const [analyst, setAnalyst] = useState("");
+  const [comment, setComment] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+
+  const loadCases = useCallback(async () => {
     setLoading(true);
     setError("");
     setWarnings([]);
@@ -366,29 +402,14 @@ export default function Approvals() {
         params: { limit: 1000 },
       });
 
-      if (!Array.isArray(response.data?.cases)) {
-        throw new Error(
-          "GET /cases did not return the expected cases array."
-        );
-      }
-
-      const cases = response.data.cases;
-      setCaseCount(cases.length);
-
+      const summaries = arr(response.data?.cases);
       const loaded = [];
       const failures = [];
 
-      /*
-        Sequential reads avoid sending a burst of requests
-        to the SOC backend. All operations are GET.
-      */
-      for (const entry of cases) {
-        const incidentId = String(
-          entry?.incident_id || entry?.id || ""
-        );
-
+      for (const summary of summaries) {
+        const incidentId = String(summary?.incident_id || summary?.id || "");
         if (!incidentId) {
-          failures.push("A case has no incident ID.");
+          failures.push("A stored case has no incident ID.");
           continue;
         }
 
@@ -396,221 +417,264 @@ export default function Approvals() {
           const details = await api.get(
             `/cases/${encodeURIComponent(incidentId)}`
           );
-
-          const caseRecord = obj(details.data);
-          let sourceActions = arr(caseRecord.response_actions);
-
-          if (!sourceActions.length) {
-            const result = await api.get(
-              `/cases/${encodeURIComponent(incidentId)}/responses`
-            );
-
-            const body = result.data;
-            sourceActions = Array.isArray(body)
-              ? body
-              : arr(body?.actions).length
-                ? body.actions
-                : arr(body?.response_actions);
-          }
-
-          sourceActions.forEach((item, index) => {
-            if (item && typeof item === "object") {
-              loaded.push(
-                normalizeAction(item, incidentId, index)
-              );
-            }
-          });
+          loaded.push(normalizeCase(details.data));
         } catch (requestError) {
-          failures.push(
-            `${incidentId}: ${errorText(requestError)}`
-          );
+          failures.push(`${incidentId}: ${apiError(requestError)}`);
         }
       }
 
-      setActions(loaded);
+      loaded.sort((a, b) => {
+        if (a.incidentId === incomingIncidentId) return -1;
+        if (b.incidentId === incomingIncidentId) return 1;
+        if (a.approvalStatus === "PENDING" && b.approvalStatus !== "PENDING") return -1;
+        if (b.approvalStatus === "PENDING" && a.approvalStatus !== "PENDING") return 1;
+        return 0;
+      });
+
+      setCases(loaded);
       setWarnings(failures);
     } catch (requestError) {
-      setActions([]);
-      setCaseCount(0);
-      setError(errorText(requestError));
+      setCases([]);
+      setError(apiError(requestError));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [incomingIncidentId]);
 
   useEffect(() => {
-    loadApprovals();
-  }, [loadApprovals]);
+    loadCases();
+  }, [loadCases]);
 
   const stats = useMemo(() => ({
-    pending: actions.filter((a) => a.status === "PENDING").length,
-    approved: actions.filter((a) => a.status === "APPROVED").length,
-    rejected: actions.filter((a) => a.status === "REJECTED").length,
-  }), [actions]);
+    pending: cases.filter((item) => item.approvalStatus === "PENDING").length,
+    approved: cases.filter((item) => item.approvalStatus === "APPROVED").length,
+    rejected: cases.filter((item) => item.approvalStatus === "REJECTED").length,
+  }), [cases]);
+
+  function openDecision(item, type) {
+    setDialog({ item, type });
+    setAnalyst("");
+    setComment("");
+    setSubmitError("");
+    setSuccess("");
+  }
+
+  async function submitDecision() {
+    if (!dialog?.item?.incidentId || !dialog?.type || submitting) return;
+
+    const analystName = analyst.trim();
+    const note = comment.trim();
+
+    if (!analystName) {
+      setSubmitError("Analyst name is required.");
+      return;
+    }
+
+    if (dialog.type === "REJECT" && !note) {
+      setSubmitError("A rejection reason is required.");
+      return;
+    }
+
+    setSubmitting(true);
+    setSubmitError("");
+
+    try {
+      let result;
+
+      if (dialog.type === "APPROVE") {
+        result = await approveIncident(dialog.item.incidentId, {
+          analyst: analystName,
+          comment: note,
+        });
+      } else {
+        result = await rejectIncident(dialog.item.incidentId, {
+          analyst: analystName,
+          reason: note,
+        });
+      }
+
+      const action = dialog.type === "APPROVE" ? "approved" : "rejected";
+      setSuccess(
+        `Case ${dialog.item.incidentId} was ${action}. Backend status: ${text(result?.status)}. Real response executed: ${result?.real_response_executed === true ? "YES" : "NO"}.`
+      );
+      setDialog(null);
+      await loadCases();
+    } catch (requestError) {
+      setSubmitError(apiError(requestError));
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
     <Box sx={{ pb: 4 }}>
-      {/* HEADER */}
       <Stack
         direction={{ xs: "column", sm: "row" }}
         justifyContent="space-between"
+        alignItems={{ xs: "flex-start", sm: "center" }}
         spacing={2}
         sx={{ mb: 3 }}
       >
         <Box>
-          <Typography variant="h4">Approvals</Typography>
-          <Typography
-            sx={{ color: "#94a3b8", mt: 0.5 }}
-          >
-            Review only persisted SOC response actions.
+          <Typography variant="h4" sx={{ fontWeight: 800 }}>
+            Approvals
+          </Typography>
+          <Typography sx={{ color: "#94a3b8", mt: 0.5 }}>
+            Analyst review of persisted SENTINEL-X response plans.
           </Typography>
         </Box>
 
         <Button
           variant="outlined"
           startIcon={<RefreshRounded />}
-          onClick={loadApprovals}
-          disabled={loading}
+          onClick={loadCases}
+          disabled={loading || submitting}
         >
           Refresh
         </Button>
       </Stack>
 
-      {/* SUMMARY */}
       <Box
         sx={{
           display: "grid",
-          gridTemplateColumns: {
-            xs: "1fr",
-            sm: "repeat(3,1fr)",
-          },
+          gridTemplateColumns: { xs: "1fr", sm: "repeat(3,1fr)" },
           gap: 2,
           mb: 3,
         }}
       >
-        <SummaryCard
-          title="Needs Your Review"
-          count={stats.pending}
-          color="#f59e0b"
-        />
-        <SummaryCard
-          title="Approved"
-          count={stats.approved}
-          color="#22c55e"
-        />
-        <SummaryCard
-          title="Rejected"
-          count={stats.rejected}
-          color="#ef4444"
-        />
+        <Metric label="Pending review" value={stats.pending} color="#f59e0b" />
+        <Metric label="Approved" value={stats.approved} color="#22c55e" />
+        <Metric label="Rejected" value={stats.rejected} color="#ef4444" />
       </Box>
 
-      {/* SAFETY BANNER */}
-      <Card
-        sx={{
-          mb: 3,
-          borderColor: "rgba(59,130,246,0.25)",
-        }}
-      >
-        <CardContent
-          sx={{
-            display: "flex", gap: 2,
-            alignItems: "center", p: 2.5,
-          }}
-        >
-          <ShieldRounded sx={{ color: "#3b82f6" }} />
-          <Box>
-            <Typography fontWeight={600}>
-              Simulation Mode Active
-            </Typography>
-            <Typography
-              sx={{
-                color: "#64748b",
-                fontSize: 13, mt: 0.3,
-              }}
-            >
-              Approval submission is locked during validation.
-              This page reads stored SOC case records only.
-              No process, file, network or device is modified.
-            </Typography>
-          </Box>
-        </CardContent>
-      </Card>
+      <Alert icon={<ShieldRounded />} severity="info" sx={{ mb: 3 }}>
+        Approval is active for the <strong>simulation-only SOC workflow</strong>.
+        Approving a case may route its persisted response action through the
+        simulation handler, but the backend keeps real endpoint execution disabled.
+      </Alert>
 
       {loading && (
-        <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
+        <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
           <CircularProgress size={22} />
           <Typography>Loading persisted SOC cases...</Typography>
         </Stack>
       )}
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
-        </Alert>
-      )}
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
 
       {!!warnings.length && (
         <Alert severity="warning" sx={{ mb: 2 }}>
-          Some case records could not be loaded.
-          {warnings.slice(0, 3).map((text, index) => (
-            <Typography key={index} fontSize={12}>
-              {text}
+          Some cases could not be loaded.
+          {warnings.slice(0, 3).map((warning, index) => (
+            <Typography key={index} sx={{ fontSize: 12 }}>
+              {warning}
             </Typography>
           ))}
         </Alert>
       )}
 
-      <Typography
-        sx={{ color: "#94a3b8", fontSize: 12, mb: 2 }}
-      >
-        Persisted SOC cases: {caseCount} | Loaded response
-        records: {actions.length}
-      </Typography>
-
-      {!loading && !error && !actions.length && (
+      {!loading && !error && !cases.length && (
         <Card>
           <CardContent sx={{ p: 4, textAlign: "center" }}>
-            <WarningAmberRounded
-              sx={{ color: "#f59e0b", fontSize: 36 }}
-            />
+            <ApprovalRounded sx={{ fontSize: 38, color: "#64748b" }} />
             <Typography variant="h6" sx={{ mt: 1 }}>
-              No persisted approval actions available
+              No persisted SOC approvals available
             </Typography>
-            <Typography
-              sx={{
-                color: "#94a3b8",
-                mt: 1,
-              }}
-            >
-              This is not a simulated list of pending actions.
-              A valid SOC case must exist before actual response
-              actions can appear here.
+            <Typography sx={{ color: "#94a3b8", mt: 1 }}>
+              Run AI Investigation for a qualifying incident to create a
+              simulation-only SOC workflow first.
             </Typography>
           </CardContent>
         </Card>
       )}
 
       <Stack spacing={2}>
-        {actions.map((action, index) => (
-          <ApprovalCard
-            key={`${action.incidentId}-${action.id}-${index}`}
-            action={action}
-            onOpenCase={(id) =>
-              navigate(`/incidents/${encodeURIComponent(id)}`)
+        {cases.map((item) => (
+          <CaseCard
+            key={item.incidentId}
+            item={item}
+            onDecision={openDecision}
+            onOpenSimulator={(incidentId) =>
+              navigate("/response-simulator", { state: { incidentId } })
+            }
+            onOpenInvestigation={(incidentId) =>
+              navigate("/ai-security", { state: { incidentId } })
             }
           />
         ))}
       </Stack>
 
-      <Divider sx={{ my: 3 }} />
+      <Dialog
+        open={Boolean(dialog)}
+        onClose={() => !submitting && setDialog(null)}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>
+          {dialog?.type === "APPROVE"
+            ? "Approve Simulation Workflow"
+            : "Reject Response Plan"}
+        </DialogTitle>
 
-      <Alert severity="info">
-        Approval and rejection buttons are intentionally disabled.
-        We have not yet validated a backend operation that
-        securely persists those decisions with authorization,
-        evidence checks and audit logging.
-      </Alert>
+        <DialogContent>
+          <Alert
+            severity={dialog?.type === "APPROVE" ? "info" : "warning"}
+            sx={{ mb: 2, mt: 1 }}
+          >
+            {dialog?.type === "APPROVE"
+              ? "This approves the persisted SOC case and permits simulation-only response routing. It does not authorize a real endpoint action."
+              : "Rejecting the case prevents the proposed response from being approved in this SOC workflow."}
+          </Alert>
+
+          <Typography sx={{ color: "#94a3b8", fontSize: 12, mb: 2 }}>
+            Incident: {dialog?.item?.incidentId}
+          </Typography>
+
+          <TextField
+            fullWidth
+            label="Analyst name"
+            value={analyst}
+            onChange={(event) => setAnalyst(event.target.value)}
+            disabled={submitting}
+            sx={{ mb: 2 }}
+          />
+
+          <TextField
+            fullWidth
+            multiline
+            minRows={3}
+            label={dialog?.type === "APPROVE" ? "Comment (optional)" : "Rejection reason"}
+            value={comment}
+            onChange={(event) => setComment(event.target.value)}
+            disabled={submitting}
+          />
+
+          {submitError && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {submitError}
+            </Alert>
+          )}
+        </DialogContent>
+
+        <DialogActions>
+          <Button onClick={() => setDialog(null)} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color={dialog?.type === "APPROVE" ? "success" : "error"}
+            onClick={submitDecision}
+            disabled={submitting}
+          >
+            {submitting
+              ? "Submitting..."
+              : dialog?.type === "APPROVE"
+                ? "Approve Simulation"
+                : "Reject Plan"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

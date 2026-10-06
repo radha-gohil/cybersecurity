@@ -1,0 +1,11 @@
+scenario_id,family,scenario_name,correlation_score,correlated,categories,event_count,expected,failure_layers,passed,notes
+C1-01,PROCESS_NETWORK,Unrelated process and network activity,0,False,NETWORK,1,NO_CORRELATION,,True,
+C1-02,PROCESS_NETWORK,Process and network share exact PID,70,True,"NETWORK,PROCESS",2,PROCESS+NETWORK_CORRELATED,,True,
+C1-03,PROCESS_NETWORK,Same PID outside correlation window,20,False,NETWORK,1,NO_CORRELATION,,True,
+C2-01,PROCESS_FILE,Same filename but different file path,0,False,FILE,1,NO_CORRELATION,,True,
+C2-02,PROCESS_FILE,Process executable exactly matches file path,80,True,"FILE,PROCESS",2,PROCESS+FILE_CORRELATED,,True,
+C3-01,PROCESS_REGISTRY,Registry value unrelated to process,0,False,REGISTRY,1,NO_CORRELATION,,True,
+C3-02,PROCESS_REGISTRY,Registry persistence references process executable,90,True,"PROCESS,REGISTRY",2,PROCESS+REGISTRY_CORRELATED,,True,
+C4-01,FULL_CHAIN,Process + file + network + registry attack chain,100,True,"FILE,NETWORK,PROCESS,REGISTRY",4,ONE_CRITICAL_MULTI_CATEGORY_INCIDENT,,True,
+C4-02,FULL_CHAIN,Duplicate network event does not duplicate incident evidence,70,True,"NETWORK,PROCESS",2,EVENT_COUNT_REMAINS_2,,True,
+C4-03,FULL_CHAIN,Critical severity without entity evidence stays uncorrelated,30,False,NETWORK,1,NO_INVENTED_RELATIONSHIP,,True,Severity alone must not create a cross-telemetry relationship.

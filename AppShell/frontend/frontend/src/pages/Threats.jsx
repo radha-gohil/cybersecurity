@@ -1,5 +1,4 @@
-
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
@@ -10,66 +9,128 @@ import {
   CardContent,
   Chip,
   CircularProgress,
-  FormControl,
-  InputLabel,
-  MenuItem,
-  Select,
+  Divider,
+  LinearProgress,
   Stack,
-  TextField,
+  Tab,
+  Tabs,
   Typography,
 } from "@mui/material";
 
 import {
   ArrowForwardRounded,
-  RefreshRounded,
-  SearchRounded,
+  AccessTimeRounded,
+  DevicesRounded,
+  PsychologyRounded,
   ShieldRounded,
   WarningAmberRounded,
 } from "@mui/icons-material";
 
-import api, { getLiveDetections } from "../api/sentinelApi";
+import api, {
+  getLiveDetections,
+} from "../api/sentinelApi";
 
 const REFRESH_MS = 10000;
 const DETECTION_LIMIT = 100;
 const INCIDENT_LIMIT = 1000;
 
-const COLORS = {
-  CRITICAL: "#ef4444",
-  HIGH: "#f97316",
-  MEDIUM: "#f59e0b",
-  LOW: "#3b82f6",
-  INFO: "#94a3b8",
-  UNKNOWN: "#94a3b8",
+const severityColor = (severity) => {
+  switch (String(severity || "").toUpperCase()) {
+    case "CRITICAL": return "#ef4444";
+    case "HIGH": return "#f97316";
+    case "MEDIUM": return "#f59e0b";
+    case "LOW": return "#3b82f6";
+    default: return "#94a3b8";
+  }
 };
 
-function display(value, fallback = "Not reported") {
-  if (value === null || value === undefined || value === "") {
-    return fallback;
+function valueOrFallback(value, fallback = "Not reported") {
+  return value === null || value === undefined || value === ""
+    ? fallback
+    : String(value);
+}
+
+function formatTime(timestamp) {
+  if (!timestamp) return "Not reported";
+
+  // SQLite historically stores some timestamps without a timezone.
+  // Do not silently assume those values are UTC or local time.
+  const parsed = new Date(timestamp);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return String(timestamp);
   }
-  return String(value);
+
+  if (
+    typeof timestamp === "string" &&
+    !/[zZ]$|[+-]\d\d:\d\d$/.test(timestamp)
+  ) {
+    return String(timestamp) + " (timezone unspecified)";
+  }
+
+  return parsed.toLocaleString();
 }
 
 function eventKey(value) {
   return String(value ?? "").trim().toLowerCase();
 }
 
-function formatTime(value) {
-  if (!value) return "Not reported";
+function titleCaseThreat(value) {
+  const text = String(value || "Security detection")
+    .replace(/_/g, " ")
+    .trim();
 
-  if (
-    typeof value === "string" &&
-    !/[zZ]$|[+-]\d\d:\d\d$/.test(value)
-  ) {
-    return `${value} (timezone unspecified)`;
-  }
-
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime())
-    ? String(value)
-    : parsed.toLocaleString();
+  return text.replace(/\b\w/g, (character) =>
+    character.toUpperCase()
+  );
 }
 
-function reasonsOf(value) {
+function buildDetectionScores(record, process) {
+  const stored = record.model_scores || {};
+
+  return {
+    ...stored,
+
+    rule_score:
+      stored.rule_score ??
+      process.rule_score ??
+      process.behavior_score ??
+      null,
+
+    statistical_score:
+      stored.statistical_score ??
+      process.statistical_score ??
+      null,
+
+    isolation_forest_score:
+      stored.isolation_forest_score ??
+      process.isolation_forest?.anomaly_confidence ??
+      null,
+
+    autoencoder_score:
+      stored.autoencoder_score ??
+      process.autoencoder?.anomaly_confidence ??
+      null,
+
+    temporal_score:
+      stored.temporal_score ??
+      process.temporal?.score ??
+      null,
+
+    fusion_score:
+      stored.fusion_score ??
+      process.fusion_score ??
+      record.risk_score ??
+      null,
+
+    independent_signal_count:
+      stored.independent_signal_count ??
+      record.independent_signal_count ??
+      null,
+  };
+}
+
+function displayReasons(value) {
   if (Array.isArray(value)) {
     return value
       .filter(Boolean)
@@ -82,57 +143,67 @@ function reasonsOf(value) {
 
   if (typeof value === "string") {
     try {
-      const parsed = JSON.parse(value);
-      if (Array.isArray(parsed)) return reasonsOf(parsed);
+      const decoded = JSON.parse(value);
+      if (Array.isArray(decoded)) return displayReasons(decoded);
     } catch {
-      // A plain-text reason is valid.
+      // Treat as plain text.
     }
+
     return value ? [value.replace(/_/g, " ")] : [];
   }
 
   return [];
 }
 
-function modeOf(record) {
-  const fields = [
-    record?.detection_mode,
-    record?.operating_mode,
-    record?.mode,
-    record?.process_evidence?.detection_mode,
-  ];
-
-  const reported = fields.find(
-    (value) => typeof value === "string" && value.trim()
-  );
-
-  if (record?.simulation_mode === true) return "SIMULATION";
-
-  return reported ? reported.toUpperCase() : null;
+function modelFlag(model) {
+  if (!model || model.available !== true) {
+    return "Not available";
+  }
+  return valueOrFallback(model.anomaly_label, "Reported");
 }
 
-function makeIncidentIndex(incidents) {
+async function fetchIncidentRecords() {
+  const response = await api.get("/detected-incidents", {
+    params: { limit: INCIDENT_LIMIT },
+  });
+
+  const data = response.data || {};
+
+  const incidents = Array.isArray(data.incidents)
+    ? data.incidents
+    : Array.isArray(data)
+      ? data
+      : [];
+
+  return {
+    incidents,
+    potentiallyTruncated: incidents.length >= INCIDENT_LIMIT,
+  };
+}
+
+function createIncidentIndex(incidents) {
   const index = new Map();
 
   for (const incident of incidents) {
-    if (!Array.isArray(incident?.event_ids)) continue;
+    if (!incident || !Array.isArray(incident.event_ids)) {
+      continue;
+    }
 
-    for (const eventId of incident.event_ids) {
-      const key = eventKey(eventId);
+    for (const id of incident.event_ids) {
+      const key = eventKey(id);
       if (!key) continue;
 
-      const matches = index.get(key) || [];
+      const existing = index.get(key) || [];
 
       if (
-        !matches.some(
-          (item) =>
-            String(item.incident_id) ===
-            String(incident.incident_id)
+        !existing.some(
+          (item) => item.incident_id === incident.incident_id
         )
       ) {
-        matches.push(incident);
+        existing.push(incident);
       }
 
-      index.set(key, matches);
+      index.set(key, existing);
     }
   }
 
@@ -141,160 +212,203 @@ function makeIncidentIndex(incidents) {
 
 function normalizeDetection(record, incidentIndex) {
   const process = record.process_evidence || {};
+  const scores = buildDetectionScores(record, process);
+
   const matchingIncidents =
     incidentIndex.get(eventKey(record.event_id)) || [];
 
-  const directIncidentId =
-    record.incident_id === null ||
-    record.incident_id === undefined ||
-    record.incident_id === ""
-      ? null
-      : String(record.incident_id);
+  const directIncidentId = record.incident_id
+    ? String(record.incident_id)
+    : null;
 
   const incidentIds = [
     ...new Set([
       ...matchingIncidents
         .map((item) => item.incident_id)
-        .filter((id) => id !== null && id !== undefined)
+        .filter(Boolean)
         .map(String),
       ...(directIncidentId ? [directIncidentId] : []),
     ]),
   ];
 
-  const processName =
-    record.process_name || process.process_name || null;
+  const name =
+    record.process_name ||
+    process.process_name ||
+    null;
 
-  const severity = String(
-    record.severity || "UNKNOWN"
-  ).toUpperCase();
+  const threatLabel = titleCaseThreat(
+    record.threat_type || "Security detection"
+  );
 
   const title =
     record.display_title ||
-    (processName
-      ? `Behavioral detection — ${processName}`
-      : String(record.threat_type || "Security detection")
-          .replace(/_/g, " "));
+    (name
+      ? `${threatLabel} - ${name}`
+      : threatLabel);
 
   return {
     ...record,
     id: `detection-${record.detection_id}`,
     title,
-    processName,
+    processName: name,
     pid: record.pid ?? process.pid,
-    severity,
-    mode: modeOf(record),
-    reasons: reasonsOf(
+    parentName:
+      record.parent_process_name ??
+      process.parent_process_name,
+    deviceId: record.device_id,
+    severity: String(record.severity || "UNKNOWN").toUpperCase(),
+    reasons: displayReasons(
       record.detection_reason ?? process.fusion_reasons
     ),
+    scores,
+    process,
     matchingIncidents,
     incidentIds,
     linked: incidentIds.length > 0,
   };
 }
 
-function Metric({ label, value, color }) {
+function InfoItem({ icon, label, value }) {
+  return (
+    <Box
+      sx={{
+        p: 1.7,
+        background: "#0f172a",
+        border: "1px solid #1e293b",
+        borderRadius: 2,
+        minWidth: 0,
+      }}
+    >
+      <Stack direction="row" spacing={1} alignItems="center">
+        {icon}
+        <Typography sx={{ color: "#94a3b8", fontSize: 12 }}>
+          {label}
+        </Typography>
+      </Stack>
+
+      <Typography
+        sx={{
+          mt: 0.8,
+          fontSize: 14,
+          fontWeight: 650,
+          overflowWrap: "anywhere",
+        }}
+      >
+        {valueOrFallback(value)}
+      </Typography>
+    </Box>
+  );
+}
+
+function SummaryCard({ title, count, color }) {
   return (
     <Card>
       <CardContent sx={{ p: 2.5 }}>
         <Typography sx={{ color: "#94a3b8", fontSize: 13 }}>
-          {label}
+          {title}
         </Typography>
+
         <Typography
           sx={{
-            mt: 1,
-            fontSize: 30,
+            fontSize: 29,
             fontWeight: 800,
             color,
+            mt: 0.5,
           }}
         >
-          {value}
+          {count}
         </Typography>
       </CardContent>
     </Card>
   );
 }
 
-function ThreatCard({ threat, linksComplete, onOpen }) {
-  const color = COLORS[threat.severity] || COLORS.UNKNOWN;
+function ThreatCard({ threat, onView, linksComplete }) {
+  const color = severityColor(threat.severity);
+
+  const isolationForest = threat.process.isolation_forest;
+  const autoencoder = threat.process.autoencoder;
+
+  const reason =
+    threat.reasons.length > 0
+      ? threat.reasons.join(", ")
+      : "No specific detection reason provided";
 
   return (
     <Card
       sx={{
-        border: `1px solid ${color}44`,
+        borderColor: `${color}55`,
         "&:hover": { borderColor: color },
       }}
     >
-      <CardContent sx={{ p: 2.5 }}>
+      <CardContent sx={{ p: 3 }}>
         <Stack
           direction={{ xs: "column", md: "row" }}
           justifyContent="space-between"
+          alignItems={{ xs: "flex-start", md: "center" }}
           spacing={2}
         >
-          <Box sx={{ minWidth: 0 }}>
-            <Stack direction="row" alignItems="center" spacing={1}>
-              <WarningAmberRounded sx={{ color }} />
+          <Stack direction="row" spacing={2}>
+            <Box
+              sx={{
+                width: 46,
+                height: 46,
+                borderRadius: 2,
+                background: `${color}18`,
+                color,
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+              }}
+            >
+              <WarningAmberRounded />
+            </Box>
+
+            <Box>
               <Typography
                 sx={{
-                  fontSize: 17,
                   fontWeight: 750,
+                  fontSize: 18,
                   overflowWrap: "anywhere",
                 }}
               >
                 {threat.title}
               </Typography>
-            </Stack>
 
-            <Typography
-              sx={{ color: "#94a3b8", fontSize: 12, mt: 1 }}
-            >
-              Detection #{display(threat.detection_id)}
-              {" · "}
-              {display(threat.engine)}
-              {" · "}
-              {formatTime(threat.timestamp)}
-            </Typography>
-          </Box>
+              <Typography
+                sx={{
+                  color: "#94a3b8",
+                  fontSize: 12,
+                  mt: 0.5,
+                }}
+              >
+                Detection #{threat.detection_id}
+                {" | "}
+                {valueOrFallback(threat.engine)}
+              </Typography>
+            </Box>
+          </Stack>
 
-          <Stack
-            direction="row"
-            spacing={1}
-            flexWrap="wrap"
-            useFlexGap
-            alignItems="flex-start"
-          >
+          <Stack direction="row" spacing={1} flexWrap="wrap">
             <Chip
-              size="small"
               label={threat.severity}
+              size="small"
               sx={{
                 color,
-                background: `${color}18`,
                 border: `1px solid ${color}`,
+                background: `${color}18`,
               }}
             />
 
-            {threat.mode && (
-              <Chip
-                size="small"
-                variant="outlined"
-                color={
-                  threat.mode.includes("SHADOW") ||
-                  threat.mode === "SIMULATION"
-                    ? "warning"
-                    : "default"
-                }
-                label={threat.mode}
-              />
-            )}
-
             <Chip
-              size="small"
-              variant="outlined"
-              color={threat.linked ? "success" : "default"}
               label={
                 threat.linked
-                  ? "Incident reference found"
-                  : "Link not verified"
+                  ? "Incident Linked"
+                  : "Link Not Verified"
               }
+              size="small"
+              color={threat.linked ? "success" : "default"}
+              variant="outlined"
             />
           </Stack>
         </Stack>
@@ -304,96 +418,137 @@ function ThreatCard({ threat, linksComplete, onOpen }) {
             display: "grid",
             gridTemplateColumns: {
               xs: "1fr",
-              sm: "repeat(2, minmax(0, 1fr))",
-              lg: "repeat(4, minmax(0, 1fr))",
+              sm: "repeat(2, minmax(0,1fr))",
+              lg: "repeat(4, minmax(0,1fr))",
             },
-            gap: 2,
-            my: 2.5,
+            gap: 1.5,
+            mt: 3,
           }}
         >
-          {[
-            ["Device", threat.device_id],
-            [
-              "Process",
+          <InfoItem
+            icon={<DevicesRounded fontSize="small" />}
+            label="Process / PID"
+            value={
               threat.processName
-                ? `${threat.processName} / PID ${display(threat.pid)}`
-                : "Not attributed",
-            ],
-            ["Risk score", threat.risk_score],
-            ["Event ID", threat.event_id],
-          ].map(([label, value]) => (
-            <Box
-              key={label}
-              sx={{
-                background: "#0f172a",
-                borderRadius: 2,
-                p: 1.5,
-                minWidth: 0,
-              }}
-            >
-              <Typography
-                sx={{ color: "#94a3b8", fontSize: 12 }}
-              >
-                {label}
-              </Typography>
-              <Typography
-                sx={{
-                  mt: 0.6,
-                  fontSize: 13,
-                  overflowWrap: "anywhere",
-                }}
-              >
-                {display(value)}
-              </Typography>
-            </Box>
-          ))}
+                ? `${threat.processName} / ${valueOrFallback(threat.pid)}`
+                : "Process not reported"
+            }
+          />
+
+          <InfoItem
+            icon={<ShieldRounded fontSize="small" />}
+            label="Risk Score"
+            value={
+              threat.risk_score == null
+                ? "Not reported"
+                : `${threat.risk_score}/100`
+            }
+          />
+
+          <InfoItem
+            icon={<PsychologyRounded fontSize="small" />}
+            label="Fusion Confidence"
+            value={
+              threat.process.fusion_confidence ??
+              threat.scores.evidence_confidence ??
+              "Not reported"
+            }
+          />
+
+          <InfoItem
+            icon={<AccessTimeRounded fontSize="small" />}
+            label="Detected"
+            value={formatTime(threat.timestamp)}
+          />
         </Box>
 
-        <Typography sx={{ fontSize: 13, fontWeight: 700 }}>
-          Recorded evidence
-        </Typography>
-        <Typography
+        <Box sx={{ mt: 2 }}>
+          <Typography
+            sx={{ fontWeight: 700, fontSize: 13, mb: 0.7 }}
+          >
+            Recorded detection reason
+          </Typography>
+
+          <Typography
+            sx={{
+              fontSize: 13,
+              color: "#cbd5e1",
+              overflowWrap: "anywhere",
+            }}
+          >
+            {reason}
+          </Typography>
+        </Box>
+
+        <Box
           sx={{
-            color: "#cbd5e1",
-            mt: 0.6,
-            fontSize: 13,
-            overflowWrap: "anywhere",
+            display: "grid",
+            gridTemplateColumns: {
+              xs: "1fr",
+              sm: "1fr 1fr",
+            },
+            gap: 2,
+            mt: 2,
           }}
         >
-          {threat.reasons.length
-            ? threat.reasons.join(", ")
-            : "No specific detection reason recorded."}
-        </Typography>
+          <Box>
+            <Typography
+              sx={{ fontSize: 12, color: "#94a3b8", mb: 0.6 }}
+            >
+              Isolation Forest
+            </Typography>
+            <Typography sx={{ fontSize: 13 }}>
+              {modelFlag(isolationForest)}
+            </Typography>
+          </Box>
+
+          <Box>
+            <Typography
+              sx={{ fontSize: 12, color: "#94a3b8", mb: 0.6 }}
+            >
+              Autoencoder
+            </Typography>
+            <Typography sx={{ fontSize: 13 }}>
+              {modelFlag(autoencoder)}
+            </Typography>
+          </Box>
+        </Box>
+
+        <Divider sx={{ my: 2 }} />
 
         <Stack
           direction={{ xs: "column", sm: "row" }}
+          alignItems={{ xs: "stretch", sm: "center" }}
           justifyContent="space-between"
-          alignItems={{ xs: "flex-start", sm: "center" }}
           spacing={2}
-          sx={{ mt: 2.5 }}
         >
-          <Box>
-            <Typography sx={{ fontSize: 12, color: "#94a3b8" }}>
-              Incident IDs:{" "}
+          <Box sx={{ minWidth: 0 }}>
+            <Typography
+              sx={{ fontSize: 12, color: "#94a3b8" }}
+            >
+              Incident:
+              {" "}
               {threat.incidentIds.length
                 ? threat.incidentIds.join(", ")
-                : "Not verified"}
+                : "Link not verified"}
             </Typography>
+
             <Typography
               sx={{ fontSize: 11, color: "#64748b", mt: 0.5 }}
             >
               {threat.linked
-                ? "A stored incident reference was found; investigation status is not implied."
+                ? "Linked through a recorded incident ID or shared event ID."
                 : linksComplete
-                  ? "No relationship found in retrieved incident records."
-                  : "Incident lookup is unavailable or incomplete."}
+                  ? "No link found in the retrieved incident records."
+                  : "Incident lookup is incomplete or unavailable."}
             </Typography>
           </Box>
 
           <Button
-            endIcon={<ArrowForwardRounded />}
             variant="outlined"
-            onClick={onOpen}
+            endIcon={<ArrowForwardRounded />}
+            onClick={onView}
+            sx={{ flexShrink: 0 }}
           >
             View Threat
           </Button>
@@ -406,100 +561,78 @@ function ThreatCard({ threat, linksComplete, onOpen }) {
 export default function Threats() {
   const navigate = useNavigate();
 
+  const [tab, setTab] = useState("ALL");
   const [detections, setDetections] = useState([]);
   const [incidents, setIncidents] = useState([]);
   const [storedCount, setStoredCount] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [incidentError, setIncidentError] = useState("");
   const [incidentTruncated, setIncidentTruncated] = useState(false);
   const [updated, setUpdated] = useState(null);
 
-  const [search, setSearch] = useState("");
-  const [severityFilter, setSeverityFilter] = useState("ALL");
-  const [engineFilter, setEngineFilter] = useState("ALL");
-  const [linkFilter, setLinkFilter] = useState("ALL");
+  useEffect(() => {
+    let active = true;
+    let busy = false;
 
-  const load = useCallback(async (initial = false) => {
-    if (!initial) setRefreshing(true);
+    async function load() {
+      if (busy) return;
+      busy = true;
 
-    try {
-      const [detectionsResult, incidentsResult] =
-        await Promise.allSettled([
+      try {
+        const [detResult, incResult] = await Promise.allSettled([
           getLiveDetections(DETECTION_LIMIT),
-          api.get("/detected-incidents", {
-            params: { limit: INCIDENT_LIMIT },
-          }),
+          fetchIncidentRecords(),
         ]);
 
-      if (detectionsResult.status === "fulfilled") {
-        const result = detectionsResult.value || {};
-        setDetections(
-          Array.isArray(result.detections)
-            ? result.detections
-            : []
-        );
-        setStoredCount(result.total_stored_detections ?? null);
-        setError("");
-      } else {
-        setError(
-          detectionsResult.reason?.message ||
-            "Could not retrieve detections."
-        );
-      }
+        if (!active) return;
 
-      if (incidentsResult.status === "fulfilled") {
-        const data = incidentsResult.value.data;
-        const records = Array.isArray(data?.incidents)
-          ? data.incidents
-          : Array.isArray(data)
-            ? data
-            : [];
+        if (detResult.status === "fulfilled") {
+          const response = detResult.value || {};
 
-        setIncidents(records);
-        setIncidentTruncated(records.length >= INCIDENT_LIMIT);
-        setIncidentError("");
-      } else {
-        setIncidentError(
-          incidentsResult.reason?.message ||
-            "Could not retrieve incident records."
-        );
-      }
+          setDetections(
+            Array.isArray(response.detections)
+              ? response.detections
+              : []
+          );
+          setStoredCount(response.total_stored_detections ?? null);
+          setError("");
+        } else {
+          setError(
+            detResult.reason?.message ||
+            "Unable to retrieve recent detections."
+          );
+        }
 
-      setUpdated(new Date());
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
+        if (incResult.status === "fulfilled") {
+          setIncidents(incResult.value.incidents);
+          setIncidentTruncated(incResult.value.potentiallyTruncated);
+          setIncidentError("");
+        } else {
+          setIncidentError(
+            incResult.reason?.message ||
+            "Incident links could not be refreshed."
+          );
+        }
 
-  useEffect(() => {
-    let busy = false;
-    let mounted = true;
-
-    async function refresh() {
-      if (busy || !mounted) return;
-
-      busy = true;
-      try {
-        if (mounted) await load();
+        setUpdated(new Date());
       } finally {
         busy = false;
+        if (active) setLoading(false);
       }
     }
 
-    refresh();
-    const timer = setInterval(refresh, REFRESH_MS);
+    load();
+    const interval = setInterval(load, REFRESH_MS);
 
     return () => {
-      mounted = false;
-      clearInterval(timer);
+      active = false;
+      clearInterval(interval);
     };
-  }, [load]);
+  }, []);
 
   const incidentIndex = useMemo(
-    () => makeIncidentIndex(incidents),
+    () => createIncidentIndex(incidents),
     [incidents]
   );
 
@@ -507,248 +640,131 @@ export default function Threats() {
     () =>
       detections
         .filter(
-          (item) =>
-            item &&
-            item.detection_id !== null &&
-            item.detection_id !== undefined
+          (record) =>
+            record &&
+            record.detection_id !== null &&
+            record.detection_id !== undefined
         )
-        .map((item) => normalizeDetection(item, incidentIndex)),
+        .map((record) => normalizeDetection(record, incidentIndex)),
     [detections, incidentIndex]
   );
 
-  const engines = useMemo(
-    () =>
-      [...new Set(threats.map((item) => item.engine).filter(Boolean))]
-        .sort(),
-    [threats]
-  );
-
-  const visibleThreats = useMemo(() => {
-    const query = search.trim().toLowerCase();
-
-    return threats.filter((threat) => {
-      if (
-        severityFilter !== "ALL" &&
-        threat.severity !== severityFilter
-      ) {
-        return false;
-      }
-
-      if (
-        engineFilter !== "ALL" &&
-        threat.engine !== engineFilter
-      ) {
-        return false;
-      }
-
-      if (linkFilter === "LINKED" && !threat.linked) return false;
-      if (linkFilter === "UNVERIFIED" && threat.linked) return false;
-
-      if (!query) return true;
-
-      return [
-        threat.title,
-        threat.engine,
-        threat.event_id,
-        threat.detection_id,
-        threat.device_id,
-        threat.processName,
-        threat.pid,
-        threat.threat_type,
-        ...threat.incidentIds,
-      ]
-        .map((value) => String(value ?? "").toLowerCase())
-        .some((value) => value.includes(query));
-    });
-  }, [threats, search, severityFilter, engineFilter, linkFilter]);
+  const displayed = useMemo(() => {
+    if (tab === "HIGH") {
+      return threats.filter(
+        (t) => t.severity === "HIGH" || t.severity === "CRITICAL"
+      );
+    }
+    if (tab === "LINKED") return threats.filter((t) => t.linked);
+    if (tab === "UNVERIFIED") return threats.filter((t) => !t.linked);
+    return threats;
+  }, [threats, tab]);
 
   const highCount = threats.filter(
-    (item) =>
-      item.severity === "HIGH" || item.severity === "CRITICAL"
+    (t) => t.severity === "HIGH" || t.severity === "CRITICAL"
   ).length;
 
-  const linkedCount = threats.filter((item) => item.linked).length;
-
+  const linkedCount = threats.filter((t) => t.linked).length;
   const linksComplete = !incidentError && !incidentTruncated;
 
   return (
     <Box>
-      <Stack
-        direction={{ xs: "column", sm: "row" }}
-        justifyContent="space-between"
-        spacing={2}
-        sx={{ mb: 3 }}
-      >
-        <Box>
-          <Typography variant="h4" sx={{ fontWeight: 750 }}>
-            Threats
-          </Typography>
-          <Typography sx={{ color: "#94a3b8", mt: 0.7 }}>
-            Live endpoint detection records and supporting evidence
-          </Typography>
-          <Typography sx={{ color: "#64748b", fontSize: 12, mt: 0.5 }}>
-            An anomaly is not automatically a confirmed attack.
-          </Typography>
-        </Box>
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h4" sx={{ fontWeight: 750 }}>
+          Threats
+        </Typography>
 
-        <Button
-          variant="outlined"
-          startIcon={
-            refreshing ? (
-              <CircularProgress size={16} />
-            ) : (
-              <RefreshRounded />
-            )
-          }
-          disabled={refreshing}
-          onClick={() => load()}
+        <Typography sx={{ color: "#94a3b8", mt: 0.5 }}>
+          Live endpoint detections and recorded security evidence
+        </Typography>
+
+        <Typography
+          sx={{ color: "#64748b", mt: 0.6, fontSize: 12 }}
         >
-          Refresh
-        </Button>
-      </Stack>
+          An anomaly alert is not automatically a confirmed attack.
+        </Typography>
+      </Box>
 
       <Box
         sx={{
           display: "grid",
           gridTemplateColumns: {
             xs: "1fr",
-            md: "repeat(3, 1fr)",
+            md: "repeat(3,1fr)",
           },
           gap: 2,
           mb: 3,
         }}
       >
-        <Metric
-          label="Recent high-priority detections"
-          value={highCount}
+        <SummaryCard
+          title="Recent High-Priority Detections"
+          count={highCount}
           color="#f97316"
         />
-        <Metric
-          label="Recent detections with incident references"
-          value={linkedCount}
+        <SummaryCard
+          title="Recent Incident-Linked Detections"
+          count={linkedCount}
           color="#22c55e"
         />
-        <Metric
-          label="Total stored detections"
-          value={storedCount ?? "—"}
+        <SummaryCard
+          title="Total Stored Detections"
+          count={storedCount ?? "—"}
           color="#60a5fa"
         />
       </Box>
 
-      <Card sx={{ mb: 3 }}>
-        <CardContent>
-          <Stack
-            direction={{ xs: "column", md: "row" }}
-            spacing={2}
-          >
-            <TextField
-              label="Search detections"
-              placeholder="Process, device, engine, event ID..."
-              size="small"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              InputProps={{
-                startAdornment: (
-                  <SearchRounded sx={{ mr: 1, color: "#94a3b8" }} />
-                ),
-              }}
-              sx={{ flex: 2 }}
-            />
-
-            <FormControl size="small" sx={{ minWidth: 130, flex: 1 }}>
-              <InputLabel>Severity</InputLabel>
-              <Select
-                label="Severity"
-                value={severityFilter}
-                onChange={(event) =>
-                  setSeverityFilter(event.target.value)
-                }
-              >
-                <MenuItem value="ALL">All</MenuItem>
-                {["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO", "UNKNOWN"].map(
-                  (severity) => (
-                    <MenuItem key={severity} value={severity}>
-                      {severity}
-                    </MenuItem>
-                  )
-                )}
-              </Select>
-            </FormControl>
-
-            <FormControl size="small" sx={{ minWidth: 130, flex: 1 }}>
-              <InputLabel>Engine</InputLabel>
-              <Select
-                label="Engine"
-                value={engineFilter}
-                onChange={(event) =>
-                  setEngineFilter(event.target.value)
-                }
-              >
-                <MenuItem value="ALL">All</MenuItem>
-                {engines.map((engine) => (
-                  <MenuItem key={engine} value={engine}>
-                    {engine}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-
-            <FormControl size="small" sx={{ minWidth: 150, flex: 1 }}>
-              <InputLabel>Incident link</InputLabel>
-              <Select
-                label="Incident link"
-                value={linkFilter}
-                onChange={(event) =>
-                  setLinkFilter(event.target.value)
-                }
-              >
-                <MenuItem value="ALL">All</MenuItem>
-                <MenuItem value="LINKED">Reference found</MenuItem>
-                <MenuItem value="UNVERIFIED">Not verified</MenuItem>
-              </Select>
-            </FormControl>
-          </Stack>
-        </CardContent>
+      <Card sx={{ mb: 2 }}>
+        <Tabs
+          value={tab}
+          onChange={(_, next) => setTab(next)}
+          variant="scrollable"
+          scrollButtons="auto"
+        >
+          <Tab value="ALL" label="All" />
+          <Tab value="HIGH" label="High Priority" />
+          <Tab value="LINKED" label="Incident Linked" />
+          <Tab value="UNVERIFIED" label="Link Not Verified" />
+        </Tabs>
       </Card>
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
-          Detection API error: {error}. Existing results may be stale.
+          {error}
         </Alert>
       )}
 
       {incidentError && (
         <Alert severity="warning" sx={{ mb: 2 }}>
-          Incident lookup unavailable: {incidentError}
+          Incident lookup: {incidentError}
         </Alert>
       )}
 
       {incidentTruncated && (
         <Alert severity="info" sx={{ mb: 2 }}>
-          Incident lookup reached its 1,000-record limit.
-          Unmatched detections may have older incident references.
+          The incident lookup reached its 1,000-record limit.
+          Unmatched detections may still belong to older incidents.
         </Alert>
       )}
 
       {loading && (
-        <Box sx={{ textAlign: "center", py: 5 }}>
+        <Box sx={{ py: 5, textAlign: "center" }}>
           <CircularProgress />
         </Box>
       )}
 
-      {!loading && !visibleThreats.length && (
+      {!loading && !displayed.length && (
         <Alert severity="info">
-          No recent detection records match your filters.
+          No recent detections match this filter.
         </Alert>
       )}
 
       <Stack spacing={2}>
-        {visibleThreats.map((threat) => (
+        {displayed.map((threat) => (
           <ThreatCard
             key={threat.id}
             threat={threat}
             linksComplete={linksComplete}
-            onOpen={() =>
+            onView={() =>
               navigate(`/threats/${threat.id}`, {
                 state: {
                   detection: threat,
@@ -761,23 +777,13 @@ export default function Threats() {
         ))}
       </Stack>
 
-      <Stack
-        direction={{ xs: "column", sm: "row" }}
-        justifyContent="space-between"
-        spacing={1}
-        sx={{ mt: 3 }}
+      <Typography
+        sx={{ color: "#64748b", fontSize: 12, mt: 3 }}
       >
-        <Typography sx={{ color: "#64748b", fontSize: 12 }}>
-          Showing {visibleThreats.length} of {threats.length} recent
-          detections (maximum {DETECTION_LIMIT}).
-          Filters apply to retrieved records only.
-        </Typography>
-
-        <Typography sx={{ color: "#64748b", fontSize: 12 }}>
-          Auto-refresh: 10 seconds
-          {updated ? ` · Last updated: ${updated.toLocaleTimeString()}` : ""}
-        </Typography>
-      </Stack>
+        Showing up to 100 recent detections; refreshes every
+        10 seconds.
+        {updated ? ` Last updated: ${updated.toLocaleTimeString()}.` : ""}
+      </Typography>
     </Box>
   );
 }

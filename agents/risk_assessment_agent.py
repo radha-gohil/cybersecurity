@@ -349,29 +349,36 @@ class RiskAssessmentAgent:
         attack_timeline: dict,
         attack_graph: dict,
     ) -> dict:
+        """
+        Calculate review priority from persisted detector evidence.
+
+        IMPORTANT:
+        - This score is NOT an attack probability.
+        - A HIGH/CRITICAL score can require response review without
+          claiming that the attack is independently confirmed.
+        - Real response execution remains disabled.
+        """
 
         incident = self.safe_dict(incident)
         investigation = self.safe_dict(investigation)
-        enriched_evidence = self.safe_dict(
-            enriched_evidence
-        )
-        attack_timeline = self.safe_dict(
-            attack_timeline
-        )
-        attack_graph = self.safe_dict(
-            attack_graph
-        )
+        enriched_evidence = self.safe_dict(enriched_evidence)
+        attack_timeline = self.safe_dict(attack_timeline)
+        attack_graph = self.safe_dict(attack_graph)
 
         score = 0
         reasons = []
         components = {}
 
-        qualifying = (
-            self.investigator.get_qualifying_events(
-                incident
-            )
+        analysis_context = self.safe_dict(
+            incident.get("analysis_context")
+        )
+        validation_only = bool(
+            analysis_context.get("validation_mode", False)
         )
 
+        qualifying = self.investigator.get_qualifying_events(
+            incident
+        )
         evidence_assessment = (
             self.investigator.evidence_assessment(
                 incident
@@ -380,11 +387,10 @@ class RiskAssessmentAgent:
 
         corroborated = bool(
             evidence_assessment.get(
-                "basic_corroboration",
+                "cross_category_corroboration",
                 False,
             )
         )
-
         category_count = self.safe_int(
             evidence_assessment.get(
                 "qualifying_category_count"
@@ -392,287 +398,350 @@ class RiskAssessmentAgent:
             0,
         )
 
-        # ========================================================
-        # 1. INCIDENT CORRELATION
-        # ========================================================
+        detections = [
+            item
+            for item in self.safe_list(
+                enriched_evidence.get("detections")
+                or incident.get("detections")
+            )
+            if isinstance(item, dict)
+            and item.get("detected") is not False
+            and item.get("stored_detection_record") is True
+        ]
 
+        strong_detections = []
+
+        for detection in detections:
+            detection_risk = self.safe_float(
+                detection.get("risk_score")
+                or detection.get("fusion_score"),
+                0.0,
+            )
+            detection_severity = str(
+                detection.get("severity") or "INFO"
+            ).upper()
+            signal_count = self.safe_int(
+                detection.get("independent_signal_count"),
+                0,
+            )
+
+            if (
+                detection_risk >= 60
+                and detection_severity in {"HIGH", "CRITICAL"}
+                and signal_count >= 2
+            ):
+                strong_detections.append(detection)
+
+        strongest_detection = None
+        if strong_detections:
+            strongest_detection = max(
+                strong_detections,
+                key=lambda item: self.safe_float(
+                    item.get("risk_score")
+                    or item.get("fusion_score"),
+                    0.0,
+                ),
+            )
+
+        max_detection_risk = (
+            self.safe_float(
+                strongest_detection.get("risk_score")
+                or strongest_detection.get("fusion_score"),
+                0.0,
+            )
+            if strongest_detection
+            else 0.0
+        )
+        strongest_detection_severity = (
+            str(
+                strongest_detection.get("severity") or "INFO"
+            ).upper()
+            if strongest_detection
+            else "INFO"
+        )
+        max_signal_count = (
+            self.safe_int(
+                strongest_detection.get("independent_signal_count"),
+                0,
+            )
+            if strongest_detection
+            else 0
+        )
+
+        # ========================================================
+        # 1. PERSISTED DETECTOR EVIDENCE
+        # ========================================================
+        detection_points = (
+            min(45, round(max_detection_risk * 0.45))
+            if strongest_detection
+            else 0
+        )
+        score += detection_points
+
+        components["persisted_detection"] = {
+            "value": max_detection_risk,
+            "points": detection_points,
+            "engine": (
+                strongest_detection.get("engine")
+                if strongest_detection
+                else None
+            ),
+            "threat_type": (
+                strongest_detection.get("threat_type")
+                if strongest_detection
+                else None
+            ),
+            "status": (
+                "STRONG_STORED_DETECTION"
+                if strongest_detection
+                else "NOT_AVAILABLE"
+            ),
+        }
+
+        if strongest_detection:
+            reasons.append(
+                "Persisted detector output contributes to review "
+                "priority because it is linked to the incident event."
+            )
+
+        # ========================================================
+        # 2. DETECTION SEVERITY
+        # ========================================================
+        detection_severity_points = {
+            "MEDIUM": 6,
+            "HIGH": 12,
+            "CRITICAL": 15,
+        }.get(strongest_detection_severity, 0)
+        score += detection_severity_points
+
+        components["detection_severity"] = {
+            "value": strongest_detection_severity,
+            "points": detection_severity_points,
+            "status": "DETECTOR_REVIEW_PRIORITY",
+        }
+
+        # ========================================================
+        # 3. MULTI-SIGNAL DETECTOR CORROBORATION
+        # ========================================================
+        signal_points = (
+            10 if max_signal_count >= 2
+            else 5 if max_signal_count == 1
+            else 0
+        )
+        score += signal_points
+
+        components["detector_signal_corroboration"] = {
+            "value": max_signal_count,
+            "points": signal_points,
+            "status": (
+                "MULTI_SIGNAL"
+                if max_signal_count >= 2
+                else "LIMITED"
+            ),
+        }
+
+        # ========================================================
+        # 4. QUALIFYING EVENT SEVERITY
+        # ========================================================
+        qualifying_event_points = min(
+            10,
+            max(
+                (
+                    self.severity_points(
+                        event.get("severity")
+                    )
+                    for event in qualifying
+                ),
+                default=0,
+            ),
+        )
+        score += qualifying_event_points
+
+        components["qualifying_event_severity"] = {
+            "value": qualifying_event_points,
+            "points": qualifying_event_points,
+            "qualifying_event_count": len(qualifying),
+        }
+
+        # ========================================================
+        # 5. INCIDENT CORRELATION SUPPORT
+        # ========================================================
         correlation_score = self.safe_int(
             incident.get("correlation_score")
         )
-
-        # Historical correlation score is context only.
-        correlation_points = 0
+        correlation_points = (
+            min(5, round(correlation_score / 20))
+            if strongest_detection
+            else 0
+        )
+        score += correlation_points
 
         components["correlation"] = {
             "value": correlation_score,
             "points": correlation_points,
-            "status": "HISTORICAL_CONTEXT",
+            "status": (
+                "SUPPORTING_CONTEXT"
+                if strongest_detection
+                else "HISTORICAL_CONTEXT"
+            ),
         }
 
         # ========================================================
-        # 2. MALWARE PROBABILITY
+        # 6. CROSS-CATEGORY TELEMETRY DIVERSITY
         # ========================================================
-
-        malware_probability = (
-            self.get_max_malware_probability(
-                enriched_evidence
-            )
-        )
-
-        malware_points = 0
-
-        components["malware_probability"] = {
-            "value": None,
-            "points": malware_points,
-            "status": "DISABLED",
-        }
-
-        # ========================================================
-        # 3. STATIC FILE RISK
-        # ========================================================
-
-        static_risk = self.get_max_static_risk(
-            enriched_evidence
-        )
-
-        static_points = 0
-
-        components["static_file_risk"] = {
-            "value": static_risk,
-            "points": static_points,
-            "status": "NOT_INDEPENDENTLY_VERIFIED",
-        }
-
-        # ========================================================
-        # 4. PROCESS BEHAVIOR
-        # ========================================================
-
-        behavior_score = self.get_max_behavior_score(
-            enriched_evidence
-        )
-
-        behavior_points = 0
-
-        components["behavior"] = {
-            "value": behavior_score,
-            "points": behavior_points,
-            "status": "PROVENANCE_NOT_VERIFIED",
-        }
-
-        # ========================================================
-        # 5. PROCESS ANOMALY
-        # ========================================================
-
-        anomaly_score = self.get_max_anomaly_score(
-            enriched_evidence
-        )
-
-        anomaly_points = 0
-
-        components["anomaly"] = {
-            "value": anomaly_score,
-            "points": anomaly_points,
-            "status": "NOT_CALIBRATED",
-        }
-
-        # ========================================================
-        # 6. PERSISTENCE
-        # ========================================================
-
-        persistence = self.has_persistence(
-            enriched_evidence,
-            attack_timeline,
-        )
-
-        persistence_points = 0
-
-        components["persistence"] = {
-            "value": persistence,
-            "points": persistence_points,
-            "status": "NOT_VERIFIED",
-        }
-
-        # ========================================================
-        # 7. NETWORK ACTIVITY
-        # ========================================================
-
-        network_activity = self.has_network_activity(
-            enriched_evidence
-        )
-
-        network_points = 0
-
-        components["network_activity"] = {
-            "value": network_activity,
-            "points": network_points,
-            "status": "OBSERVATION_ONLY",
-        }
-
-        # ========================================================
-        # 8. TELEMETRY DIVERSITY
-        # ========================================================
-
-        # Calculate directly from qualifying incident
-        # evidence, never from raw enriched entity counts.
-        category_points = (
-            8 if corroborated else 0
-        )
+        category_points = 10 if corroborated else 0
+        score += category_points
 
         components["telemetry_diversity"] = {
             "value": category_count,
             "points": category_points,
             "status": (
-                "PRELIMINARY_CROSS_CATEGORY"
+                "CROSS_CATEGORY_CORROBORATION"
                 if corroborated
-                else "INSUFFICIENT"
+                else "NOT_PRESENT"
             ),
         }
 
-        if corroborated:
-            score += category_points
-            reasons.append(
-                "Qualifying events in different categories "
-                "occur on the same device. A causal link "
-                "has not been verified."
-            )
-
         # ========================================================
-        # 9. RELATIONSHIP CONFIDENCE
+        # CONTEXT-ONLY COMPONENTS
         # ========================================================
-
-        relationship_info = (
-            self.get_relationship_strength(
-                enriched_evidence
-            )
+        static_risk = self.get_max_static_risk(
+            enriched_evidence
+        )
+        behavior_score = self.get_max_behavior_score(
+            enriched_evidence
+        )
+        anomaly_score = self.get_max_anomaly_score(
+            enriched_evidence
+        )
+        persistence = self.has_persistence(
+            enriched_evidence,
+            attack_timeline,
+        )
+        network_activity = self.has_network_activity(
+            enriched_evidence
+        )
+        relationship_info = self.get_relationship_strength(
+            enriched_evidence
         )
 
-        relationship_points = 0
-
+        components["behavior"] = {
+            "value": behavior_score,
+            "points": 0,
+            "status": "ALREADY_REPRESENTED_IN_DETECTOR_EVIDENCE",
+        }
+        components["anomaly"] = {
+            "value": anomaly_score,
+            "points": 0,
+            "status": "CONTEXT_ONLY",
+        }
+        components["static_file_risk"] = {
+            "value": static_risk,
+            "points": 0,
+            "status": "CONTEXT_ONLY",
+        }
+        components["persistence"] = {
+            "value": persistence,
+            "points": 0,
+            "status": "NOT_VERIFIED",
+        }
+        components["network_activity"] = {
+            "value": network_activity,
+            "points": 0,
+            "status": "OBSERVATION_ONLY",
+        }
         components["entity_relationships"] = {
             "value": relationship_info,
-            "points": relationship_points,
+            "points": 0,
             "status": "NOT_INDEPENDENTLY_VERIFIED",
         }
-
-        # ========================================================
-        # 10. INCIDENT SEVERITY
-        # ========================================================
-
-        incident_severity = incident.get(
-            "severity", "INFO"
-        )
-
         components["incident_severity"] = {
-            "value": incident_severity,
+            "value": incident.get("severity", "INFO"),
             "points": 0,
-            "status": "HISTORICAL_CONTEXT",
+            "status": "ANALYSIS_CONTEXT",
+        }
+        components["malware_probability"] = {
+            "value": None,
+            "points": 0,
+            "status": "DISABLED",
         }
 
-        # ========================================================
-        # 11. QUALIFYING EVENT SEVERITY
-        # ========================================================
+        # Without a strong persisted detector result, preserve the
+        # conservative review-only ceiling from the previous policy.
+        if not strongest_detection:
+            score = min(score, 34)
 
-        strongest_event_score = max(
-            (
-                self.severity_points(
-                    event.get("severity")
-                )
-                for event in qualifying
-            ),
-            default=0,
+        score = max(0, min(int(score), 100))
+        risk_level = self.score_to_risk_level(score)
+
+        response_review_supported = bool(
+            strongest_detection
+            and score >= 60
         )
 
-        score += strongest_event_score
-
-        components["qualifying_event_severity"] = {
-            "value": strongest_event_score,
-            "points": strongest_event_score,
-        }
-
-        if qualifying:
+        if response_review_supported:
             reasons.append(
-                "The strongest qualifying event severity "
-                "was counted once, without multiplying "
-                "repeated event observations."
+                "High review priority warrants simulated response "
+                "planning and analyst review. It does not authorize "
+                "real containment."
             )
         else:
             reasons.append(
-                "No qualifying authoritative detection "
-                "evidence was found."
+                "Evidence remains below the response-review threshold."
             )
 
-        # ========================================================
-        # 12. CONSERVATIVE RISK CAP
-        # ========================================================
-
-        # Current evidence does not establish attack
-        # confirmation or verified causal relationships.
-        # Restrict unverified scores to analyst-review levels.
-        score = max(0, min(int(score), 34))
-
-        risk_level = self.score_to_risk_level(
-            score
-        )
-
-        reasons.append(
-            "Stored severity, correlation, INFO network "
-            "activity, unverified relationships, and "
-            "disabled malware predictions were not "
-            "counted as independent risk evidence."
-        )
-
-        # ========================================================
-        # FINAL RESULT
-        # ========================================================
-
         return {
-            "incident_id": incident.get(
-                "incident_id"
-            ),
+            "incident_id": incident.get("incident_id"),
             "agent": self.name,
             "assessed_at": self.now_iso(),
-
             "risk_score": score,
             "risk_level": risk_level,
-            "recommended_action":
-                self.recommended_action(
-                    risk_level
-                ),
-
-            # No autonomous response authorization.
-            "requires_response": False,
-
+            "recommended_action": self.recommended_action(
+                risk_level
+            ),
+            "requires_response": response_review_supported,
+            "requires_response_review": response_review_supported,
             "components": components,
             "reasons": reasons,
-
             "evidence_summary": {
                 "malware_probability": None,
                 "static_risk": static_risk,
                 "behavior_score": behavior_score,
                 "anomaly_score": anomaly_score,
-                "combined_process_score":
+                "combined_process_score": (
                     self.get_max_combined_process_score(
                         enriched_evidence
-                    ),
+                    )
+                ),
                 "persistence": persistence,
                 "network_activity": network_activity,
                 "telemetry_categories": category_count,
-                "relationship_count":
-                    relationship_info["count"],
-                "high_confidence_relationships":
-                    relationship_info[
-                        "high_confidence_count"
-                    ],
-                "qualifying_event_count": len(
-                    qualifying
+                "relationship_count": relationship_info["count"],
+                "high_confidence_relationships": relationship_info[
+                    "high_confidence_count"
+                ],
+                "qualifying_event_count": len(qualifying),
+                "stored_detection_count": len(detections),
+                "strong_detection_count": len(strong_detections),
+                "max_detection_risk": max_detection_risk,
+                "max_detection_signal_count": max_signal_count,
+                "detection_supported": bool(strongest_detection),
+                "basic_corroboration": bool(
+                    evidence_assessment.get(
+                        "basic_corroboration",
+                        False,
+                    )
                 ),
-                "basic_corroboration": corroborated,
+                "cross_category_corroboration": corroborated,
                 "causal_relationship_verified": False,
                 "attack_confirmed": False,
-                "scoring_policy":
-                    "CONSERVATIVE_RISK_V2",
+                "validation_only": validation_only,
+                "production_eligible": not validation_only,
+                "scoring_policy": "DETECTION_GROUNDED_REVIEW_RISK_V3",
             },
-
             "confidence_calibrated": False,
             "execution_allowed": False,
+            "validation_only": validation_only,
+            "production_eligible": not validation_only,
         }
+

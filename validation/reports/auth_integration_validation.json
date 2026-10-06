@@ -1,0 +1,88 @@
+{
+  "suite": "SENTINEL-X PHASE 5 AUTH INTEGRATION VALIDATION",
+  "validation_runtime": true,
+  "passed": 10,
+  "failed": 0,
+  "results": [
+    {
+      "scenario_id": "AI-01",
+      "scenario_name": "AuthMonitor uses shared runtime telemetry manager",
+      "observed": "True",
+      "expected": "True",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "AI-02",
+      "scenario_name": "AuthMonitor defaults to SHADOW",
+      "observed": "SHADOW",
+      "expected": "SHADOW",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "AI-03",
+      "scenario_name": "SHADOW returns findings without authoritative persistence",
+      "observed": "type=security_auth_failure;severity=INFO;stored=0;findings=1",
+      "expected": "failure/INFO/stored0/findings1",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "AI-04",
+      "scenario_name": "Runtime mode enforces safe authentication detection mode",
+      "observed": "SHADOW",
+      "expected": "SHADOW",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "AI-05",
+      "scenario_name": "Successful authentication keeps success telemetry type",
+      "observed": "security_auth_success/INFO",
+      "expected": "security_auth_success/INFO",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "AI-06",
+      "scenario_name": "WindowsAuthCollector defaults to SHADOW",
+      "observed": "SHADOW",
+      "expected": "SHADOW",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "AI-07",
+      "scenario_name": "Windows Event 4625 parses to normalized failure",
+      "observed": "{\"event_type\": \"login_failure\", \"windows_event_id\": 4625, \"record_id\": 7001, \"timestamp\": \"2026-10-06T12:00:00.0000000Z\", \"username\": \"target_user\", \"domain\": \"TEST\", \"source_ip\": \"198.51.100.77\", \"source_port\": \"51515\", \"workstation\": \"TESTHOST\", \"logon_type\": \"3\", \"process_name\": \"C:\\\\Windows\\\\System32\\\\svchost.exe\", \"result\": \"failed\", \"status_code\": \"0xC000006D\", \"sub_status\": \"0xC000006A\", \"source\": \"windows_security_log\", \"synthetic_test\": false}",
+      "expected": "normalized login_failure",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "AI-08",
+      "scenario_name": "Windows Event 4624 parses to normalized success",
+      "observed": "{\"event_type\": \"login_success\", \"windows_event_id\": 4624, \"record_id\": 8001, \"timestamp\": \"2026-10-06T12:00:00.0000000Z\", \"username\": \"normal_user\", \"domain\": \"TEST\", \"source_ip\": \"local\", \"source_port\": \"51515\", \"workstation\": \"TESTHOST\", \"logon_type\": \"3\", \"process_name\": \"C:\\\\Windows\\\\System32\\\\svchost.exe\", \"result\": \"success\", \"status_code\": \"0xC000006D\", \"sub_status\": \"0xC000006A\", \"source\": \"windows_security_log\", \"synthetic_test\": false}",
+      "expected": "normalized login_success",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "AI-09",
+      "scenario_name": "Windows EventRecordID is idempotent",
+      "observed": "calls=1",
+      "expected": "calls=1",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "AI-10",
+      "scenario_name": "Missing username is ignored without consuming EventRecordID",
+      "observed": "result=None;calls=0;record_consumed=False",
+      "expected": "ignored/calls0/not-consumed",
+      "failure_layers": "",
+      "passed": true
+    }
+  ]
+}

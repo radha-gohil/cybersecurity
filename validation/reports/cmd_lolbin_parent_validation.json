@@ -1,0 +1,806 @@
+{
+  "run_id": "PROCESS-P2-P4-F3E276B4",
+  "total": 24,
+  "passed": 24,
+  "failed": 0,
+  "results": [
+    {
+      "summary": {
+        "scenario_id": "P2-01",
+        "family": "CMD_SCRIPT",
+        "scenario_name": "Benign CMD directory listing",
+        "rule_score": 5,
+        "rule_suspicious": false,
+        "statistical_score": 0,
+        "if_score": 26.93,
+        "if_label": "NORMAL",
+        "ae_score": 67.88,
+        "ae_label": "SUSPICIOUS",
+        "fusion_score": 14.31,
+        "severity": "INFO",
+        "should_alert": false,
+        "stored": 0,
+        "engine": null,
+        "threat_type": null,
+        "failure_layers": "",
+        "passed": true
+      },
+      "failures": [],
+      "rule_indicators": [
+        "monitored_binary"
+      ],
+      "rule_reasons": [
+        "Security-relevant Windows utility observed"
+      ],
+      "fusion_reasons": []
+    },
+    {
+      "summary": {
+        "scenario_id": "P2-02",
+        "family": "CMD_SCRIPT",
+        "scenario_name": "Benign CMD whoami",
+        "rule_score": 5,
+        "rule_suspicious": false,
+        "statistical_score": 0,
+        "if_score": 26.21,
+        "if_label": "NORMAL",
+        "ae_score": 75.47,
+        "ae_label": "SUSPICIOUS",
+        "fusion_score": 15.4,
+        "severity": "LOW",
+        "should_alert": false,
+        "stored": 0,
+        "engine": null,
+        "threat_type": null,
+        "failure_layers": "",
+        "passed": true
+      },
+      "failures": [],
+      "rule_indicators": [
+        "monitored_binary"
+      ],
+      "rule_reasons": [
+        "Security-relevant Windows utility observed"
+      ],
+      "fusion_reasons": []
+    },
+    {
+      "summary": {
+        "scenario_id": "P2-03",
+        "family": "CMD_SCRIPT",
+        "scenario_name": "Benign local WScript",
+        "rule_score": 5,
+        "rule_suspicious": false,
+        "statistical_score": 0,
+        "if_score": 26.71,
+        "if_label": "NORMAL",
+        "ae_score": 81.43,
+        "ae_label": "HIGH_ANOMALY",
+        "fusion_score": 16.33,
+        "severity": "LOW",
+        "should_alert": false,
+        "stored": 0,
+        "engine": null,
+        "threat_type": null,
+        "failure_layers": "",
+        "passed": true
+      },
+      "failures": [],
+      "rule_indicators": [
+        "monitored_binary"
+      ],
+      "rule_reasons": [
+        "Security-relevant Windows utility observed"
+      ],
+      "fusion_reasons": []
+    },
+    {
+      "summary": {
+        "scenario_id": "P2-04",
+        "family": "CMD_SCRIPT",
+        "scenario_name": "Benign local CScript",
+        "rule_score": 5,
+        "rule_suspicious": false,
+        "statistical_score": 0,
+        "if_score": 26.47,
+        "if_label": "NORMAL",
+        "ae_score": 81.41,
+        "ae_label": "HIGH_ANOMALY",
+        "fusion_score": 16.31,
+        "severity": "LOW",
+        "should_alert": false,
+        "stored": 0,
+        "engine": null,
+        "threat_type": null,
+        "failure_layers": "",
+        "passed": true
+      },
+      "failures": [],
+      "rule_indicators": [
+        "monitored_binary"
+      ],
+      "rule_reasons": [
+        "Security-relevant Windows utility observed"
+      ],
+      "fusion_reasons": []
+    },
+    {
+      "summary": {
+        "scenario_id": "P2-05",
+        "family": "CMD_SCRIPT",
+        "scenario_name": "CMD launches encoded PowerShell",
+        "rule_score": 35,
+        "rule_suspicious": true,
+        "statistical_score": 0,
+        "if_score": 27.31,
+        "if_label": "NORMAL",
+        "ae_score": 61.75,
+        "ae_label": "SUSPICIOUS",
+        "fusion_score": 32.3458,
+        "severity": "LOW",
+        "should_alert": false,
+        "stored": 0,
+        "engine": null,
+        "threat_type": null,
+        "failure_layers": "",
+        "passed": true
+      },
+      "failures": [],
+      "rule_indicators": [
+        "monitored_binary",
+        "command:-encodedcommand"
+      ],
+      "rule_reasons": [
+        "Security-relevant Windows utility observed",
+        "Command-line indicator observed: -encodedcommand"
+      ],
+      "fusion_reasons": [
+        "RULE_EVIDENCE"
+      ]
+    },
+    {
+      "summary": {
+        "scenario_id": "P2-06",
+        "family": "CMD_SCRIPT",
+        "scenario_name": "CMD launches hidden encoded PowerShell",
+        "rule_score": 50,
+        "rule_suspicious": true,
+        "statistical_score": 0,
+        "if_score": 28.08,
+        "if_label": "NORMAL",
+        "ae_score": 50.86,
+        "ae_label": "UNUSUAL",
+        "fusion_score": 45.2715,
+        "severity": "MEDIUM",
+        "should_alert": false,
+        "stored": 0,
+        "engine": null,
+        "threat_type": null,
+        "failure_layers": "",
+        "passed": true
+      },
+      "failures": [],
+      "rule_indicators": [
+        "monitored_binary",
+        "command:-encodedcommand",
+        "command:-windowstyle hidden"
+      ],
+      "rule_reasons": [
+        "Security-relevant Windows utility observed",
+        "Command-line indicator observed: -encodedcommand",
+        "Command-line indicator observed: -windowstyle hidden"
+      ],
+      "fusion_reasons": [
+        "RULE_EVIDENCE"
+      ]
+    },
+    {
+      "summary": {
+        "scenario_id": "P2-07",
+        "family": "CMD_SCRIPT",
+        "scenario_name": "Remote WScript payload",
+        "rule_score": 75,
+        "rule_suspicious": true,
+        "statistical_score": 0,
+        "if_score": 26.62,
+        "if_label": "NORMAL",
+        "ae_score": 81.53,
+        "ae_label": "HIGH_ANOMALY",
+        "fusion_score": 65.9012,
+        "severity": "HIGH",
+        "should_alert": true,
+        "stored": 1,
+        "engine": "process_threat_fusion_v3",
+        "threat_type": "WSCRIPT_REMOTE_SCRIPT",
+        "failure_layers": "",
+        "passed": true
+      },
+      "failures": [],
+      "rule_indicators": [
+        "monitored_binary",
+        "script_network_reference",
+        "remote_script_execution"
+      ],
+      "rule_reasons": [
+        "Security-relevant Windows utility observed",
+        "Script or command interpreter contains a network URL in its command line",
+        "Windows script interpreter is executing remote network content"
+      ],
+      "fusion_reasons": [
+        "RULE_EVIDENCE"
+      ]
+    },
+    {
+      "summary": {
+        "scenario_id": "P2-08",
+        "family": "CMD_SCRIPT",
+        "scenario_name": "Remote MSHTA payload",
+        "rule_score": 75,
+        "rule_suspicious": true,
+        "statistical_score": 0,
+        "if_score": 26.67,
+        "if_label": "NORMAL",
+        "ae_score": 81.48,
+        "ae_label": "HIGH_ANOMALY",
+        "fusion_score": 65.9,
+        "severity": "HIGH",
+        "should_alert": true,
+        "stored": 1,
+        "engine": "process_threat_fusion_v3",
+        "threat_type": "MSHTA_REMOTE_PAYLOAD",
+        "failure_layers": "",
+        "passed": true
+      },
+      "failures": [],
+      "rule_indicators": [
+        "monitored_binary",
+        "script_network_reference",
+        "remote_script_execution"
+      ],
+      "rule_reasons": [
+        "Security-relevant Windows utility observed",
+        "Script or command interpreter contains a network URL in its command line",
+        "Windows script interpreter is executing remote network content"
+      ],
+      "fusion_reasons": [
+        "RULE_EVIDENCE"
+      ]
+    },
+    {
+      "summary": {
+        "scenario_id": "P3-01",
+        "family": "LOLBIN",
+        "scenario_name": "Benign CertUtil hash operation",
+        "rule_score": 5,
+        "rule_suspicious": false,
+        "statistical_score": 0,
+        "if_score": 3.22,
+        "if_label": "NORMAL",
+        "ae_score": 20.86,
+        "ae_label": "NORMAL",
+        "fusion_score": 6.3467,
+        "severity": "INFO",
+        "should_alert": false,
+        "stored": 0,
+        "engine": null,
+        "threat_type": null,
+        "failure_layers": "",
+        "passed": true
+      },
+      "failures": [],
+      "rule_indicators": [
+        "monitored_binary"
+      ],
+      "rule_reasons": [
+        "Security-relevant Windows utility observed"
+      ],
+      "fusion_reasons": []
+    },
+    {
+      "summary": {
+        "scenario_id": "P3-02",
+        "family": "LOLBIN",
+        "scenario_name": "CertUtil remote download",
+        "rule_score": 75,
+        "rule_suspicious": true,
+        "statistical_score": 0,
+        "if_score": 4.28,
+        "if_label": "NORMAL",
+        "ae_score": 22.94,
+        "ae_label": "NORMAL",
+        "fusion_score": 62.5878,
+        "severity": "HIGH",
+        "should_alert": true,
+        "stored": 1,
+        "engine": "process_threat_fusion_v3",
+        "threat_type": "CERTUTIL_DOWNLOAD",
+        "failure_layers": "",
+        "passed": true
+      },
+      "failures": [],
+      "rule_indicators": [
+        "monitored_binary",
+        "certutil_remote_download"
+      ],
+      "rule_reasons": [
+        "Security-relevant Windows utility observed",
+        "CertUtil remote URL-cache download behavior"
+      ],
+      "fusion_reasons": [
+        "RULE_EVIDENCE"
+      ]
+    },
+    {
+      "summary": {
+        "scenario_id": "P3-03",
+        "family": "LOLBIN",
+        "scenario_name": "BITSAdmin remote transfer",
+        "rule_score": 75,
+        "rule_suspicious": true,
+        "statistical_score": 0,
+        "if_score": 4.01,
+        "if_label": "NORMAL",
+        "ae_score": 21.97,
+        "ae_label": "NORMAL",
+        "fusion_score": 62.5155,
+        "severity": "HIGH",
+        "should_alert": true,
+        "stored": 1,
+        "engine": "process_threat_fusion_v3",
+        "threat_type": "BITSADMIN_TRANSFER",
+        "failure_layers": "",
+        "passed": true
+      },
+      "failures": [],
+      "rule_indicators": [
+        "monitored_binary",
+        "bitsadmin_remote_transfer"
+      ],
+      "rule_reasons": [
+        "Security-relevant Windows utility observed",
+        "BITSAdmin remote transfer behavior"
+      ],
+      "fusion_reasons": [
+        "RULE_EVIDENCE"
+      ]
+    },
+    {
+      "summary": {
+        "scenario_id": "P3-04",
+        "family": "LOLBIN",
+        "scenario_name": "Benign Rundll32 control panel",
+        "rule_score": 5,
+        "rule_suspicious": false,
+        "statistical_score": 0,
+        "if_score": 2.52,
+        "if_label": "NORMAL",
+        "ae_score": 18.27,
+        "ae_label": "NORMAL",
+        "fusion_score": 5.7967,
+        "severity": "INFO",
+        "should_alert": false,
+        "stored": 0,
+        "engine": null,
+        "threat_type": null,
+        "failure_layers": "",
+        "passed": true
+      },
+      "failures": [],
+      "rule_indicators": [
+        "monitored_binary"
+      ],
+      "rule_reasons": [
+        "Security-relevant Windows utility observed"
+      ],
+      "fusion_reasons": []
+    },
+    {
+      "summary": {
+        "scenario_id": "P3-05",
+        "family": "LOLBIN",
+        "scenario_name": "Rundll32 script execution",
+        "rule_score": 75,
+        "rule_suspicious": true,
+        "statistical_score": 0,
+        "if_score": 2.43,
+        "if_label": "NORMAL",
+        "ae_score": 18.46,
+        "ae_label": "NORMAL",
+        "fusion_score": 62.2192,
+        "severity": "HIGH",
+        "should_alert": true,
+        "stored": 1,
+        "engine": "process_threat_fusion_v3",
+        "threat_type": "RUNDLL32_SCRIPT_EXECUTION",
+        "failure_layers": "",
+        "passed": true
+      },
+      "failures": [],
+      "rule_indicators": [
+        "monitored_binary",
+        "rundll32_script_execution"
+      ],
+      "rule_reasons": [
+        "Security-relevant Windows utility observed",
+        "Rundll32 script-based execution behavior"
+      ],
+      "fusion_reasons": [
+        "RULE_EVIDENCE"
+      ]
+    },
+    {
+      "summary": {
+        "scenario_id": "P3-06",
+        "family": "LOLBIN",
+        "scenario_name": "Regsvr32 remote scriptlet",
+        "rule_score": 75,
+        "rule_suspicious": true,
+        "statistical_score": 0,
+        "if_score": 4.12,
+        "if_label": "NORMAL",
+        "ae_score": 22.9,
+        "ae_label": "NORMAL",
+        "fusion_score": 62.5762,
+        "severity": "HIGH",
+        "should_alert": true,
+        "stored": 1,
+        "engine": "process_threat_fusion_v3",
+        "threat_type": "REGSVR32_REMOTE_SCRIPTLET",
+        "failure_layers": "",
+        "passed": true
+      },
+      "failures": [],
+      "rule_indicators": [
+        "monitored_binary",
+        "regsvr32_remote_scriptlet"
+      ],
+      "rule_reasons": [
+        "Security-relevant Windows utility observed",
+        "Regsvr32 remote scriptlet execution behavior"
+      ],
+      "fusion_reasons": [
+        "RULE_EVIDENCE"
+      ]
+    },
+    {
+      "summary": {
+        "scenario_id": "P3-07",
+        "family": "LOLBIN",
+        "scenario_name": "Benign local MSHTA",
+        "rule_score": 5,
+        "rule_suspicious": false,
+        "statistical_score": 0,
+        "if_score": 26.43,
+        "if_label": "NORMAL",
+        "ae_score": 81.38,
+        "ae_label": "HIGH_ANOMALY",
+        "fusion_score": 16.3033,
+        "severity": "LOW",
+        "should_alert": false,
+        "stored": 0,
+        "engine": null,
+        "threat_type": null,
+        "failure_layers": "",
+        "passed": true
+      },
+      "failures": [],
+      "rule_indicators": [
+        "monitored_binary"
+      ],
+      "rule_reasons": [
+        "Security-relevant Windows utility observed"
+      ],
+      "fusion_reasons": []
+    },
+    {
+      "summary": {
+        "scenario_id": "P3-08",
+        "family": "LOLBIN",
+        "scenario_name": "Remote MSHTA execution",
+        "rule_score": 75,
+        "rule_suspicious": true,
+        "statistical_score": 0,
+        "if_score": 26.67,
+        "if_label": "NORMAL",
+        "ae_score": 81.5,
+        "ae_label": "HIGH_ANOMALY",
+        "fusion_score": 65.9012,
+        "severity": "HIGH",
+        "should_alert": true,
+        "stored": 1,
+        "engine": "process_threat_fusion_v3",
+        "threat_type": "MSHTA_REMOTE_PAYLOAD",
+        "failure_layers": "",
+        "passed": true
+      },
+      "failures": [],
+      "rule_indicators": [
+        "monitored_binary",
+        "script_network_reference",
+        "remote_script_execution"
+      ],
+      "rule_reasons": [
+        "Security-relevant Windows utility observed",
+        "Script or command interpreter contains a network URL in its command line",
+        "Windows script interpreter is executing remote network content"
+      ],
+      "fusion_reasons": [
+        "RULE_EVIDENCE"
+      ]
+    },
+    {
+      "summary": {
+        "scenario_id": "P4-01",
+        "family": "PARENT_CHILD",
+        "scenario_name": "Explorer launches CMD",
+        "rule_score": 5,
+        "rule_suspicious": false,
+        "statistical_score": 0,
+        "if_score": 26.23,
+        "if_label": "NORMAL",
+        "ae_score": 75.37,
+        "ae_label": "SUSPICIOUS",
+        "fusion_score": 15.3867,
+        "severity": "LOW",
+        "should_alert": false,
+        "stored": 0,
+        "engine": null,
+        "threat_type": null,
+        "failure_layers": "",
+        "passed": true
+      },
+      "failures": [],
+      "rule_indicators": [
+        "monitored_binary"
+      ],
+      "rule_reasons": [
+        "Security-relevant Windows utility observed"
+      ],
+      "fusion_reasons": []
+    },
+    {
+      "summary": {
+        "scenario_id": "P4-02",
+        "family": "PARENT_CHILD",
+        "scenario_name": "Explorer launches local WScript",
+        "rule_score": 5,
+        "rule_suspicious": false,
+        "statistical_score": 0,
+        "if_score": 26.47,
+        "if_label": "NORMAL",
+        "ae_score": 81.39,
+        "ae_label": "HIGH_ANOMALY",
+        "fusion_score": 16.3067,
+        "severity": "LOW",
+        "should_alert": false,
+        "stored": 0,
+        "engine": null,
+        "threat_type": null,
+        "failure_layers": "",
+        "passed": true
+      },
+      "failures": [],
+      "rule_indicators": [
+        "monitored_binary"
+      ],
+      "rule_reasons": [
+        "Security-relevant Windows utility observed"
+      ],
+      "fusion_reasons": []
+    },
+    {
+      "summary": {
+        "scenario_id": "P4-03",
+        "family": "PARENT_CHILD",
+        "scenario_name": "Word launches CMD",
+        "rule_score": 45,
+        "rule_suspicious": true,
+        "statistical_score": 0,
+        "if_score": 40.6,
+        "if_label": "UNUSUAL",
+        "ae_score": 85.67,
+        "ae_label": "HIGH_ANOMALY",
+        "fusion_score": 42.0448,
+        "severity": "MEDIUM",
+        "should_alert": false,
+        "stored": 0,
+        "engine": null,
+        "threat_type": null,
+        "failure_layers": "",
+        "passed": true
+      },
+      "failures": [],
+      "rule_indicators": [
+        "monitored_binary",
+        "document_to_script"
+      ],
+      "rule_reasons": [
+        "Security-relevant Windows utility observed",
+        "Document application launched a scripting or command interpreter"
+      ],
+      "fusion_reasons": [
+        "RULE_EVIDENCE"
+      ]
+    },
+    {
+      "summary": {
+        "scenario_id": "P4-04",
+        "family": "PARENT_CHILD",
+        "scenario_name": "Excel launches WScript",
+        "rule_score": 45,
+        "rule_suspicious": true,
+        "statistical_score": 0,
+        "if_score": 41.13,
+        "if_label": "UNUSUAL",
+        "ae_score": 87.85,
+        "ae_label": "HIGH_ANOMALY",
+        "fusion_score": 42.172,
+        "severity": "MEDIUM",
+        "should_alert": false,
+        "stored": 0,
+        "engine": null,
+        "threat_type": null,
+        "failure_layers": "",
+        "passed": true
+      },
+      "failures": [],
+      "rule_indicators": [
+        "monitored_binary",
+        "document_to_script"
+      ],
+      "rule_reasons": [
+        "Security-relevant Windows utility observed",
+        "Document application launched a scripting or command interpreter"
+      ],
+      "fusion_reasons": [
+        "RULE_EVIDENCE"
+      ]
+    },
+    {
+      "summary": {
+        "scenario_id": "P4-05",
+        "family": "PARENT_CHILD",
+        "scenario_name": "Outlook launches CMD",
+        "rule_score": 45,
+        "rule_suspicious": true,
+        "statistical_score": 0,
+        "if_score": 40.6,
+        "if_label": "UNUSUAL",
+        "ae_score": 85.67,
+        "ae_label": "HIGH_ANOMALY",
+        "fusion_score": 42.0448,
+        "severity": "MEDIUM",
+        "should_alert": false,
+        "stored": 0,
+        "engine": null,
+        "threat_type": null,
+        "failure_layers": "",
+        "passed": true
+      },
+      "failures": [],
+      "rule_indicators": [
+        "monitored_binary",
+        "document_to_script"
+      ],
+      "rule_reasons": [
+        "Security-relevant Windows utility observed",
+        "Document application launched a scripting or command interpreter"
+      ],
+      "fusion_reasons": [
+        "RULE_EVIDENCE"
+      ]
+    },
+    {
+      "summary": {
+        "scenario_id": "P4-06",
+        "family": "PARENT_CHILD",
+        "scenario_name": "Word launches encoded CMD chain",
+        "rule_score": 75,
+        "rule_suspicious": true,
+        "statistical_score": 0,
+        "if_score": 43.14,
+        "if_label": "UNUSUAL",
+        "ae_score": 82.51,
+        "ae_label": "HIGH_ANOMALY",
+        "fusion_score": 66.3387,
+        "severity": "HIGH",
+        "should_alert": true,
+        "stored": 1,
+        "engine": "process_threat_fusion_v3",
+        "threat_type": "DOCUMENT_TO_CMD",
+        "failure_layers": "",
+        "passed": true
+      },
+      "failures": [],
+      "rule_indicators": [
+        "monitored_binary",
+        "command:-encodedcommand",
+        "document_to_script"
+      ],
+      "rule_reasons": [
+        "Security-relevant Windows utility observed",
+        "Command-line indicator observed: -encodedcommand",
+        "Document application launched a scripting or command interpreter"
+      ],
+      "fusion_reasons": [
+        "RULE_EVIDENCE"
+      ]
+    },
+    {
+      "summary": {
+        "scenario_id": "P4-07",
+        "family": "PARENT_CHILD",
+        "scenario_name": "Excel launches remote WScript",
+        "rule_score": 100,
+        "rule_suspicious": true,
+        "statistical_score": 0,
+        "if_score": 41.51,
+        "if_label": "UNUSUAL",
+        "ae_score": 88.04,
+        "ae_label": "HIGH_ANOMALY",
+        "fusion_score": 79.0,
+        "severity": "HIGH",
+        "should_alert": true,
+        "stored": 1,
+        "engine": "process_threat_fusion_v3",
+        "threat_type": "DOCUMENT_TO_WSCRIPT",
+        "failure_layers": "",
+        "passed": true
+      },
+      "failures": [],
+      "rule_indicators": [
+        "monitored_binary",
+        "document_to_script",
+        "script_network_reference",
+        "remote_script_execution"
+      ],
+      "rule_reasons": [
+        "Security-relevant Windows utility observed",
+        "Document application launched a scripting or command interpreter",
+        "Script or command interpreter contains a network URL in its command line",
+        "Windows script interpreter is executing remote network content"
+      ],
+      "fusion_reasons": [
+        "RULE_EVIDENCE"
+      ]
+    },
+    {
+      "summary": {
+        "scenario_id": "P4-08",
+        "family": "PARENT_CHILD",
+        "scenario_name": "Outlook launches remote MSHTA",
+        "rule_score": 100,
+        "rule_suspicious": true,
+        "statistical_score": 0,
+        "if_score": 41.61,
+        "if_label": "UNUSUAL",
+        "ae_score": 87.99,
+        "ae_label": "HIGH_ANOMALY",
+        "fusion_score": 79.0,
+        "severity": "HIGH",
+        "should_alert": true,
+        "stored": 1,
+        "engine": "process_threat_fusion_v3",
+        "threat_type": "DOCUMENT_TO_MSHTA",
+        "failure_layers": "",
+        "passed": true
+      },
+      "failures": [],
+      "rule_indicators": [
+        "monitored_binary",
+        "document_to_script",
+        "script_network_reference",
+        "remote_script_execution"
+      ],
+      "rule_reasons": [
+        "Security-relevant Windows utility observed",
+        "Document application launched a scripting or command interpreter",
+        "Script or command interpreter contains a network URL in its command line",
+        "Windows script interpreter is executing remote network content"
+      ],
+      "fusion_reasons": [
+        "RULE_EVIDENCE"
+      ]
+    }
+  ]
+}

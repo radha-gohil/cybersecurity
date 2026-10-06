@@ -1,0 +1,11 @@
+scenario_id,family,scenario_name,sample_count,detections,expected,finding_count,stored,failure_layers,passed
+N1-01,BASELINE,Single normal outbound connection,1,,,0,False,,True
+N1-02,CONNECTION_BURST,Nineteen rapid connections,19,,,0,False,,True
+N1-03,CONNECTION_BURST,Twenty rapid connections,20,CONNECTION_BURST,CONNECTION_BURST,1,True,,True
+N2-01,PORT_SCAN,Nine destination ports,9,,,0,False,,True
+N2-02,PORT_SCAN,Ten unique destination ports,10,PORT_SCAN_BEHAVIOR,PORT_SCAN_BEHAVIOR,1,True,,True
+N3-01,DOS,Twenty-nine same-target connections,29,CONNECTION_BURST,,1,False,,True
+N3-02,DOS,Thirty same-target connections,30,"CONNECTION_BURST,POSSIBLE_DOS_BEHAVIOR",POSSIBLE_DOS_BEHAVIOR,2,True,,True
+N4-01,BEACONING,Irregular repeated connections,5,,,0,False,,True
+N4-02,BEACONING,Regular ten-second beacon,5,SUSPICIOUS_BEACONING,SUSPICIOUS_BEACONING,1,True,,True
+N5-01,DDOS,Multi-source distributed target flood,40,DISTRIBUTED_DOS_BEHAVIOR,DISTRIBUTED_DOS_BEHAVIOR,1,True,,True

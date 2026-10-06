@@ -2,7 +2,9 @@ import json
 import sqlite3
 from pathlib import Path
 from datetime import datetime, timezone
-
+from config import (
+    ACTIVE_SOC_DATABASE_PATH,
+)
 
 # ============================================================
 # PROJECT / DATABASE PATH
@@ -11,14 +13,6 @@ from datetime import datetime, timezone
 PROJECT_ROOT = Path(
     __file__
 ).resolve().parents[2]
-
-DATABASE_PATH = (
-    PROJECT_ROOT
-    / "data"
-    / "database"
-    / "sentinel_endpoint.db"
-)
-
 
 class IncidentStore:
 
@@ -30,7 +24,7 @@ class IncidentStore:
         if database_path is None:
 
             database_path = (
-                DATABASE_PATH
+                ACTIVE_SOC_DATABASE_PATH
             )
 
         self.database_path = Path(

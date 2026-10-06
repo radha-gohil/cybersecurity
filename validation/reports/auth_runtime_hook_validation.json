@@ -1,0 +1,87 @@
+{
+  "suite": "SENTINEL-X AUTH RUNTIME HOOK VALIDATION",
+  "passed": 10,
+  "failed": 0,
+  "results": [
+    {
+      "scenario_id": "AH-01",
+      "scenario_name": "SentinelAgent imports WindowsAuthCollector",
+      "observed": "True",
+      "expected": "True",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "AH-02",
+      "scenario_name": "SentinelAgent constructs auth collector in SHADOW",
+      "observed": "True",
+      "expected": "True",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "AH-03",
+      "scenario_name": "Authentication collector is registered in generic collector lifecycle",
+      "observed": "True",
+      "expected": "True",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "AH-04",
+      "scenario_name": "Runtime WindowsAuthCollector remains SHADOW",
+      "observed": "SHADOW",
+      "expected": "SHADOW",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "AH-05",
+      "scenario_name": "Windows Event Log backend dependency is available",
+      "observed": "True",
+      "expected": "True",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "AH-06",
+      "scenario_name": "/telemetry/live exposes auth collector",
+      "observed": "True",
+      "expected": "True",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "AH-07",
+      "scenario_name": "Live collector health count includes all registered collector types",
+      "observed": "True",
+      "expected": "True",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "AH-08",
+      "scenario_name": "/endpoint/overview exposes auth collector state",
+      "observed": "True",
+      "expected": "True",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "AH-09",
+      "scenario_name": "Authentication collector uses read-only Security Event Log query path",
+      "observed": "True",
+      "expected": "True",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "AH-10",
+      "scenario_name": "Auth parser remains functional after runtime hookup",
+      "observed": "{\"event_type\": \"login_failure\", \"windows_event_id\": 4625, \"record_id\": 12345, \"timestamp\": \"2026-10-06T12:00:00.0000000Z\", \"username\": \"test_user\", \"domain\": \"TEST\", \"source_ip\": \"198.51.100.125\", \"source_port\": \"51515\", \"workstation\": \"TESTHOST\", \"logon_type\": \"3\", \"process_name\": \"C:\\\\Windows\\\\System32\\\\svchost.exe\", \"result\": \"failed\", \"status_code\": \"0xC000006D\", \"sub_status\": \"0xC000006A\", \"source\": \"windows_security_log\", \"synthetic_test\": false}",
+      "expected": "normalized 4625",
+      "failure_layers": "",
+      "passed": true
+    }
+  ]
+}

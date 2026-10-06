@@ -69,8 +69,60 @@ class InvestigationAgent:
         except (TypeError, ValueError, OverflowError):
             return False
 
+    def is_validation_incident(self, incident: dict) -> bool:
+        context = self.safe_dict(
+            self.safe_dict(incident).get("analysis_context")
+        )
+        return bool(context.get("validation_mode", False))
+
+    def get_stored_detections(self, incident: dict) -> list:
+        return [
+            item
+            for item in self.safe_list(
+                self.safe_dict(incident).get("detections")
+            )
+            if isinstance(item, dict)
+            and item.get("detected") is not False
+            and item.get("stored_detection_record") is True
+        ]
+
+    def get_strong_detections(self, incident: dict) -> list:
+        result = []
+
+        for detection in self.get_stored_detections(incident):
+            try:
+                score = float(
+                    detection.get("risk_score")
+                    or detection.get("fusion_score")
+                    or 0
+                )
+            except (TypeError, ValueError, OverflowError):
+                score = 0.0
+
+            severity = str(
+                detection.get("severity") or "INFO"
+            ).upper()
+
+            try:
+                signal_count = int(
+                    detection.get("independent_signal_count")
+                    or 0
+                )
+            except (TypeError, ValueError, OverflowError):
+                signal_count = 0
+
+            if (
+                score >= 60
+                and severity in {"HIGH", "CRITICAL"}
+                and signal_count >= 2
+            ):
+                result.append(detection)
+
+        return result
+
     def get_qualifying_events(self, incident: dict) -> list:
         incident = self.safe_dict(incident)
+        validation_mode = self.is_validation_incident(incident)
 
         events = self.safe_list(
             incident.get("timeline")
@@ -112,20 +164,21 @@ class InvestigationAgent:
                 or ""
             ).upper()
 
-            if (
-                "SHADOW" in mode
-                or mode in {
-                    "OFF", "DISABLED", "SIMULATION"
-                }
-            ):
-                continue
+            if not validation_mode:
+                if (
+                    "SHADOW" in mode
+                    or mode in {
+                        "OFF", "DISABLED", "SIMULATION"
+                    }
+                ):
+                    continue
 
-            if (
-                event.get("simulation_mode") is True
-                or metadata.get("simulation_mode") is True
-                or metadata.get("synthetic") is True
-            ):
-                continue
+                if (
+                    event.get("simulation_mode") is True
+                    or metadata.get("simulation_mode") is True
+                    or metadata.get("synthetic") is True
+                ):
+                    continue
 
             device_id = str(
                 event.get("device_id")
@@ -157,10 +210,6 @@ class InvestigationAgent:
 
         return result
 
-    # ============================================================
-    # COLLECT PROCESSES
-    # ============================================================
-
     def collect_processes(self, events: list) -> list:
         processes = {}
 
@@ -171,6 +220,9 @@ class InvestigationAgent:
             process = self.safe_dict(
                 event.get("process")
             )
+            metadata = self.safe_dict(
+                event.get("metadata")
+            )
 
             if not self.valid_pid(process.get("pid")):
                 continue
@@ -178,22 +230,77 @@ class InvestigationAgent:
             pid = int(process["pid"])
             name = process.get("name")
             device = str(
-                event.get("device_id") or ""
+                event.get("device_id")
+                or metadata.get("device_id")
+                or ""
+            ).strip()
+
+            create_time = (
+                process.get("create_time")
+                if process.get("create_time") is not None
+                else process.get("process_create_time")
             )
+
+            try:
+                normalized_create_time = (
+                    round(float(create_time), 6)
+                    if create_time is not None
+                    else None
+                )
+            except (TypeError, ValueError, OverflowError):
+                normalized_create_time = (
+                    str(create_time).strip()
+                    if create_time is not None
+                    else None
+                )
 
             key = (
                 device,
                 pid,
-                str(name or "").lower(),
+                normalized_create_time,
             )
 
-            if key not in processes:
-                processes[key] = {
+            if normalized_create_time is None:
+                key = (
+                    device,
+                    pid,
+                    str(name or "").lower(),
+                    str(process.get("exe") or "").lower(),
+                )
+
+            item = processes.get(key)
+
+            if item is None:
+                item = {
                     "pid": pid,
                     "name": name,
                     "exe": process.get("exe"),
-                    "device_id": device,
+                    "device_id": device or None,
+                    "process_create_time": normalized_create_time,
+                    "identity_complete": bool(
+                        device
+                        and normalized_create_time is not None
+                    ),
+                    "identity_verified": False,
+                    "observation_count": 0,
+                    "event_ids": [],
                 }
+                processes[key] = item
+
+            item["observation_count"] += 1
+
+            event_id = event.get("event_id")
+            if (
+                event_id
+                and event_id not in item["event_ids"]
+            ):
+                item["event_ids"].append(event_id)
+
+            if name:
+                item["name"] = name
+
+            if process.get("exe"):
+                item["exe"] = process.get("exe")
 
         return list(processes.values())
 
@@ -425,6 +532,9 @@ class InvestigationAgent:
     # ============================================================
 
     def evidence_assessment(self, incident: dict) -> dict:
+        incident = self.safe_dict(incident)
+        validation_mode = self.is_validation_incident(incident)
+
         qualifying = self.get_qualifying_events(
             incident
         )
@@ -454,7 +564,7 @@ class InvestigationAgent:
             default=0,
         )
 
-        corroborated = (
+        cross_category_corroboration = (
             len(qualifying) >= 2
             and diversity >= 2
         )
@@ -467,32 +577,96 @@ class InvestigationAgent:
                     str(event.get("event_id"))
                 )
 
+        strong_detections = self.get_strong_detections(
+            incident
+        )
+
+        max_detection_risk = 0.0
+        max_signal_count = 0
+
+        for detection in strong_detections:
+            try:
+                max_detection_risk = max(
+                    max_detection_risk,
+                    float(
+                        detection.get("risk_score")
+                        or detection.get("fusion_score")
+                        or 0
+                    ),
+                )
+            except (TypeError, ValueError, OverflowError):
+                pass
+
+            try:
+                max_signal_count = max(
+                    max_signal_count,
+                    int(
+                        detection.get("independent_signal_count")
+                        or 0
+                    ),
+                )
+            except (TypeError, ValueError, OverflowError):
+                pass
+
+        detection_signal_corroboration = bool(
+            strong_detections
+            and max_signal_count >= 2
+        )
+
+        basic_corroboration = (
+            cross_category_corroboration
+            or (
+                validation_mode
+                and detection_signal_corroboration
+            )
+        )
+
         return {
-            "qualifying_event_count": len(
-                qualifying
-            ),
+            "qualifying_event_count": len(qualifying),
             "qualifying_category_count": diversity,
             "categories_by_device": {
                 device: sorted(categories)
                 for device, categories in by_device.items()
             },
-            "indicator_event_count": len(
-                indicator_event_ids
+            "indicator_event_count": len(indicator_event_ids),
+            "stored_detection_count": len(
+                self.get_stored_detections(incident)
             ),
-            "basic_corroboration": corroborated,
+            "strong_detection_count": len(strong_detections),
+            "max_detection_risk": round(max_detection_risk, 4),
+            "max_detection_signal_count": max_signal_count,
+            "cross_category_corroboration": (
+                cross_category_corroboration
+            ),
+            "detection_signal_corroboration": (
+                detection_signal_corroboration
+            ),
+            "basic_corroboration": basic_corroboration,
             "causal_relationship_verified": False,
             "attack_confirmed": False,
-            "policy": "INVESTIGATION_EVIDENCE_V2",
+            "validation_only": validation_mode,
+            "production_eligible": not validation_mode,
+            "policy": (
+                "VALIDATION_DETECTION_EVIDENCE_V1"
+                if validation_mode
+                else "INVESTIGATION_EVIDENCE_V2"
+            ),
         }
-
-    # ============================================================
-    # DETERMINE INVESTIGATION PRIORITY
-    # ============================================================
 
     def determine_priority(self, incident: dict) -> str:
         assessment = self.evidence_assessment(
             incident
         )
+
+        detection_risk = float(
+            assessment.get("max_detection_risk") or 0
+        )
+
+        if detection_risk >= 80:
+            return "IMMEDIATE"
+
+        if detection_risk >= 60:
+            return "HIGH"
 
         if not assessment["basic_corroboration"]:
             return "LOW"
@@ -501,10 +675,6 @@ class InvestigationAgent:
             return "NORMAL"
 
         return "LOW"
-
-    # ============================================================
-    # GENERATE FINDINGS
-    # ============================================================
 
     def generate_findings(
         self,
@@ -528,22 +698,44 @@ class InvestigationAgent:
             "met preliminary evidence criteria."
         )
 
-        if assessment["basic_corroboration"]:
+        if assessment.get(
+            "cross_category_corroboration",
+            False,
+        ):
             findings.append(
-                "Two or more qualifying event categories "
+                "Two or more qualifying telemetry categories "
                 "were recorded on the same device. "
                 "A causal relationship is not verified."
             )
+
+        elif assessment.get(
+            "detection_signal_corroboration",
+            False,
+        ):
+            findings.append(
+                "Stored detector evidence contains two or more "
+                "independent supporting signals. The incident "
+                "remains single-category telemetry, and a causal "
+                "cross-category relationship is not verified."
+            )
+
         else:
             findings.append(
-                "Insufficient qualifying cross-category "
-                "evidence for corroboration."
+                "Insufficient independent corroboration for "
+                "cross-category confirmation."
             )
 
         if processes:
+            observation_count = sum(
+                int(process.get("observation_count") or 1)
+                for process in processes
+                if isinstance(process, dict)
+            )
+
             findings.append(
-                f"{len(processes)} qualifying process "
-                "entity/entities recorded."
+                f"{len(processes)} canonical process entity/entities "
+                f"represent {observation_count} recorded process "
+                "observation(s)."
             )
 
         if files:
@@ -583,6 +775,7 @@ class InvestigationAgent:
 
     def investigate(self, incident: dict) -> dict:
         incident = self.safe_dict(incident)
+        validation_mode = self.is_validation_incident(incident)
 
         events = [
             event
@@ -596,11 +789,18 @@ class InvestigationAgent:
             incident
         )
 
-        processes = self.collect_processes(qualifying)
-        files = self.collect_files(qualifying)
-        network = self.collect_network(qualifying)
-        registry = self.collect_registry(qualifying)
-        indicators = self.collect_indicators(qualifying)
+        # In validation mode we retain all recorded telemetry for
+        # analyst context while still keeping the evidence gate and
+        # attack-confirmation fields explicit.
+        analysis_events = (
+            events if validation_mode else qualifying
+        )
+
+        processes = self.collect_processes(analysis_events)
+        files = self.collect_files(analysis_events)
+        network = self.collect_network(analysis_events)
+        registry = self.collect_registry(analysis_events)
+        indicators = self.collect_indicators(analysis_events)
 
         timeline = self.build_timeline(events)
 
@@ -619,8 +819,45 @@ class InvestigationAgent:
             indicators,
         )
 
+        assessment = self.evidence_assessment(
+            incident
+        )
+
+        strong_detections = self.get_strong_detections(
+            incident
+        )
+
+        if strong_detections:
+            strongest = max(
+                strong_detections,
+                key=lambda item: float(
+                    item.get("risk_score")
+                    or item.get("fusion_score")
+                    or 0
+                ),
+            )
+
+            findings.insert(
+                0,
+                (
+                    "Persisted detector evidence: "
+                    f"{strongest.get('engine')} reported "
+                    f"{strongest.get('threat_type')} at "
+                    f"{strongest.get('severity')} severity "
+                    f"(risk/fusion score "
+                    f"{strongest.get('risk_score') or strongest.get('fusion_score')})."
+                ),
+            )
+
         priority = self.determine_priority(
             incident
+        )
+
+        response_review_required = bool(
+            strong_detections
+            and float(
+                assessment.get("max_detection_risk") or 0
+            ) >= 60
         )
 
         return {
@@ -628,29 +865,30 @@ class InvestigationAgent:
             "agent": self.name,
             "investigated_at": self.now_iso(),
             "priority": priority,
-
-            # Historical source values, not conclusions.
             "incident_score": incident.get(
                 "correlation_score", 0
             ),
             "incident_severity": incident.get(
                 "severity", "INFO"
             ),
-
             "event_count": len(events),
+            "qualifying_event_count": len(qualifying),
             "category_counts": dict(category_counts),
             "processes": processes,
             "files": files,
             "network_connections": network,
             "registry_artifacts": registry,
             "indicators": indicators,
+            "detections": self.get_stored_detections(incident),
+            "strong_detections": strong_detections,
             "findings": findings,
             "timeline": timeline,
-
-            "evidence_assessment":
-                self.evidence_assessment(incident),
-
-            "requires_response": False,
+            "evidence_assessment": assessment,
+            "requires_response": response_review_required,
+            "response_review_only": response_review_required,
             "attack_confirmed": False,
             "confidence_calibrated": False,
+            "validation_only": validation_mode,
+            "production_eligible": not validation_mode,
         }
+

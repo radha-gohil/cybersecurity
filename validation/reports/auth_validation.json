@@ -1,0 +1,108 @@
+{
+  "suite": "SENTINEL-X PHASE 5 A1 AUTHENTICATION VALIDATION",
+  "scenario_count": 10,
+  "passed": 10,
+  "failed": 0,
+  "results": [
+    {
+      "scenario_id": "A1-01",
+      "family": "AUTHENTICATION",
+      "scenario_name": "Successful login remains quiet",
+      "detections": "",
+      "expected": "NO_ALERT",
+      "failure_layers": "",
+      "passed": true,
+      "notes": "A successful authentication must not enter failure history."
+    },
+    {
+      "scenario_id": "A1-02",
+      "family": "AUTHENTICATION",
+      "scenario_name": "Single failed login remains quiet",
+      "detections": "",
+      "expected": "NO_ALERT",
+      "failure_layers": "",
+      "passed": true,
+      "notes": ""
+    },
+    {
+      "scenario_id": "A1-03",
+      "family": "AUTHENTICATION",
+      "scenario_name": "Four failures stay below repeated threshold",
+      "detections": "",
+      "expected": "NO_REPEATED_LOGIN_FAILURES",
+      "failure_layers": "",
+      "passed": true,
+      "notes": "Current repeated-failure threshold is 5 within 60 seconds."
+    },
+    {
+      "scenario_id": "A1-04",
+      "family": "AUTHENTICATION",
+      "scenario_name": "Five failures trigger repeated-login signal",
+      "detections": "REPEATED_LOGIN_FAILURES",
+      "expected": "REPEATED_LOGIN_FAILURES",
+      "failure_layers": "",
+      "passed": true,
+      "notes": "Exact repeated-failure boundary."
+    },
+    {
+      "scenario_id": "A1-05",
+      "family": "AUTHENTICATION",
+      "scenario_name": "Three accounts from one source trigger multi-account signal",
+      "detections": "MULTI_ACCOUNT_LOGIN_FAILURES",
+      "expected": "MULTI_ACCOUNT_LOGIN_FAILURES",
+      "failure_layers": "",
+      "passed": true,
+      "notes": "Exact multi-account threshold is 3."
+    },
+    {
+      "scenario_id": "A1-06",
+      "family": "AUTHENTICATION",
+      "scenario_name": "Repeated plus multi-account failures trigger combined behavior",
+      "detections": "AUTH_BRUTE_FORCE_BEHAVIOR,MULTI_ACCOUNT_LOGIN_FAILURES,REPEATED_LOGIN_FAILURES",
+      "expected": "AUTH_BRUTE_FORCE_BEHAVIOR",
+      "failure_layers": "",
+      "passed": true,
+      "notes": "Five failures across three accounts provide both supporting signals."
+    },
+    {
+      "scenario_id": "A1-07",
+      "family": "AUTHENTICATION",
+      "scenario_name": "Different source IPs are not incorrectly merged",
+      "detections": "",
+      "expected": "NO_ALERT",
+      "failure_layers": "",
+      "passed": true,
+      "notes": "Each source has only four failures."
+    },
+    {
+      "scenario_id": "A1-08",
+      "family": "AUTHENTICATION",
+      "scenario_name": "Successful login does not become a failure or erase prior failures",
+      "detections": "REPEATED_LOGIN_FAILURES",
+      "expected": "REPEATED_LOGIN_FAILURES_AFTER_5_TOTAL_FAILURES",
+      "failure_layers": "",
+      "passed": true,
+      "notes": "The success itself must remain quiet; the fifth actual failure still reaches threshold."
+    },
+    {
+      "scenario_id": "A1-09",
+      "family": "AUTHENTICATION",
+      "scenario_name": "Duplicate Windows EventRecordID is processed once",
+      "detections": "",
+      "expected": "DEDUPLICATED",
+      "failure_layers": "",
+      "passed": true,
+      "notes": "AuthMonitor calls=1"
+    },
+    {
+      "scenario_id": "A1-10",
+      "family": "AUTHENTICATION",
+      "scenario_name": "Missing username or source IP fails quiet",
+      "detections": "",
+      "expected": "NO_ALERT",
+      "failure_layers": "",
+      "passed": true,
+      "notes": "Detector must not invent identity or source evidence."
+    }
+  ]
+}

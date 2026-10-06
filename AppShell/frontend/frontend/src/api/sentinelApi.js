@@ -140,6 +140,25 @@ export async function approveIncident(
 
 
 /* ============================================================ */
+/* REJECTION */
+/* ============================================================ */
+
+export async function rejectIncident(
+    incidentId,
+    payload
+) {
+
+    const response = await api.post(
+        `/cases/${encodeURIComponent(incidentId)}/reject`,
+        payload
+    );
+
+    return response.data;
+
+}
+
+
+/* ============================================================ */
 /* TICKETS */
 /* ============================================================ */
 

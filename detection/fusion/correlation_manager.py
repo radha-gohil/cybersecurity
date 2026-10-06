@@ -9,6 +9,10 @@ from detection.fusion.incident_store import (
     IncidentStore,
 )
 
+from config import (
+    IS_VALIDATION_MODE,
+    DATA_SOURCE_VALIDATION,
+)
 
 class CorrelationManager:
 
@@ -1024,7 +1028,83 @@ class CorrelationManager:
                 event
             )
         )
+        # ========================================================
+        # DATA-SOURCE SAFETY GATE
+        # ========================================================
 
+        metadata = (
+            normalized_event.get(
+                "metadata",
+                {},
+            )
+            or {}
+        )
+
+
+        if not isinstance(
+            metadata,
+            dict,
+        ):
+
+            metadata = {}
+
+
+        data_source = str(
+            metadata.get(
+                "data_source",
+                ""
+            )
+            or ""
+        ).strip().upper()
+
+
+        # ========================================================
+        # VALIDATION MODE
+        #
+        # Real telemetry must NEVER enter correlation while we
+        # are validating detectors.
+        # ========================================================
+
+        if (
+            IS_VALIDATION_MODE
+            and
+            data_source
+            != DATA_SOURCE_VALIDATION
+        ):
+
+            return {
+
+                "correlation": {
+
+                    "correlated":
+                        False,
+
+                    "correlation_score":
+                        0,
+
+                    "related_event_count":
+                        0,
+
+                    "state":
+                        "SKIPPED_RUNTIME_MODE",
+
+                    "reason":
+                        "LIVE_EVENT_BLOCKED_DURING_VALIDATION",
+
+                    "data_source":
+                        data_source
+                        or "MISSING",
+                },
+
+                "incident_created":
+                    False,
+
+                "incident_updated":
+                    False,
+
+                "incident":
+                    None,
+            }
 
         correlation_result = (
             self.correlator.add_event(

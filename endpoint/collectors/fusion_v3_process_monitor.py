@@ -10,6 +10,9 @@ from typing import (
     Optional,
 )
 
+from config import (
+    ACTIVE_SOC_DATABASE_PATH,
+)
 
 from endpoint.collectors.temporal_process_monitor import (
     TemporalProcessMonitor,
@@ -48,10 +51,9 @@ PROJECT_ROOT = (
 
 
 DEFAULT_DATABASE_PATH = (
-    PROJECT_ROOT
-    / "data"
-    / "database"
-    / "sentinel_endpoint.db"
+    Path(
+        ACTIVE_SOC_DATABASE_PATH
+    )
 )
 
 

@@ -10,6 +10,10 @@ from datetime import (
 
 from pathlib import Path
 
+from config import (
+    ACTIVE_SOC_DATABASE_PATH,
+)
+
 from typing import (
     Any,
     Dict,
@@ -28,18 +32,20 @@ from ai_detection.behavior.process_feature_schema import (
 # PROJECT PATHS
 # ================================================================
 
-PROJECT_ROOT = (
-    Path(__file__)
-    .resolve()
-    .parents[2]
-)
-
+# ================================================================
+# ACTIVE SENTINEL-X DATABASE
+#
+# VALIDATION:
+#     sentinel_validation.db
+#
+# LIVE:
+#     sentinel_endpoint.db
+# ================================================================
 
 DATABASE_PATH = (
-    PROJECT_ROOT
-    / "data"
-    / "database"
-    / "sentinel_endpoint.db"
+    Path(
+        ACTIVE_SOC_DATABASE_PATH
+    )
 )
 
 

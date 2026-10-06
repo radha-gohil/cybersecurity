@@ -6,7 +6,7 @@ import {
   useState,
 } from "react";
 
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import {
   Alert,
@@ -1481,7 +1481,7 @@ function AnimationPlayer({
           The plan ranking is heuristic. Risk reduction
           describes modeled components, not the
           probability of preventing an attack.
-          Approval and real response execution remain disabled.
+          Approval is handled through the simulation-only SOC approval workflow. Real endpoint execution remains disabled.
         </Alert>
       </DialogContent>
 
@@ -1500,6 +1500,7 @@ function AnimationPlayer({
 
 export default function ResponseSimulator() {
   const location = useLocation();
+  const navigate = useNavigate();
 
   const initialId = String(
     new URLSearchParams(location.search)
@@ -1513,6 +1514,7 @@ export default function ResponseSimulator() {
   const [incidentId, setIncidentId] = useState(initialId);
 
   const [mode, setMode] = useState("preview");
+  const [modeTouched, setModeTouched] = useState(false);
 
   const [loadingList, setLoadingList] = useState(true);
   const [loadingTwin, setLoadingTwin] = useState(false);
@@ -1627,7 +1629,21 @@ export default function ResponseSimulator() {
   const hasSocCase =
     selectedIncident?.soc_case_exists === true;
 
-  // Stored plan availability depends on persisted cases.
+  // Prefer the persisted Digital Twin when a SOC workflow already
+  // exists. Analysts can still manually switch back to preview.
+  useEffect(() => {
+    if (!selectedIncident || modeTouched) {
+      return;
+    }
+
+    setMode(
+      hasSocCase
+        ? "stored"
+        : "preview"
+    );
+  }, [selectedIncident, hasSocCase, modeTouched]);
+
+  // A stored plan cannot be selected when no SOC case exists.
   useEffect(() => {
     if (
       mode === "stored" &&
@@ -1813,11 +1829,12 @@ export default function ResponseSimulator() {
                 labelId="sim-incident"
                 label="Detected incident"
                 value={incidentId}
-                onChange={(event) =>
+                onChange={(event) => {
+                  setModeTouched(false);
                   setIncidentId(
                     String(event.target.value)
-                  )
-                }
+                  );
+                }}
               >
                 {incidentId &&
                   !incidents.some(
@@ -1857,9 +1874,10 @@ export default function ResponseSimulator() {
                 labelId="sim-mode"
                 label="Simulation source"
                 value={mode}
-                onChange={(event) =>
-                  setMode(event.target.value)
-                }
+                onChange={(event) => {
+                  setModeTouched(true);
+                  setMode(event.target.value);
+                }}
               >
                 <MenuItem value="preview">
                   Hypothetical preview
@@ -1932,7 +1950,7 @@ export default function ResponseSimulator() {
             >
               {mode === "preview"
                 ? "Read-only Digital Twin preview. No SOC case, approval or real endpoint change is created."
-                : "Historical persisted SOC simulation. This view does not execute any response."}
+                : "Persisted Digital Twin decision from the SOC workflow. Viewing it does not execute another response."}
             </Alert>
           )}
         </CardContent>
@@ -1946,6 +1964,55 @@ export default function ResponseSimulator() {
           Select a detected incident to view
           Digital Twin diagnostics.
         </Alert>
+      )}
+
+      {incidentId && selectedIncident && (
+        <Card
+          sx={{
+            mb: 3,
+            borderColor: hasSocCase
+              ? "rgba(34,197,94,0.30)"
+              : "rgba(148,163,184,0.20)",
+          }}
+        >
+          <CardContent sx={{ p: 2.5 }}>
+            <Stack
+              direction={{ xs: "column", md: "row" }}
+              justifyContent="space-between"
+              alignItems={{ xs: "flex-start", md: "center" }}
+              spacing={2}
+            >
+              <Box>
+                <Typography fontWeight={750}>
+                  SOC Response Workflow
+                </Typography>
+                <Typography
+                  sx={{
+                    color: "#94a3b8",
+                    fontSize: 12,
+                    mt: 0.5,
+                  }}
+                >
+                  {hasSocCase
+                    ? `Case ${display(selectedIncident.soc_case_status)} · Approval ${display(selectedIncident.approval_status)} · Ticket ${display(selectedIncident.ticket_id)}`
+                    : "No persisted SOC case exists yet. Preview mode remains read-only."}
+                </Typography>
+              </Box>
+
+              <Button
+                variant="outlined"
+                disabled={!hasSocCase}
+                onClick={() =>
+                  navigate("/approvals", {
+                    state: { incidentId },
+                  })
+                }
+              >
+                Open Approvals
+              </Button>
+            </Stack>
+          </CardContent>
+        </Card>
       )}
 
       {/* EVIDENCE OVERVIEW */}

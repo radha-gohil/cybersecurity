@@ -43,6 +43,10 @@ from endpoint.collectors.registry_monitor import (
     RegistryMonitor,
 )
 
+from endpoint.collectors.windows_auth_collector import (
+    WindowsAuthCollector,
+)
+
 from endpoint.runtime.collector_heartbeat import (
     initialize_heartbeat_table,
     update_collector_heartbeat,
@@ -135,6 +139,19 @@ class SentinelAgent:
 
 
         # ========================================================
+        # WINDOWS AUTHENTICATION COLLECTOR
+        # ========================================================
+
+        self.auth_monitor = (
+            WindowsAuthCollector(
+                poll_interval=5.0,
+                max_events_per_poll=50,
+                auth_detection_mode="SHADOW",
+            )
+        )
+
+
+        # ========================================================
         # COLLECTOR REGISTRY
         # ========================================================
 
@@ -151,6 +168,9 @@ class SentinelAgent:
 
             "registry":
                 self.registry_monitor,
+
+            "auth":
+                self.auth_monitor,
         }
 
 
@@ -986,6 +1006,12 @@ class SentinelAgent:
         logger.info(
 
             "Registry monitoring      : ENABLED"
+        )
+
+
+        logger.info(
+
+            "Authentication monitoring: ENABLED (READ-ONLY / SHADOW)"
         )
 
 

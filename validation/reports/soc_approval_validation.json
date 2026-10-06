@@ -1,0 +1,108 @@
+{
+  "suite": "SENTINEL-X PHASE 7B APPROVAL AND SIMULATED RESPONSE",
+  "incident_id": "PHASE7B-910B2DFC096B4210",
+  "passed": 9,
+  "failed": 1,
+  "results": [
+    {
+      "scenario_id": "7B-01",
+      "family": "SOC_APPROVAL_E2E",
+      "scenario_name": "Validation SOC stores are isolated from live database",
+      "observed": "active=sentinel_validation.db;case=sentinel_validation.db;action=sentinel_validation.db;evidence=sentinel_validation.db;workflow_ticket=sentinel_validation.db;ticket=sentinel_validation.db",
+      "expected": "all SOC stores -> sentinel_validation.db",
+      "failure_layers": "",
+      "passed": true,
+      "notes": ""
+    },
+    {
+      "scenario_id": "7B-02",
+      "family": "SOC_APPROVAL_E2E",
+      "scenario_name": "Digital Twin produces approval-required response plan",
+      "observed": "plan=Minimal Targeted Response;actions=1;approval=True;simulation=True",
+      "expected": "plan exists with approval-required response action",
+      "failure_layers": "",
+      "passed": true,
+      "notes": ""
+    },
+    {
+      "scenario_id": "7B-03",
+      "family": "SOC_APPROVAL_E2E",
+      "scenario_name": "Controlled SOC case is visible through API",
+      "observed": "http=200;status=AWAITING_ANALYST_REVIEW;ticket=TKT-FC2611460048;approval=PENDING",
+      "expected": "case visible with PENDING ticket",
+      "failure_layers": "",
+      "passed": true,
+      "notes": ""
+    },
+    {
+      "scenario_id": "7B-04",
+      "family": "SOC_APPROVAL_E2E",
+      "scenario_name": "Response action begins in safe PENDING state",
+      "observed": "http=200;actions=1;pending=1",
+      "expected": "approval=PENDING and execution=NOT_EXECUTED",
+      "failure_layers": "",
+      "passed": true,
+      "notes": ""
+    },
+    {
+      "scenario_id": "7B-05",
+      "family": "SOC_APPROVAL_E2E",
+      "scenario_name": "SOC ticket persists with analyst approval pending",
+      "observed": "http=200;tickets=1;pending=1",
+      "expected": "ticket approval=PENDING",
+      "failure_layers": "",
+      "passed": true,
+      "notes": ""
+    },
+    {
+      "scenario_id": "7B-06",
+      "family": "SOC_APPROVAL_E2E",
+      "scenario_name": "Analyst approval routes actions through simulation only",
+      "observed": "http=200;success=True;status=SIMULATED_RESPONSE_COMPLETED;routes=1;safe_routes=1;real_execution=False",
+      "expected": "SIMULATED_RESPONSE_COMPLETED / executed=False",
+      "failure_layers": "",
+      "passed": true,
+      "notes": ""
+    },
+    {
+      "scenario_id": "7B-07",
+      "family": "SOC_APPROVAL_E2E",
+      "scenario_name": "Approved simulated action state persists",
+      "observed": "http=200;actions=1;approved_success=0",
+      "expected": "all actions APPROVED + SUCCESS",
+      "failure_layers": "ACTION_PERSISTENCE",
+      "passed": false,
+      "notes": ""
+    },
+    {
+      "scenario_id": "7B-08",
+      "family": "SOC_APPROVAL_E2E",
+      "scenario_name": "SOC ticket approval state persists",
+      "observed": "http=200;tickets=1;approved=1",
+      "expected": "ticket approval=APPROVED",
+      "failure_layers": "",
+      "passed": true,
+      "notes": ""
+    },
+    {
+      "scenario_id": "7B-09",
+      "family": "SOC_APPROVAL_E2E",
+      "scenario_name": "Already-approved ticket cannot be approved again",
+      "observed": "http=409;detail=SOC ticket is already approved.",
+      "expected": "HTTP 409 on duplicate approval",
+      "failure_layers": "",
+      "passed": true,
+      "notes": ""
+    },
+    {
+      "scenario_id": "7B-10",
+      "family": "SOC_APPROVAL_E2E",
+      "scenario_name": "Simulated response reaches mitigation verification and full incident view",
+      "observed": "verify_http=200;verify_status=SIMULATION_VERIFIED;full_http=200;incident_visible=True;real_execution=False",
+      "expected": "SIMULATION_VERIFIED + complete persisted incident view",
+      "failure_layers": "",
+      "passed": true,
+      "notes": ""
+    }
+  ]
+}

@@ -161,6 +161,616 @@ class DigitalTwinDecisionIntegration:
 
 
     # ============================================================
+    # TARGET NORMALIZATION
+    # ============================================================
+
+    def safe_int(
+        self,
+        value,
+        default=None,
+    ):
+
+        try:
+            if value is None or isinstance(value, bool):
+                return default
+
+            return int(
+                value
+            )
+
+        except (
+            TypeError,
+            ValueError,
+            OverflowError,
+        ):
+            return default
+
+
+    def normalize_process_target(
+        self,
+        target,
+        twin,
+    ):
+
+        target = self.safe_dict(
+            target
+        )
+
+        raw_items = target.get(
+            "processes"
+        )
+
+        if not isinstance(
+            raw_items,
+            list,
+        ):
+            raw_items = (
+                [target]
+                if target
+                else []
+            )
+
+
+        by_pid = {}
+
+
+        for item in raw_items:
+
+            if not isinstance(
+                item,
+                dict,
+            ):
+                continue
+
+
+            pid = self.safe_int(
+                item.get(
+                    "pid"
+                )
+            )
+
+
+            if (
+                pid is None
+                or pid <= 0
+            ):
+                continue
+
+
+            # Keep only entities that actually exist in the
+            # virtual endpoint state.
+            if twin.find_process(
+                pid
+            ) is None:
+                continue
+
+
+            candidate = deepcopy(
+                item
+            )
+
+            candidate[
+                "pid"
+            ] = pid
+
+
+            existing = by_pid.get(
+                pid
+            )
+
+
+            if existing is None:
+
+                by_pid[
+                    pid
+                ] = candidate
+
+                continue
+
+
+            # Prefer the target carrying a semantic threat type.
+            existing_has_type = bool(
+                existing.get(
+                    "threat_type"
+                )
+            )
+
+            candidate_has_type = bool(
+                candidate.get(
+                    "threat_type"
+                )
+            )
+
+
+            if (
+                candidate_has_type
+                and not existing_has_type
+            ):
+
+                by_pid[
+                    pid
+                ] = candidate
+
+                continue
+
+
+            # If both have the same semantic quality, retain the
+            # stronger explicitly supplied threat score.
+            if (
+                candidate_has_type
+                == existing_has_type
+            ):
+
+                existing_score = (
+                    self.safe_int(
+                        existing.get(
+                            "threat_score"
+                        ),
+                        0,
+                    )
+                    or 0
+                )
+
+                candidate_score = (
+                    self.safe_int(
+                        candidate.get(
+                            "threat_score"
+                        ),
+                        0,
+                    )
+                    or 0
+                )
+
+
+                if (
+                    candidate_score
+                    > existing_score
+                ):
+
+                    by_pid[
+                        pid
+                    ] = candidate
+
+
+        processes = list(
+            by_pid.values()
+        )
+
+
+        # Fallback to the first known twin process if the
+        # recommendation did not provide a usable target.
+        if (
+            not processes
+            and twin.processes
+        ):
+
+            process = self.safe_dict(
+                twin.processes[
+                    0
+                ]
+            )
+
+            pid = self.safe_int(
+                process.get(
+                    "pid"
+                )
+            )
+
+
+            if (
+                pid is not None
+                and pid > 0
+            ):
+
+                processes.append(
+                    {
+                        "pid":
+                            pid,
+
+                        "name":
+                            process.get(
+                                "name"
+                            ),
+
+                        "exe":
+                            process.get(
+                                "exe"
+                            ),
+
+                        "threat_score":
+                            (
+                                process.get(
+                                    "combined_threat_score"
+                                )
+                                or process.get(
+                                    "behavior_score"
+                                )
+                                or process.get(
+                                    "anomaly_score"
+                                )
+                                or 0
+                            ),
+
+                        "threat_type":
+                            process.get(
+                                "threat_type"
+                            ),
+                    }
+                )
+
+
+        return {
+            "processes":
+                processes
+        }
+
+
+    def normalize_file_target(
+        self,
+        target,
+        twin,
+    ):
+
+        target = self.safe_dict(
+            target
+        )
+
+        raw_items = target.get(
+            "files"
+        )
+
+        if not isinstance(
+            raw_items,
+            list,
+        ):
+            raw_items = (
+                [target]
+                if target
+                else []
+            )
+
+
+        files = []
+
+        seen = set()
+
+
+        for item in raw_items:
+
+            if not isinstance(
+                item,
+                dict,
+            ):
+                continue
+
+
+            path = item.get(
+                "path"
+            )
+
+            sha256 = item.get(
+                "sha256"
+            )
+
+
+            if twin.find_file(
+                path=path,
+                sha256=sha256,
+            ) is None:
+                continue
+
+
+            signature = (
+                str(
+                    path
+                    or ""
+                ).lower(),
+
+                str(
+                    sha256
+                    or ""
+                ).lower(),
+            )
+
+
+            if signature in seen:
+                continue
+
+
+            seen.add(
+                signature
+            )
+
+            files.append(
+                deepcopy(
+                    item
+                )
+            )
+
+
+        if (
+            not files
+            and twin.files
+        ):
+
+            item = self.safe_dict(
+                twin.files[
+                    0
+                ]
+            )
+
+            files.append(
+                {
+                    "path":
+                        item.get(
+                            "path"
+                        ),
+
+                    "sha256":
+                        item.get(
+                            "sha256"
+                        ),
+                }
+            )
+
+
+        return {
+            "files":
+                files
+        }
+
+
+    def normalize_network_target(
+        self,
+        target,
+        twin,
+    ):
+
+        target = self.safe_dict(
+            target
+        )
+
+        raw_items = target.get(
+            "connections"
+        )
+
+        if not isinstance(
+            raw_items,
+            list,
+        ):
+            raw_items = (
+                [target]
+                if target
+                else []
+            )
+
+
+        connections = []
+
+        seen = set()
+
+
+        for item in raw_items:
+
+            if not isinstance(
+                item,
+                dict,
+            ):
+                continue
+
+
+            remote_ip = item.get(
+                "remote_ip"
+            )
+
+            remote_port = item.get(
+                "remote_port"
+            )
+
+
+            if not remote_ip:
+                continue
+
+
+            if twin.find_network_connection(
+                remote_ip,
+                remote_port,
+            ) is None:
+                continue
+
+
+            signature = (
+                str(
+                    remote_ip
+                ),
+
+                str(
+                    remote_port
+                ),
+            )
+
+
+            if signature in seen:
+                continue
+
+
+            seen.add(
+                signature
+            )
+
+            connections.append(
+                deepcopy(
+                    item
+                )
+            )
+
+
+        if (
+            not connections
+            and twin.network_connections
+        ):
+
+            item = self.safe_dict(
+                twin.network_connections[
+                    0
+                ]
+            )
+
+            connections.append(
+                {
+                    "remote_ip":
+                        item.get(
+                            "remote_ip"
+                        ),
+
+                    "remote_port":
+                        item.get(
+                            "remote_port"
+                        ),
+
+                    "pid":
+                        item.get(
+                            "pid"
+                        ),
+
+                    "process_name":
+                        item.get(
+                            "process_name"
+                        ),
+                }
+            )
+
+
+        return {
+            "connections":
+                connections
+        }
+
+
+    def normalize_registry_target(
+        self,
+        target,
+        twin,
+    ):
+
+        target = self.safe_dict(
+            target
+        )
+
+        raw_items = target.get(
+            "registry_artifacts"
+        )
+
+        if not isinstance(
+            raw_items,
+            list,
+        ):
+            raw_items = (
+                [target]
+                if target
+                else []
+            )
+
+
+        artifacts = []
+
+        seen = set()
+
+
+        for item in raw_items:
+
+            if not isinstance(
+                item,
+                dict,
+            ):
+                continue
+
+
+            key = item.get(
+                "key"
+            )
+
+            value_name = item.get(
+                "value_name"
+            )
+
+
+            if not key:
+                continue
+
+
+            if twin.find_persistence_artifact(
+                key,
+                value_name,
+            ) is None:
+                continue
+
+
+            signature = (
+                str(
+                    key
+                ).lower(),
+
+                str(
+                    value_name
+                    or ""
+                ).lower(),
+            )
+
+
+            if signature in seen:
+                continue
+
+
+            seen.add(
+                signature
+            )
+
+            artifacts.append(
+                deepcopy(
+                    item
+                )
+            )
+
+
+        if (
+            not artifacts
+            and twin.persistence_artifacts
+        ):
+
+            item = self.safe_dict(
+                twin.persistence_artifacts[
+                    0
+                ]
+            )
+
+            artifacts.append(
+                {
+                    "key":
+                        item.get(
+                            "key"
+                        ),
+
+                    "value_name":
+                        item.get(
+                            "value_name"
+                        ),
+
+                    "value_data":
+                        item.get(
+                            "value_data"
+                        ),
+                }
+            )
+
+
+        return {
+            "registry_artifacts":
+                artifacts
+        }
+
+
+    # ============================================================
     # RECOMMENDATION -> DIGITAL TWIN ACTION
     # ============================================================
 
@@ -205,40 +815,24 @@ class DigitalTwinDecisionIntegration:
             "QUARANTINE_FILE",
         }:
 
-            if target:
+            normalized = (
+                self.normalize_file_target(
+                    target,
+                    twin,
+                )
+            )
+
+
+            if normalized[
+                "files"
+            ]:
 
                 return {
                     "action_type":
                         "QUARANTINE_FILE",
 
                     "target":
-                        deepcopy(
-                            target
-                        ),
-                }
-
-
-            if twin.files:
-
-                file_item = twin.files[0]
-
-
-                return {
-                    "action_type":
-                        "QUARANTINE_FILE",
-
-                    "target": {
-
-                        "path":
-                            file_item.get(
-                                "path"
-                            ),
-
-                        "sha256":
-                            file_item.get(
-                                "sha256"
-                            ),
-                    },
+                        normalized,
                 }
 
 
@@ -251,35 +845,24 @@ class DigitalTwinDecisionIntegration:
             "TERMINATE_PROCESS",
         }:
 
-            if target:
+            normalized = (
+                self.normalize_process_target(
+                    target,
+                    twin,
+                )
+            )
+
+
+            if normalized[
+                "processes"
+            ]:
 
                 return {
                     "action_type":
                         "TERMINATE_PROCESS",
 
                     "target":
-                        deepcopy(
-                            target
-                        ),
-                }
-
-
-            if twin.processes:
-
-                process = twin.processes[0]
-
-
-                return {
-                    "action_type":
-                        "TERMINATE_PROCESS",
-
-                    "target": {
-
-                        "pid":
-                            process.get(
-                                "pid"
-                            ),
-                    },
+                        normalized,
                 }
 
 
@@ -292,42 +875,24 @@ class DigitalTwinDecisionIntegration:
             "BLOCK_NETWORK",
         }:
 
-            if target:
+            normalized = (
+                self.normalize_network_target(
+                    target,
+                    twin,
+                )
+            )
+
+
+            if normalized[
+                "connections"
+            ]:
 
                 return {
                     "action_type":
                         "BLOCK_NETWORK",
 
                     "target":
-                        deepcopy(
-                            target
-                        ),
-                }
-
-
-            if twin.network_connections:
-
-                connection = (
-                    twin.network_connections[0]
-                )
-
-
-                return {
-                    "action_type":
-                        "BLOCK_NETWORK",
-
-                    "target": {
-
-                        "remote_ip":
-                            connection.get(
-                                "remote_ip"
-                            ),
-
-                        "remote_port":
-                            connection.get(
-                                "remote_port"
-                            ),
-                    },
+                        normalized,
                 }
 
 
@@ -340,42 +905,24 @@ class DigitalTwinDecisionIntegration:
             "REMEDIATE_PERSISTENCE",
         }:
 
-            if target:
+            normalized = (
+                self.normalize_registry_target(
+                    target,
+                    twin,
+                )
+            )
+
+
+            if normalized[
+                "registry_artifacts"
+            ]:
 
                 return {
                     "action_type":
                         "REMEDIATE_PERSISTENCE",
 
                     "target":
-                        deepcopy(
-                            target
-                        ),
-                }
-
-
-            if twin.persistence_artifacts:
-
-                artifact = (
-                    twin.persistence_artifacts[0]
-                )
-
-
-                return {
-                    "action_type":
-                        "REMEDIATE_PERSISTENCE",
-
-                    "target": {
-
-                        "key":
-                            artifact.get(
-                                "key"
-                            ),
-
-                        "value_name":
-                            artifact.get(
-                                "value_name"
-                            ),
-                    },
+                        normalized,
                 }
 
 

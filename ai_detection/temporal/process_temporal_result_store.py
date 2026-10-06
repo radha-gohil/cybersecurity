@@ -10,6 +10,12 @@ from datetime import (
 
 from pathlib import Path
 
+
+from config import (
+    ACTIVE_SOC_DATABASE_PATH,
+)
+
+
 from typing import (
     Any,
     Dict,
@@ -62,10 +68,9 @@ PROJECT_ROOT = (
 
 
 DEFAULT_DATABASE_PATH = (
-    PROJECT_ROOT
-    / "data"
-    / "database"
-    / "sentinel_endpoint.db"
+    Path(
+        ACTIVE_SOC_DATABASE_PATH
+    )
 )
 
 

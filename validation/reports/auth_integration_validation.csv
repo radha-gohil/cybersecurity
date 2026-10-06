@@ -1,0 +1,11 @@
+scenario_id,scenario_name,observed,expected,failure_layers,passed
+AI-01,AuthMonitor uses shared runtime telemetry manager,True,True,,True
+AI-02,AuthMonitor defaults to SHADOW,SHADOW,SHADOW,,True
+AI-03,SHADOW returns findings without authoritative persistence,type=security_auth_failure;severity=INFO;stored=0;findings=1,failure/INFO/stored0/findings1,,True
+AI-04,Runtime mode enforces safe authentication detection mode,SHADOW,SHADOW,,True
+AI-05,Successful authentication keeps success telemetry type,security_auth_success/INFO,security_auth_success/INFO,,True
+AI-06,WindowsAuthCollector defaults to SHADOW,SHADOW,SHADOW,,True
+AI-07,Windows Event 4625 parses to normalized failure,"{""event_type"": ""login_failure"", ""windows_event_id"": 4625, ""record_id"": 7001, ""timestamp"": ""2026-10-06T12:00:00.0000000Z"", ""username"": ""target_user"", ""domain"": ""TEST"", ""source_ip"": ""198.51.100.77"", ""source_port"": ""51515"", ""workstation"": ""TESTHOST"", ""logon_type"": ""3"", ""process_name"": ""C:\\Windows\\System32\\svchost.exe"", ""result"": ""failed"", ""status_code"": ""0xC000006D"", ""sub_status"": ""0xC000006A"", ""source"": ""windows_security_log"", ""synthetic_test"": false}",normalized login_failure,,True
+AI-08,Windows Event 4624 parses to normalized success,"{""event_type"": ""login_success"", ""windows_event_id"": 4624, ""record_id"": 8001, ""timestamp"": ""2026-10-06T12:00:00.0000000Z"", ""username"": ""normal_user"", ""domain"": ""TEST"", ""source_ip"": ""local"", ""source_port"": ""51515"", ""workstation"": ""TESTHOST"", ""logon_type"": ""3"", ""process_name"": ""C:\\Windows\\System32\\svchost.exe"", ""result"": ""success"", ""status_code"": ""0xC000006D"", ""sub_status"": ""0xC000006A"", ""source"": ""windows_security_log"", ""synthetic_test"": false}",normalized login_success,,True
+AI-09,Windows EventRecordID is idempotent,calls=1,calls=1,,True
+AI-10,Missing username is ignored without consuming EventRecordID,result=None;calls=0;record_consumed=False,ignored/calls0/not-consumed,,True

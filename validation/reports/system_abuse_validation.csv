@@ -1,0 +1,11 @@
+scenario_id,family,scenario_name,detections,expected,failure_layers,passed
+S1-01,SYSTEM_ABUSE,Unknown system event remains quiet,,NO_ALERT,,True
+S1-02,SYSTEM_ABUSE,SYSTEM special privileges remain quiet,,NO_ALERT,,True
+S1-03,SYSTEM_ABUSE,User receives sensitive privileges,SENSITIVE_PRIVILEGE_ASSIGNMENT,SENSITIVE_PRIVILEGE_ASSIGNMENT,,True
+S1-04,SYSTEM_ABUSE,Local account creation,LOCAL_ACCOUNT_CREATED,LOCAL_ACCOUNT_CREATED,,True
+S1-05,SYSTEM_ABUSE,Ordinary Users group membership stays quiet,,NO_ALERT,,True
+S1-06,SYSTEM_ABUSE,Account added to Administrators,PRIVILEGED_GROUP_MEMBERSHIP_CHANGE,PRIVILEGED_GROUP_MEMBERSHIP_CHANGE,,True
+S1-07,SYSTEM_ABUSE,Scheduled task persistence signal,SCHEDULED_TASK_PERSISTENCE,SCHEDULED_TASK_PERSISTENCE,,True
+S1-08,SYSTEM_ABUSE,Suspicious PowerShell scheduled task,SUSPICIOUS_SCHEDULED_TASK_PERSISTENCE,SUSPICIOUS_SCHEDULED_TASK_PERSISTENCE,,True
+S1-09,SYSTEM_ABUSE,Windows Security log cleared,SECURITY_LOG_CLEARED,SECURITY_LOG_CLEARED,,True
+S1-10,SYSTEM_ABUSE,Windows audit policy changed,AUDIT_POLICY_CHANGE,AUDIT_POLICY_CHANGE,,True

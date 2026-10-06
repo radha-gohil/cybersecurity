@@ -4,7 +4,9 @@ import sqlite3
 from pathlib import Path
 from datetime import datetime, timezone
 from contextlib import closing
-
+from config import (
+    ACTIVE_SOC_DATABASE_PATH,
+)
 
 class SOCCaseStore:
 
@@ -14,14 +16,9 @@ class SOCCaseStore:
     ):
 
         if database_path is None:
-
+    
             database_path = (
-                Path(__file__)
-                .resolve()
-                .parents[1]
-                / "data"
-                / "database"
-                / "sentinel_endpoint.db"
+                ACTIVE_SOC_DATABASE_PATH
             )
 
         self.database_path = Path(

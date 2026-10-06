@@ -1,0 +1,11 @@
+scenario_id,family,scenario_name,observed,expected,failure_layers,passed,notes
+E2E-01,SOC_E2E,Authoritative validation detections correlate into one incident,"id=27e3e58e-418b-4927-9d00-64f3fc0a770f;score=100;events=4;categories=FILE,NETWORK,PROCESS,REGISTRY",one incident / score>=80 / 4 cross-telemetry events,,True,
+E2E-02,SOC_E2E,Detected incident persists and reloads through API,http=200;id=27e3e58e-418b-4927-9d00-64f3fc0a770f;events=4;score=100,HTTP 200 and matching incident,,True,
+E2E-03,SOC_E2E,Detected incident completes AI multi-agent investigation,http=200;success=True;already_in_soc=False;agent_status=COMPLETED;case_status=AWAITING_ANALYST_REVIEW,investigation success / multi-agent COMPLETED,,True,
+E2E-04,SOC_E2E,Persistent SOC case and ticket reload correctly,http=200;status=AWAITING_ANALYST_REVIEW;ticket=TKT-4FBE2D274EDA;actions=0,persistent case + ticket + simulation safety,,True,
+E2E-05,SOC_E2E,Risk assessment is produced from persisted evidence,risk_score=20;risk_level=LOW,risk_score > 0 with valid risk level,,True,
+E2E-06,SOC_E2E,Digital Twin follows conservative response policy,http=200;risk=20;level=LOW;candidate_actions=0;decision=NO_RESPONSE_PLAN_AVAILABLE;best_plan=None;simulation=True,low/unverified risk => safe no-response plan; otherwise valid Digital Twin plan,,True,
+E2E-07,SOC_E2E,Response policy correctly controls analyst approval,http=200;actions=0;pending=0;ticket_approval=NOT_REQUIRED;decision=NO_RESPONSE_PLAN_AVAILABLE,safe low-risk case => NOT_REQUIRED; response case => PENDING analyst approval,,True,
+E2E-08,SOC_E2E,Approval contract respects current response policy,approval_not_required=True;route_exists=True;ticket_approval=NOT_REQUIRED;actions=0;pending=0,no forced approval for low-risk case; approval API remains registered,,True,
+E2E-09,SOC_E2E,Simulated mitigation is verified and persisted,post_http=200;status=SIMULATION_VERIFIED;persisted=True;get_http=200;verified=True,SIMULATION_VERIFIED and persisted,,True,
+E2E-10,SOC_E2E,Threat/SOC frontend API contract exposes complete incident state,full_route=True;tickets_route=True;full_http=200;dashboard_http=200;tickets_http=200;ticket_count=1;incident_visible=True,full incident + dashboard + ticket APIs all expose persisted workflow,,True,

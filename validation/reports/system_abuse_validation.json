@@ -1,0 +1,97 @@
+{
+  "suite": "SENTINEL-X PHASE 5 S1 SYSTEM ABUSE VALIDATION",
+  "passed": 10,
+  "failed": 0,
+  "results": [
+    {
+      "scenario_id": "S1-01",
+      "family": "SYSTEM_ABUSE",
+      "scenario_name": "Unknown system event remains quiet",
+      "detections": "",
+      "expected": "NO_ALERT",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "S1-02",
+      "family": "SYSTEM_ABUSE",
+      "scenario_name": "SYSTEM special privileges remain quiet",
+      "detections": "",
+      "expected": "NO_ALERT",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "S1-03",
+      "family": "SYSTEM_ABUSE",
+      "scenario_name": "User receives sensitive privileges",
+      "detections": "SENSITIVE_PRIVILEGE_ASSIGNMENT",
+      "expected": "SENSITIVE_PRIVILEGE_ASSIGNMENT",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "S1-04",
+      "family": "SYSTEM_ABUSE",
+      "scenario_name": "Local account creation",
+      "detections": "LOCAL_ACCOUNT_CREATED",
+      "expected": "LOCAL_ACCOUNT_CREATED",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "S1-05",
+      "family": "SYSTEM_ABUSE",
+      "scenario_name": "Ordinary Users group membership stays quiet",
+      "detections": "",
+      "expected": "NO_ALERT",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "S1-06",
+      "family": "SYSTEM_ABUSE",
+      "scenario_name": "Account added to Administrators",
+      "detections": "PRIVILEGED_GROUP_MEMBERSHIP_CHANGE",
+      "expected": "PRIVILEGED_GROUP_MEMBERSHIP_CHANGE",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "S1-07",
+      "family": "SYSTEM_ABUSE",
+      "scenario_name": "Scheduled task persistence signal",
+      "detections": "SCHEDULED_TASK_PERSISTENCE",
+      "expected": "SCHEDULED_TASK_PERSISTENCE",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "S1-08",
+      "family": "SYSTEM_ABUSE",
+      "scenario_name": "Suspicious PowerShell scheduled task",
+      "detections": "SUSPICIOUS_SCHEDULED_TASK_PERSISTENCE",
+      "expected": "SUSPICIOUS_SCHEDULED_TASK_PERSISTENCE",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "S1-09",
+      "family": "SYSTEM_ABUSE",
+      "scenario_name": "Windows Security log cleared",
+      "detections": "SECURITY_LOG_CLEARED",
+      "expected": "SECURITY_LOG_CLEARED",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "S1-10",
+      "family": "SYSTEM_ABUSE",
+      "scenario_name": "Windows audit policy changed",
+      "detections": "AUDIT_POLICY_CHANGE",
+      "expected": "AUDIT_POLICY_CHANGE",
+      "failure_layers": "",
+      "passed": true
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+scenario_id,family,scenario_name,detections,expected,failure_layers,passed,notes
+A1-01,AUTHENTICATION,Successful login remains quiet,,NO_ALERT,,True,A successful authentication must not enter failure history.
+A1-02,AUTHENTICATION,Single failed login remains quiet,,NO_ALERT,,True,
+A1-03,AUTHENTICATION,Four failures stay below repeated threshold,,NO_REPEATED_LOGIN_FAILURES,,True,Current repeated-failure threshold is 5 within 60 seconds.
+A1-04,AUTHENTICATION,Five failures trigger repeated-login signal,REPEATED_LOGIN_FAILURES,REPEATED_LOGIN_FAILURES,,True,Exact repeated-failure boundary.
+A1-05,AUTHENTICATION,Three accounts from one source trigger multi-account signal,MULTI_ACCOUNT_LOGIN_FAILURES,MULTI_ACCOUNT_LOGIN_FAILURES,,True,Exact multi-account threshold is 3.
+A1-06,AUTHENTICATION,Repeated plus multi-account failures trigger combined behavior,"AUTH_BRUTE_FORCE_BEHAVIOR,MULTI_ACCOUNT_LOGIN_FAILURES,REPEATED_LOGIN_FAILURES",AUTH_BRUTE_FORCE_BEHAVIOR,,True,Five failures across three accounts provide both supporting signals.
+A1-07,AUTHENTICATION,Different source IPs are not incorrectly merged,,NO_ALERT,,True,Each source has only four failures.
+A1-08,AUTHENTICATION,Successful login does not become a failure or erase prior failures,REPEATED_LOGIN_FAILURES,REPEATED_LOGIN_FAILURES_AFTER_5_TOTAL_FAILURES,,True,The success itself must remain quiet; the fifth actual failure still reaches threshold.
+A1-09,AUTHENTICATION,Duplicate Windows EventRecordID is processed once,,DEDUPLICATED,,True,AuthMonitor calls=1
+A1-10,AUTHENTICATION,Missing username or source IP fails quiet,,NO_ALERT,,True,Detector must not invent identity or source evidence.

@@ -5,7 +5,9 @@ from pathlib import Path
 from response.response_action import (
     ResponseAction,
 )
-
+from config import (
+    ACTIVE_SOC_DATABASE_PATH,
+)
 
 class ResponseActionStore:
 
@@ -17,12 +19,7 @@ class ResponseActionStore:
         if database_path is None:
 
             database_path = (
-                Path(__file__)
-                .resolve()
-                .parents[1]
-                / "data"
-                / "database"
-                / "sentinel_endpoint.db"
+                ACTIVE_SOC_DATABASE_PATH
             )
 
         self.database_path = Path(

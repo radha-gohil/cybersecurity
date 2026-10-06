@@ -2,7 +2,9 @@ import sqlite3
 from pathlib import Path
 
 from response.soc_ticket import SOCTicket
-
+from config import (
+    ACTIVE_SOC_DATABASE_PATH,
+)
 
 class SOCTicketStore:
 
@@ -14,12 +16,7 @@ class SOCTicketStore:
         if database_path is None:
 
             database_path = (
-                Path(__file__)
-                .resolve()
-                .parents[1]
-                / "data"
-                / "database"
-                / "sentinel_endpoint.db"
+                ACTIVE_SOC_DATABASE_PATH
             )
 
 

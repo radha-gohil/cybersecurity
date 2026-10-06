@@ -1,0 +1,88 @@
+{
+  "suite": "SENTINEL-X S1 SYSTEM ABUSE INTEGRATION",
+  "validation_runtime": true,
+  "passed": 10,
+  "failed": 0,
+  "results": [
+    {
+      "scenario_id": "SI-01",
+      "scenario_name": "SystemAbuseMonitor uses shared telemetry manager",
+      "observed": "True",
+      "expected": "True",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "SI-02",
+      "scenario_name": "SystemAbuseMonitor defaults to SHADOW",
+      "observed": "SHADOW",
+      "expected": "SHADOW",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "SI-03",
+      "scenario_name": "SHADOW returns system finding without persistence",
+      "observed": "type=security_group_membership_change;severity=INFO;stored=0;findings=1",
+      "expected": "group-change/INFO/stored0/findings1",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "SI-04",
+      "scenario_name": "Runtime mode enforces safe system detection mode",
+      "observed": "SHADOW",
+      "expected": "SHADOW",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "SI-05",
+      "scenario_name": "Windows system collector covers all S1 event IDs",
+      "observed": "1102,4672,4698,4719,4720,4728,4732",
+      "expected": "1102,4672,4698,4719,4720,4728,4732",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "SI-06",
+      "scenario_name": "Event 4672 parses privilege evidence",
+      "observed": "{\"event_type\": \"windows_system_security_event\", \"windows_event_id\": 4672, \"record_id\": 6101, \"timestamp\": \"2026-10-06T12:00:00.0000000Z\", \"username\": \"operator1\", \"target_username\": \"\", \"group_name\": \"\", \"member_name\": \"\", \"privilege_list\": \"SeDebugPrivilege SeImpersonatePrivilege\", \"task_name\": \"\", \"task_command\": \"\", \"task_content\": \"\", \"subcategory\": \"\", \"change\": \"\", \"source\": \"windows_security_log\", \"synthetic_test\": false}",
+      "expected": "4672/operator1/privileges",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "SI-07",
+      "scenario_name": "Event 4720 parses created account",
+      "observed": "{\"event_type\": \"windows_system_security_event\", \"windows_event_id\": 4720, \"record_id\": 6201, \"timestamp\": \"2026-10-06T12:00:00.0000000Z\", \"username\": \"administrator\", \"target_username\": \"new_local_user\", \"group_name\": \"\", \"member_name\": \"\", \"privilege_list\": \"\", \"task_name\": \"\", \"task_command\": \"\", \"task_content\": \"\", \"subcategory\": \"\", \"change\": \"\", \"source\": \"windows_security_log\", \"synthetic_test\": false}",
+      "expected": "4720/new_local_user",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "SI-08",
+      "scenario_name": "Event 4732 parses privileged group membership",
+      "observed": "{\"event_type\": \"windows_system_security_event\", \"windows_event_id\": 4732, \"record_id\": 6301, \"timestamp\": \"2026-10-06T12:00:00.0000000Z\", \"username\": \"administrator\", \"target_username\": \"Administrators\", \"group_name\": \"Administrators\", \"member_name\": \"operator1\", \"privilege_list\": \"\", \"task_name\": \"\", \"task_command\": \"\", \"task_content\": \"\", \"subcategory\": \"\", \"change\": \"\", \"source\": \"windows_security_log\", \"synthetic_test\": false}",
+      "expected": "Administrators/operator1",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "SI-09",
+      "scenario_name": "Event 4698 parses scheduled-task evidence",
+      "observed": "{\"event_type\": \"windows_system_security_event\", \"windows_event_id\": 4698, \"record_id\": 6401, \"timestamp\": \"2026-10-06T12:00:00.0000000Z\", \"username\": \"operator1\", \"target_username\": \"\", \"group_name\": \"\", \"member_name\": \"\", \"privilege_list\": \"\", \"task_name\": \"\\\\Updater\", \"task_command\": \"powershell.exe -WindowStyle Hidden -File C:\\\\Users\\\\Public\\\\update.ps1\", \"task_content\": \"powershell.exe -WindowStyle Hidden -File C:\\\\Users\\\\Public\\\\update.ps1\", \"subcategory\": \"\", \"change\": \"\", \"source\": \"windows_security_log\", \"synthetic_test\": false}",
+      "expected": "\\Updater + task command",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "SI-10",
+      "scenario_name": "Events 1102 and 4719 parse audit-tampering evidence",
+      "observed": "{\"1102\": {\"event_type\": \"windows_system_security_event\", \"windows_event_id\": 1102, \"record_id\": 6501, \"timestamp\": \"2026-10-06T12:00:00.0000000Z\", \"username\": \"operator1\", \"target_username\": \"\", \"group_name\": \"\", \"member_name\": \"\", \"privilege_list\": \"\", \"task_name\": \"\", \"task_command\": \"\", \"task_content\": \"\", \"subcategory\": \"\", \"change\": \"\", \"source\": \"windows_security_log\", \"synthetic_test\": false}, \"4719\": {\"event_type\": \"windows_system_security_event\", \"windows_event_id\": 4719, \"record_id\": 6502, \"timestamp\": \"2026-10-06T12:00:00.0000000Z\", \"username\": \"operator1\", \"target_username\": \"\", \"group_name\": \"\", \"member_name\": \"\", \"privilege_list\": \"\", \"task_name\": \"\", \"task_command\": \"\", \"task_content\": \"\", \"subcategory\": \"{TEST-GUID}\", \"change\": \"Success removed\", \"source\": \"windows_security_log\", \"synthetic_test\": false}}",
+      "expected": "1102+4719",
+      "failure_layers": "",
+      "passed": true
+    }
+  ]
+}

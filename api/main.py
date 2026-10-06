@@ -4,6 +4,11 @@ from datetime import datetime, timezone
 
 import threading
 
+from config import (
+    ACTIVE_SOC_DATABASE_PATH,
+    IS_VALIDATION_MODE,
+)
+
 from contextlib import asynccontextmanager
 
 import json
@@ -637,6 +642,9 @@ def get_live_telemetry():
 
             "registry": False,
 
+
+            "auth": False,
+
         }
 
         if agent is not None:
@@ -665,7 +673,7 @@ def get_live_telemetry():
 
             agent_running
 
-            and healthy_count == 4
+            and healthy_count == len(collectors)
 
         )
 
@@ -727,7 +735,7 @@ def get_live_telemetry():
 
             "healthy_collector_count": healthy_count,
 
-            "expected_collector_count": 4,
+            "expected_collector_count": len(collectors),
 
             "all_collectors_healthy": all_healthy,
 
@@ -802,35 +810,20 @@ def _safe_json_dict(value):
     return {}
 
 def _get_endpoint_database_path() -> Path:
+    """
+    Return the database associated with the current
+    SENTINEL-X runtime mode.
 
+    VALIDATION:
+        sentinel_validation.db
+
+    LIVE:
+        sentinel_endpoint.db
     """
 
-    Resolve the existing Sentinel-X endpoint SQLite database.
-
-    api/main.py
-
-        -> project root
-
-        -> data/database/sentinel_endpoint.db
-
-    """
-
-    return (
-
-        Path(__file__)
-
-        .resolve()
-
-        .parents[1]
-
-        / "data"
-
-        / "database"
-
-        / "sentinel_endpoint.db"
-
+    return Path(
+        ACTIVE_SOC_DATABASE_PATH
     )
-
 def _load_event_context_by_event_ids(
 
     event_ids,
@@ -989,448 +982,616 @@ def _load_event_context_by_event_ids(
 
             connection.close()
 
+
+def _safe_json_value(value, default=None):
+    """Decode a JSON database value while preserving scalars."""
+
+    if value is None:
+        return default
+
+    if isinstance(value, (dict, list, int, float, bool)):
+        return value
+
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return default
+
+        try:
+            return json.loads(stripped)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return value
+
+    return default
+
+
+def _first_present(*values):
+    for value in values:
+        if value is not None:
+            return value
+    return None
+
+
+def _severity_rank(value) -> int:
+    return {
+        "INFO": 0,
+        "LOW": 1,
+        "MEDIUM": 2,
+        "HIGH": 3,
+        "CRITICAL": 4,
+    }.get(str(value or "INFO").upper(), 0)
+
+
+def _infer_analysis_category(event_type, metadata):
+    metadata = metadata if isinstance(metadata, dict) else {}
+
+    category = str(
+        metadata.get("event_category") or ""
+    ).upper()
+
+    if category in {"PROCESS", "NETWORK", "FILE", "REGISTRY"}:
+        return category
+
+    event_type = str(event_type or "").lower()
+
+    if event_type.startswith("process"):
+        return "PROCESS"
+    if event_type.startswith("network"):
+        return "NETWORK"
+    if event_type.startswith("file"):
+        return "FILE"
+    if event_type.startswith(("registry", "startup")):
+        return "REGISTRY"
+
+    return "OTHER"
+
+
+def _load_detection_context_by_event_ids(event_ids):
+    """Read persisted detection rows linked to an incident's events."""
+
+    clean_event_ids = [
+        str(event_id)
+        for event_id in event_ids
+        if event_id
+    ]
+
+    if not clean_event_ids:
+        return []
+
+    database_path = _get_endpoint_database_path()
+
+    if not database_path.exists():
+        return []
+
+    placeholders = ",".join("?" for _ in clean_event_ids)
+
+    query = f"""
+        SELECT
+            id AS detection_id,
+            event_id,
+            engine,
+            detected,
+            threat_type,
+            confidence,
+            risk_score,
+            severity,
+            reason,
+            created_at
+        FROM detections
+        WHERE event_id IN ({placeholders})
+        ORDER BY id ASC
+    """
+
+    connection = None
+
+    try:
+        connection = sqlite3.connect(
+            database_path.as_uri() + "?mode=ro",
+            uri=True,
+        )
+        connection.row_factory = sqlite3.Row
+
+        return [
+            dict(row)
+            for row in connection.execute(
+                query,
+                clean_event_ids,
+            ).fetchall()
+        ]
+
+    except Exception:
+        logger.exception(
+            "Unable to load incident-linked detection evidence"
+        )
+        return []
+
+    finally:
+        if connection is not None:
+            connection.close()
+
+
+def _score_from_model_block(block, *keys):
+    if not isinstance(block, dict):
+        return None
+
+    for key in keys:
+        value = block.get(key)
+        if value is not None:
+            return value
+
+    return None
+
+
+def _hydrate_incident_for_analysis(incident: dict) -> dict:
+    """
+    Build the analysis contract consumed by the multi-agent pipeline.
+
+    The correlation incident store intentionally remains lightweight.
+    Before AI analysis, this helper joins it back to the persisted raw
+    events and detections so the agents receive the detector output that
+    actually caused the incident.
+
+    VALIDATION mode may use a clearly-labelled fallback device identity
+    so deterministic synthetic telemetry can exercise the SOC workflow.
+    It never makes validation evidence production eligible.
+    """
+
+    if not isinstance(incident, dict):
+        return {}
+
+    hydrated = dict(incident)
+
+    raw_timeline = [
+        dict(item)
+        for item in (incident.get("timeline") or [])
+        if isinstance(item, dict)
+    ]
+
+    ordered_event_ids = []
+    seen_event_ids = set()
+
+    for event in raw_timeline:
+        event_id = str(event.get("event_id") or "").strip()
+        if event_id and event_id not in seen_event_ids:
+            seen_event_ids.add(event_id)
+            ordered_event_ids.append(event_id)
+
+    for event_id in incident.get("event_ids") or []:
+        event_id = str(event_id or "").strip()
+        if event_id and event_id not in seen_event_ids:
+            seen_event_ids.add(event_id)
+            ordered_event_ids.append(event_id)
+
+    persisted_events = _load_event_context_by_event_ids(
+        ordered_event_ids
+    )
+
+    validation_device = "SENTINEL-X-VALIDATION-ENDPOINT"
+    hydrated_timeline = []
+    raw_by_id = {
+        str(item.get("event_id")): item
+        for item in raw_timeline
+        if item.get("event_id")
+    }
+
+    for event_id in ordered_event_ids:
+        existing = dict(raw_by_id.get(event_id) or {})
+        row = persisted_events.get(event_id)
+
+        if row:
+            metadata = _safe_json_dict(row.get("metadata"))
+            process = _safe_json_dict(row.get("process_data"))
+            file_data = _safe_json_dict(row.get("file_data"))
+            network = _safe_json_dict(row.get("network_data"))
+            registry = _safe_json_dict(row.get("registry_data"))
+
+            device_id = (
+                row.get("device_id")
+                or existing.get("device_id")
+                or metadata.get("device_id")
+            )
+
+            if IS_VALIDATION_MODE and not device_id:
+                device_id = validation_device
+                metadata = dict(metadata)
+                metadata["device_id"] = device_id
+                metadata["device_identity_source"] = (
+                    "VALIDATION_FALLBACK"
+                )
+
+            if IS_VALIDATION_MODE:
+                metadata = dict(metadata)
+                metadata["validation_mode"] = True
+                metadata["synthetic"] = True
+
+            event_type = row.get("event_type") or existing.get("event_type")
+
+            merged = {
+                **existing,
+                "event_id": event_id,
+                "timestamp": row.get("timestamp") or existing.get("timestamp"),
+                "device_id": device_id,
+                "event_type": event_type,
+                "severity": row.get("severity") or existing.get("severity") or "INFO",
+                "source": row.get("source") or existing.get("source"),
+                "process": process,
+                "file": file_data,
+                "network": network,
+                "registry": registry,
+                "metadata": metadata,
+                "event_category": _infer_analysis_category(
+                    event_type,
+                    metadata,
+                ),
+                "simulation_mode": bool(IS_VALIDATION_MODE),
+            }
+        else:
+            merged = existing
+
+            if IS_VALIDATION_MODE:
+                metadata = _safe_json_dict(merged.get("metadata"))
+                metadata = dict(metadata)
+                metadata["validation_mode"] = True
+                metadata["synthetic"] = True
+
+                if not merged.get("device_id"):
+                    merged["device_id"] = validation_device
+                    metadata["device_id"] = validation_device
+                    metadata["device_identity_source"] = (
+                        "VALIDATION_FALLBACK"
+                    )
+
+                merged["metadata"] = metadata
+                merged["simulation_mode"] = True
+
+        hydrated_timeline.append(merged)
+
+    detection_rows = _load_detection_context_by_event_ids(
+        ordered_event_ids
+    )
+
+    detections = []
+
+    for row in detection_rows:
+        if not bool(row.get("detected")):
+            continue
+
+        event_id = str(row.get("event_id") or "")
+        event_row = persisted_events.get(event_id)
+        event_evidence = _build_detection_evidence(event_row)
+
+        process_evidence = event_evidence.get("process") or {}
+        model_scores = event_evidence.get("model_scores") or {}
+        raw_process = (
+            _safe_json_dict(event_row.get("process_data"))
+            if event_row
+            else {}
+        )
+
+        temporal_block = _first_present(
+            raw_process.get("temporal_ai"),
+            raw_process.get("temporal"),
+            raw_process.get("temporal_result"),
+        )
+        if not isinstance(temporal_block, dict):
+            temporal_block = {}
+
+        isolation_block = process_evidence.get("isolation_forest")
+        if not isinstance(isolation_block, dict):
+            isolation_block = {}
+
+        autoencoder_block = process_evidence.get("autoencoder")
+        if not isinstance(autoencoder_block, dict):
+            autoencoder_block = {}
+
+        rule_score = _first_present(
+            model_scores.get("rule_score"),
+            raw_process.get("rule_score"),
+            raw_process.get("behavior_score"),
+        )
+        statistical_score = _first_present(
+            model_scores.get("statistical_score"),
+            raw_process.get("statistical_score"),
+        )
+        temporal_score = _first_present(
+            raw_process.get("temporal_score"),
+            raw_process.get("temporal_ai_score"),
+            _score_from_model_block(
+                temporal_block,
+                "score",
+                "temporal_score",
+                "anomaly_score",
+                "confidence",
+            ),
+        )
+        isolation_score = _first_present(
+            model_scores.get("isolation_forest_score"),
+            _score_from_model_block(
+                isolation_block,
+                "anomaly_confidence",
+                "score",
+                "confidence",
+            ),
+        )
+        autoencoder_score = _first_present(
+            model_scores.get("autoencoder_score"),
+            _score_from_model_block(
+                autoencoder_block,
+                "anomaly_confidence",
+                "score",
+                "confidence",
+            ),
+        )
+        fusion_score = _first_present(
+            model_scores.get("fusion_score"),
+            process_evidence.get("fusion_score"),
+            row.get("risk_score"),
+        )
+
+        stored_reason = _safe_json_value(
+            row.get("reason"),
+            [],
+        )
+        if isinstance(stored_reason, str):
+            stored_reason = [stored_reason]
+        if not isinstance(stored_reason, list):
+            stored_reason = []
+
+        fusion_reasons = process_evidence.get("fusion_reasons") or []
+        if isinstance(fusion_reasons, str):
+            fusion_reasons = [fusion_reasons]
+        if not isinstance(fusion_reasons, list):
+            fusion_reasons = []
+
+        all_reasons = []
+        for value in [*fusion_reasons, *stored_reason]:
+            text_value = str(value or "").strip()
+            if text_value and text_value not in all_reasons:
+                all_reasons.append(text_value)
+
+        reason_text = " ".join(all_reasons).upper()
+        supporting_signals = []
+
+        def add_signal(name):
+            if name not in supporting_signals:
+                supporting_signals.append(name)
+
+        try:
+            if float(rule_score or 0) >= 35:
+                add_signal("rules")
+        except (TypeError, ValueError):
+            pass
+
+        if "RULE" in reason_text:
+            add_signal("rules")
+
+        try:
+            if float(temporal_score or 0) >= 60:
+                add_signal("temporal_ai")
+        except (TypeError, ValueError):
+            pass
+
+        if "TEMPORAL" in reason_text:
+            add_signal("temporal_ai")
+
+        try:
+            if float(statistical_score or 0) >= 35:
+                add_signal("statistical")
+        except (TypeError, ValueError):
+            pass
+
+        if "STATISTICAL" in reason_text:
+            add_signal("statistical")
+
+        try:
+            if float(isolation_score or 0) >= 60:
+                add_signal("isolation_forest")
+        except (TypeError, ValueError):
+            pass
+
+        try:
+            if float(autoencoder_score or 0) >= 60:
+                add_signal("autoencoder")
+        except (TypeError, ValueError):
+            pass
+
+        detections.append({
+            "detection_id": row.get("detection_id"),
+            "event_id": event_id,
+            "stored_detection_record": True,
+            "detected": True,
+            "engine": row.get("engine"),
+            "threat_type": row.get("threat_type"),
+            "confidence": row.get("confidence"),
+            "risk_score": row.get("risk_score"),
+            "severity": row.get("severity") or "INFO",
+            "reason": stored_reason,
+            "created_at": row.get("created_at"),
+            "device_id": (
+                (event_evidence.get("event") or {}).get("device_id")
+                or (validation_device if IS_VALIDATION_MODE else None)
+            ),
+            "process_name": process_evidence.get("process_name"),
+            "pid": process_evidence.get("pid"),
+            "ppid": process_evidence.get("ppid"),
+            "parent_process_name": process_evidence.get("parent_process_name"),
+            "rule_score": rule_score,
+            "statistical_score": statistical_score,
+            "isolation_forest_score": isolation_score,
+            "autoencoder_score": autoencoder_score,
+            "temporal_score": temporal_score,
+            "fusion_score": fusion_score,
+            "fusion_reasons": all_reasons,
+            "supporting_signals": supporting_signals,
+            "independent_signal_count": len(supporting_signals),
+            "validation_only": bool(IS_VALIDATION_MODE),
+            "production_eligible": not bool(IS_VALIDATION_MODE),
+        })
+
+    original_severity = str(
+        hydrated.get("severity") or "INFO"
+    ).upper()
+
+    analysis_severity = original_severity
+    for detection in detections:
+        candidate = str(
+            detection.get("severity") or "INFO"
+        ).upper()
+        if _severity_rank(candidate) > _severity_rank(analysis_severity):
+            analysis_severity = candidate
+
+    hydrated["stored_incident_severity"] = original_severity
+    hydrated["analysis_severity"] = analysis_severity
+    hydrated["severity"] = analysis_severity
+    hydrated["timeline"] = hydrated_timeline
+    hydrated["event_ids"] = ordered_event_ids
+    hydrated["event_count"] = len(hydrated_timeline)
+    hydrated["detections"] = detections
+    hydrated["analysis_context"] = {
+        "runtime_mode": (
+            "VALIDATION" if IS_VALIDATION_MODE else "LIVE"
+        ),
+        "validation_mode": bool(IS_VALIDATION_MODE),
+        "validation_only": bool(IS_VALIDATION_MODE),
+        "synthetic_evidence_allowed": bool(IS_VALIDATION_MODE),
+        "production_eligible": not bool(IS_VALIDATION_MODE),
+        "real_response_execution_allowed": False,
+    }
+
+    return hydrated
+
+
 def _build_detection_evidence(
-
     event_record,
-
 ):
-
-    """
-
-    Convert a persisted endpoint event into a small,
-
-    frontend-safe evidence object.
-
-    This does NOT assign an attack family.
-
-    """
+    """Convert a persisted endpoint event into frontend-safe evidence."""
 
     if not event_record:
-
-        return {
-
-            "event_found": False,
-
-        }
+        return {"event_found": False}
 
     process_data = _safe_json_dict(
-
-        event_record.get(
-
-            "process_data"
-
-        )
-
+        event_record.get("process_data")
     )
-
     file_data = _safe_json_dict(
-
-        event_record.get(
-
-            "file_data"
-
-        )
-
+        event_record.get("file_data")
     )
-
     network_data = _safe_json_dict(
-
-        event_record.get(
-
-            "network_data"
-
-        )
-
+        event_record.get("network_data")
     )
-
     registry_data = _safe_json_dict(
-
-        event_record.get(
-
-            "registry_data"
-
-        )
-
+        event_record.get("registry_data")
     )
-
     metadata = _safe_json_dict(
-
-        event_record.get(
-
-            "metadata"
-
-        )
-
+        event_record.get("metadata")
     )
 
     process_name = (
-
         process_data.get("name")
-
-        or process_data.get(
-
-            "process_name"
-
-        )
-
+        or process_data.get("process_name")
     )
-
     parent_process_name = (
-
-        process_data.get(
-
-            "parent_name"
-
-        )
-
-        or process_data.get(
-
-            "parent_process_name"
-
-        )
-
+        process_data.get("parent_name")
+        or process_data.get("parent_process_name")
     )
-
-    # ------------------------------------------------------------
-
-    # PROCESS / MODEL EVIDENCE
-
-    # ------------------------------------------------------------
 
     process_evidence = {
-
-        "pid":
-
-            process_data.get("pid"),
-
-        "ppid":
-
-            process_data.get("ppid"),
-
-        "process_name":
-
-            process_name,
-
-        "parent_process_name":
-
-            parent_process_name,
-
-        "create_time":
-
-            process_data.get(
-
-                "create_time"
-
-            ),
-
-        "cpu_percent":
-
-            process_data.get(
-
-                "cpu_percent"
-
-            ),
-
-        "memory_percent":
-
-            process_data.get(
-
-                "memory_percent"
-
-            ),
-
-        "rss_mb":
-
-            process_data.get(
-
-                "rss_mb"
-
-            ),
-
-        "num_threads":
-
-            process_data.get(
-
-                "num_threads"
-
-            ),
-
-        "num_handles":
-
-            process_data.get(
-
-                "num_handles"
-
-            ),
-
-        "fusion_version":
-
-            process_data.get(
-
-                "fusion_version"
-
-            ),
-
-        "fusion_score":
-
-            process_data.get(
-
-                "fusion_score"
-
-            ),
-
-        "fusion_severity":
-
-            process_data.get(
-
-                "fusion_severity"
-
-            ),
-
-        "fusion_confidence":
-
-            process_data.get(
-
-                "fusion_confidence"
-
-            ),
-
-        "fusion_reasons":
-
-            process_data.get(
-
-                "fusion_reasons"
-
-            ),
-
-        "ai_consensus_score":
-
-            process_data.get(
-
-                "ai_consensus_score"
-
-            ),
-
-        "ai_consensus":
-
-            process_data.get(
-
-                "ai_consensus"
-
-            ),
-
-        "isolation_forest":
-
-            process_data.get(
-
-                "isolation_forest"
-
-            ),
-
-        "autoencoder":
-
-            process_data.get(
-
-                "autoencoder"
-
-            ),
-
-        "ai_behavior_context":
-
-            process_data.get(
-
-                "ai_behavior_context"
-
-            ),
-
+        "pid": process_data.get("pid"),
+        "ppid": process_data.get("ppid"),
+        "process_name": process_name,
+        "parent_process_name": parent_process_name,
+        "create_time": process_data.get("create_time"),
+        "cpu_percent": process_data.get("cpu_percent"),
+        "memory_percent": process_data.get("memory_percent"),
+        "rss_mb": process_data.get("rss_mb"),
+        "num_threads": process_data.get("num_threads"),
+        "num_handles": process_data.get("num_handles"),
+        "fusion_version": process_data.get("fusion_version"),
+        "fusion_score": process_data.get("fusion_score"),
+        "fusion_severity": process_data.get("fusion_severity"),
+        "fusion_confidence": process_data.get("fusion_confidence"),
+        "fusion_reasons": process_data.get("fusion_reasons"),
+        "ai_consensus_score": process_data.get("ai_consensus_score"),
+        "ai_consensus": process_data.get("ai_consensus"),
+        "isolation_forest": process_data.get("isolation_forest"),
+        "autoencoder": process_data.get("autoencoder"),
+        "temporal_ai": (
+            process_data.get("temporal_ai")
+            or process_data.get("temporal")
+            or process_data.get("temporal_result")
+        ),
+        "ai_behavior_context": process_data.get("ai_behavior_context"),
     }
 
-    # ------------------------------------------------------------
+    isolation = process_evidence.get("isolation_forest")
+    if not isinstance(isolation, dict):
+        isolation = {}
 
-    # FUSION / METADATA SCORES
+    autoencoder = process_evidence.get("autoencoder")
+    if not isinstance(autoencoder, dict):
+        autoencoder = {}
 
-    # ------------------------------------------------------------
+    temporal = process_evidence.get("temporal_ai")
+    if not isinstance(temporal, dict):
+        temporal = {}
 
     model_scores = {
-
-        "rule_score":
-
-            metadata.get(
-
-                "rule_score"
-
-            ),
-
-        "statistical_score":
-
-            metadata.get(
-
-                "statistical_score"
-
-            ),
-
-        "isolation_forest_score":
-
-            metadata.get(
-
-                "isolation_forest_score"
-
-            ),
-
-        "autoencoder_score":
-
-            metadata.get(
-
-                "autoencoder_score"
-
-            ),
-
-        "ai_consensus_score":
-
-            metadata.get(
-
-                "ai_consensus_score"
-
-            ),
-
-        "ai_agreement":
-
-            metadata.get(
-
-                "ai_agreement"
-
-            ),
-
-        "ai_disagreement":
-
-            metadata.get(
-
-                "ai_disagreement"
-
-            ),
-
-        "fusion_score":
-
-            metadata.get(
-
-                "fusion_score"
-
-            ),
-
-        "evidence_confidence":
-
-            metadata.get(
-
-                "evidence_confidence"
-
-            ),
-
-        "critical_allowed":
-
-            metadata.get(
-
-                "critical_allowed"
-
-            ),
-
-        "feature_record_id":
-
-            metadata.get(
-
-                "feature_record_id"
-
-            ),
-
-        "event_category":
-
-            metadata.get(
-
-                "event_category"
-
-            ),
-
+        "rule_score": _first_present(
+            metadata.get("rule_score"),
+            process_data.get("rule_score"),
+            process_data.get("behavior_score"),
+        ),
+        "statistical_score": _first_present(
+            metadata.get("statistical_score"),
+            process_data.get("statistical_score"),
+        ),
+        "isolation_forest_score": _first_present(
+            metadata.get("isolation_forest_score"),
+            isolation.get("anomaly_confidence"),
+            isolation.get("score"),
+        ),
+        "autoencoder_score": _first_present(
+            metadata.get("autoencoder_score"),
+            autoencoder.get("anomaly_confidence"),
+            autoencoder.get("score"),
+        ),
+        "temporal_score": _first_present(
+            metadata.get("temporal_score"),
+            process_data.get("temporal_score"),
+            process_data.get("temporal_ai_score"),
+            temporal.get("score"),
+            temporal.get("temporal_score"),
+            temporal.get("anomaly_score"),
+        ),
+        "ai_consensus_score": _first_present(
+            metadata.get("ai_consensus_score"),
+            process_data.get("ai_consensus_score"),
+        ),
+        "ai_agreement": metadata.get("ai_agreement"),
+        "ai_disagreement": metadata.get("ai_disagreement"),
+        "fusion_score": _first_present(
+            metadata.get("fusion_score"),
+            process_data.get("fusion_score"),
+        ),
+        "evidence_confidence": metadata.get("evidence_confidence"),
+        "critical_allowed": metadata.get("critical_allowed"),
+        "feature_record_id": metadata.get("feature_record_id"),
+        "event_category": metadata.get("event_category"),
     }
 
-    # ------------------------------------------------------------
-
-    # OTHER TELEMETRY
-
-    #
-
-    # These fields remain empty for a process-only fusion event
-
-    # unless the persisted event actually contains that modality.
-
-    # ------------------------------------------------------------
-
     return {
-
         "event_found": True,
-
         "event": {
-
-            "timestamp":
-
-                event_record.get(
-
-                    "timestamp"
-
-                ),
-
-            "device_id":
-
-                event_record.get(
-
-                    "device_id"
-
-                ),
-
-            "event_type":
-
-                event_record.get(
-
-                    "event_type"
-
-                ),
-
-            "severity":
-
-                event_record.get(
-
-                    "severity"
-
-                ),
-
-            "source":
-
-                event_record.get(
-
-                    "source"
-
-                ),
-
+            "timestamp": event_record.get("timestamp"),
+            "device_id": event_record.get("device_id"),
+            "event_type": event_record.get("event_type"),
+            "severity": event_record.get("severity"),
+            "source": event_record.get("source"),
         },
-
-        "process":
-
-            process_evidence,
-
-        "model_scores":
-
-            model_scores,
-
-        "file":
-
-            file_data,
-
-        "network":
-
-            network_data,
-
-        "registry":
-
-            registry_data,
-
+        "process": process_evidence,
+        "model_scores": model_scores,
+        "file": file_data,
+        "network": network_data,
+        "registry": registry_data,
     }
 
 # ================================================================
@@ -1512,23 +1673,33 @@ def get_live_detections(limit: int = 50):
                 ).replace("_", " ").title()
 
                 if process_name:
-                    display_title = f"{category} — {process_name}"
+                    display_title = f"{category} - {process_name}"
                 else:
                     display_title = category
 
-            elif process_name and event_type == "process_fusion_detection":
-
-                display_title = f"Behavioral AI alert — {process_name}"
-
-            elif process_name:
-
-                display_title = f"Process alert — {process_name}"
-
             else:
+    
+                category = str(
+                    threat_type
+                    or "SECURITY_DETECTION"
+                ).replace(
+                    "_",
+                    " ",
+                ).title()
 
-                display_title = str(
-                    threat_type or "Security detection"
-                ).replace("_", " ")
+
+                if process_name:
+
+                    display_title = (
+                        f"{category} - "
+                        f"{process_name}"
+                    )
+
+                else:
+
+                    display_title = (
+                        category
+                    )
 
             detections.append({
                 # Preserve all previous frontend response keys.
@@ -1679,6 +1850,9 @@ def endpoint_overview(recent_limit: int = 25):
             "network": "OFFLINE",
 
             "registry": "OFFLINE",
+
+
+            "auth": "OFFLINE",
 
         }
 
@@ -2822,6 +2996,8 @@ def get_detected_incident(incident_id: str):
 
             )
 
+        incident = _hydrate_incident_for_analysis(incident)
+
         return enrich_detected_incident(
 
             incident
@@ -2872,6 +3048,8 @@ def preview_detected_incident(incident_id: str):
             status_code=404,
             detail=f"Detected incident {incident_id} was not found.",
         )
+
+    incident = _hydrate_incident_for_analysis(incident)
 
     try:
         intelligence = multi_agent_pipeline.preview_incident(incident)
@@ -2976,6 +3154,8 @@ def investigate_detected_incident(
             ),
 
         )
+
+    incident = _hydrate_incident_for_analysis(incident)
 
     existing = workflow.recover_case(
 
@@ -3611,3 +3791,288 @@ def get_case_evidence(incident_id: str):
     )
 
     return
+
+# ================================================================
+# INCIDENT TIMELINE
+# ================================================================
+
+@app.get(
+    "/api/v1/cases/{incident_id}/timeline"
+)
+def get_case_timeline(
+    incident_id: str,
+):
+
+    require_case(
+        incident_id
+    )
+
+    timeline = (
+        workflow.get_timeline(
+            incident_id
+        )
+    )
+
+    return {
+        "incident_id":
+            incident_id,
+
+        "count":
+            len(
+                timeline
+            ),
+
+        "persistent":
+            True,
+
+        "timeline":
+            serialize_value(
+                timeline
+            ),
+    }
+
+
+# ================================================================
+# APPROVE SOC CASE
+# ================================================================
+
+@app.post(
+    "/api/v1/cases/{incident_id}/approve"
+)
+def approve_case(
+    incident_id: str,
+    request: AnalystDecisionRequest,
+):
+
+    require_case(
+        incident_id
+    )
+
+    try:
+
+        result = (
+            workflow.approve_case(
+                incident_id=
+                    incident_id,
+
+                analyst=
+                    request.analyst,
+
+                comment=
+                    request.comment,
+            )
+        )
+
+        return serialize_value(
+            result
+        )
+
+    except ValueError as error:
+
+        raise HTTPException(
+            status_code=409,
+            detail=str(
+                error
+            ),
+        )
+
+    except Exception as error:
+
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Approval workflow failed: "
+                f"{error}"
+            ),
+        )
+
+
+# ================================================================
+# REJECT SOC CASE
+# ================================================================
+
+@app.post(
+    "/api/v1/cases/{incident_id}/reject"
+)
+def reject_case(
+    incident_id: str,
+    request: AnalystRejectionRequest,
+):
+
+    require_case(
+        incident_id
+    )
+
+    try:
+
+        result = (
+            workflow.reject_case(
+                incident_id=
+                    incident_id,
+
+                analyst=
+                    request.analyst,
+
+                reason=
+                    request.reason,
+            )
+        )
+
+        return serialize_value(
+            result
+        )
+
+    except ValueError as error:
+
+        raise HTTPException(
+            status_code=409,
+            detail=str(
+                error
+            ),
+        )
+
+    except Exception as error:
+
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Rejection workflow failed: "
+                f"{error}"
+            ),
+        )
+
+
+# ================================================================
+# LIST SOC TICKETS
+# ================================================================
+
+@app.get(
+    "/api/v1/tickets"
+)
+def list_tickets(
+    limit: int = 100,
+):
+
+    limit = max(
+        1,
+        min(
+            limit,
+            1000,
+        ),
+    )
+
+    tickets = (
+        ticket_store.list_tickets(
+            limit=limit
+        )
+    )
+
+    return {
+        "count":
+            len(
+                tickets
+            ),
+
+        "tickets":
+            serialize_value(
+                tickets
+            ),
+    }
+
+
+# ================================================================
+# GET SOC TICKET
+# ================================================================
+
+@app.get(
+    "/api/v1/tickets/{ticket_id}"
+)
+def get_ticket(
+    ticket_id: str,
+):
+
+    ticket = (
+        ticket_store.get_ticket(
+            ticket_id
+        )
+    )
+
+    if ticket is None:
+
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"Ticket {ticket_id} "
+                "not found."
+            ),
+        )
+
+    return serialize_value(
+        ticket
+    )
+
+
+# ================================================================
+# GET TICKETS FOR INCIDENT
+# ================================================================
+
+@app.get(
+    "/api/v1/incidents/{incident_id}/tickets"
+)
+def get_incident_tickets(
+    incident_id: str,
+):
+
+    tickets = (
+        ticket_store.get_by_incident(
+            incident_id
+        )
+    )
+
+    return {
+        "incident_id":
+            incident_id,
+
+        "count":
+            len(
+                tickets
+            ),
+
+        "tickets":
+            serialize_value(
+                tickets
+            ),
+    }
+
+
+# ================================================================
+# COMPLETE INCIDENT DETAIL
+# ================================================================
+
+@app.get(
+    "/api/v1/incidents/{incident_id}/full"
+)
+def get_full_incident(
+    incident_id: str,
+):
+
+    result = (
+        incident_view_service
+        .get_full_incident(
+            incident_id
+        )
+    )
+
+    if result is None:
+
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"Incident {incident_id} "
+                "was not found."
+            ),
+        )
+
+    return serialize_value(
+        result
+    )

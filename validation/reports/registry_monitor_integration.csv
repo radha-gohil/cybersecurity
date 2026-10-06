@@ -1,0 +1,11 @@
+scenario_id,scenario_name,mode,detections,expected,failure_layers,passed
+RI-01,Registry collector coverage contract,SHADOW,"defender_policy,defender_realtime_policy,hkcu_run,hkcu_runonce,hklm_run,hklm_runonce,lsa_policy,services,uac_policy,winlogon",R1_R2_R3_SCOPES_PRESENT,,True
+RI-02,Run key benign persistence signal,SHADOW,REGISTRY_AUTORUN_PERSISTENCE,REGISTRY_AUTORUN_PERSISTENCE,,True
+RI-03,Run key suspicious PowerShell persistence,SHADOW,SUSPICIOUS_RUN_KEY_PERSISTENCE,SUSPICIOUS_RUN_KEY_PERSISTENCE,,True
+RI-04,Suspicious service persistence,SHADOW,SUSPICIOUS_SERVICE_PERSISTENCE,SUSPICIOUS_SERVICE_PERSISTENCE,,True
+RI-05,Standard Winlogon shell remains quiet,SHADOW,,NO_ALERT,,True
+RI-06,Nonstandard Winlogon shell,SHADOW,WINLOGON_PERSISTENCE_CHANGE,WINLOGON_PERSISTENCE_CHANGE,,True
+RI-07,Defender realtime protection disabled,SHADOW,SECURITY_DEFENDER_TAMPERING,SECURITY_DEFENDER_TAMPERING,,True
+RI-08,Unrelated registry value remains quiet,SHADOW,,NO_ALERT,,True
+RI-09,Registry detector defaults to SHADOW,SHADOW,,SHADOW,,True
+RI-10,Incomplete registry evidence fails quiet,SHADOW,,NO_ALERT,,True

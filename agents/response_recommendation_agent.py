@@ -389,619 +389,344 @@ class ResponseRecommendationAgent:
         evidence: dict,
         attack_timeline: dict,
     ) -> dict:
-
-        consensus = (
-            self.safe_dict(
-                consensus
-            )
-        )
-
-        risk = (
-            self.safe_dict(
-                risk
-            )
-        )
-
-        evidence = (
-            self.safe_dict(
-                evidence
-            )
-        )
-
-        attack_timeline = (
-            self.safe_dict(
-                attack_timeline
-            )
-        )
-
+        consensus = self.safe_dict(consensus)
+        risk = self.safe_dict(risk)
+        evidence = self.safe_dict(evidence)
+        attack_timeline = self.safe_dict(attack_timeline)
 
         recommendations = []
 
-
         consensus_decision = str(
-            consensus.get(
-                "final_decision",
-                "MONITOR",
-            )
+            consensus.get("final_decision", "MONITOR")
         ).upper()
-
-
-        consensus_confidence = (
-            self.safe_int(
-                consensus.get(
-                    "consensus_confidence"
-                ),
-                0,
-            )
+        consensus_confidence = self.safe_int(
+            consensus.get("consensus_confidence"),
+            0,
         )
-
-
-        risk_score = (
-            self.safe_int(
-                risk.get(
-                    "risk_score"
-                ),
-                0,
-            )
+        risk_score = self.safe_int(
+            risk.get("risk_score"),
+            0,
         )
-
-
         risk_level = str(
-            risk.get(
-                "risk_level",
-                "INFO",
-            )
+            risk.get("risk_level", "INFO")
         ).upper()
 
-
-        malware_probability = (
-            self.get_max_malware_probability(
-                evidence
-            )
+        malware_probability = self.get_max_malware_probability(
+            evidence
         )
-
-
-        process_score = (
-            self.get_max_process_score(
-                evidence
-            )
+        process_score = self.get_max_process_score(
+            evidence
         )
-
-
-        network_activity = (
-            self.has_network_activity(
-                evidence
-            )
+        network_activity = self.has_network_activity(
+            evidence
         )
-
-
-        persistence_activity = (
-            self.has_persistence_activity(
-                evidence,
-                attack_timeline,
-            )
+        persistence_activity = self.has_persistence_activity(
+            evidence,
+            attack_timeline,
         )
-
-
-        # ========================================================
-        # ALWAYS RETAIN / MONITOR EVIDENCE
-        # ========================================================
 
         self.add_recommendation(
-
             recommendations,
-
-            action=
-                "MONITOR_INCIDENT",
-
-            priority=
-                "LOW",
-
-            reason=
-                "Continue monitoring and retain incident evidence.",
-
-            requires_approval=
-                False,
+            action="MONITOR_INCIDENT",
+            priority="LOW",
+            reason=(
+                "Continue monitoring and retain incident evidence."
+            ),
+            requires_approval=False,
         )
-        # ============================================================
-        # EVIDENCE AUTHORIZATION GATE
-        # ============================================================
-        # Review-only operation until independent attack
-        # confirmation is supported by validated evidence.
-        #
-        # Do not promote consensus votes, inherited labels,
-        # unverified graph links, or model scores into
-        # containment recommendations.
 
         evidence_summary = self.safe_dict(
             risk.get("evidence_summary")
+        )
+        detection_summary = self.safe_dict(
+            evidence.get("detection_summary")
         )
 
         attack_confirmed = (
             evidence_summary.get("attack_confirmed") is True
         )
-
         causal_verified = (
             evidence_summary.get(
                 "causal_relationship_verified"
             ) is True
         )
-
         confidence_calibrated = (
             risk.get("confidence_calibrated") is True
         )
 
-        if not (
+        fully_authorized_evidence = bool(
             attack_confirmed
             and causal_verified
             and confidence_calibrated
-        ):
+        )
+
+        strong_detection_count = self.safe_int(
+            detection_summary.get("strong_detection_count"),
+            self.safe_int(
+                evidence_summary.get("strong_detection_count"),
+                0,
+            ),
+        )
+
+        simulation_candidate_allowed = bool(
+            strong_detection_count > 0
+            and risk_score >= 60
+        )
+
+        if not fully_authorized_evidence:
             self.add_recommendation(
                 recommendations,
                 action="INVESTIGATE_INCIDENT",
-                priority="MEDIUM",
+                priority=(
+                    "HIGH"
+                    if risk_score >= 60
+                    else "MEDIUM"
+                ),
                 reason=(
-                    "Continue analyst investigation. "
-                    "Attack confirmation, causal validation, "
-                    "or calibrated confidence is unavailable."
+                    "Continue analyst investigation. Response candidates "
+                    "remain simulation-only because attack confirmation, "
+                    "causal validation, or calibrated confidence is unavailable."
                 ),
                 requires_approval=False,
             )
 
-            return {
-                "agent": self.name,
-                "generated_at": self.now_iso(),
-                "response_level": "INVESTIGATION",
-                "consensus_decision": consensus_decision,
-                "consensus_confidence": consensus_confidence,
-                "risk_score": risk_score,
-                "risk_level": risk_level,
-                "recommendation_count": len(recommendations),
-                "recommendations": recommendations,
-                "execution_allowed": False,
-                "evidence_authorized": False,
-                "note": (
-                    "Analyst investigation only. No containment "
-                    "or remediation action was recommended or executed."
-                ),
-            }
+            if not simulation_candidate_allowed:
+                return {
+                    "agent": self.name,
+                    "generated_at": self.now_iso(),
+                    "response_level": "INVESTIGATION",
+                    "consensus_decision": consensus_decision,
+                    "consensus_confidence": consensus_confidence,
+                    "risk_score": risk_score,
+                    "risk_level": risk_level,
+                    "recommendation_count": len(recommendations),
+                    "recommendations": recommendations,
+                    "execution_allowed": False,
+                    "evidence_authorized": False,
+                    "simulation_candidate_allowed": False,
+                    "simulation_only": True,
+                    "note": (
+                        "Analyst investigation only. No containment "
+                        "or remediation action was recommended or executed."
+                    ),
+                }
 
-        # ========================================================
-        # INVESTIGATION
-        # ========================================================
-
+        # A strong persisted detector can justify response simulation
+        # and analyst review even when it cannot authorize execution.
         if (
             risk_score >= 35
-
-            or consensus_decision in [
-
+            or consensus_decision in {
                 "INVESTIGATE",
-
                 "CONTINUE_ANALYSIS",
-
                 "RESPONSE_REVIEW",
-
                 "RESPONSE_RECOMMENDED",
-
                 "CONTAINMENT_RECOMMENDED",
-            ]
+            }
         ):
-
             self.add_recommendation(
-
                 recommendations,
-
-                action=
-                    "INVESTIGATE_INCIDENT",
-
-                priority=
-                    (
-                        "HIGH"
-                        if risk_score >= 60
-                        else "MEDIUM"
-                    ),
-
-                reason=
-                    "The incident has sufficient risk or agent support for further investigation.",
-
-                requires_approval=
-                    False,
+                action="INVESTIGATE_INCIDENT",
+                priority=(
+                    "HIGH"
+                    if risk_score >= 60
+                    else "MEDIUM"
+                ),
+                reason=(
+                    "The incident has sufficient detector-grounded "
+                    "review priority for further investigation."
+                ),
+                requires_approval=False,
             )
-
-
-        # ========================================================
-        # FILE QUARANTINE REVIEW
-        # ========================================================
 
         if malware_probability >= 0.70:
-
             suspicious_files = []
 
-
             for file_item in self.safe_list(
-                evidence.get(
-                    "files"
-                )
+                evidence.get("files")
             ):
-
-                probability = (
-                    self.safe_float(
-                        file_item.get(
-                            "malware_probability"
-                        ),
-                        0.0,
-                    )
+                probability = self.safe_float(
+                    file_item.get("malware_probability"),
+                    0.0,
                 )
-
 
                 if probability >= 0.70:
-
-                    suspicious_files.append(
-                        {
-
-                            "path":
-                                file_item.get(
-                                    "path"
-                                ),
-
-                            "sha256":
-                                file_item.get(
-                                    "sha256"
-                                ),
-
-                            "malware_probability":
-                                probability,
-                        }
-                    )
-
+                    suspicious_files.append({
+                        "path": file_item.get("path"),
+                        "sha256": file_item.get("sha256"),
+                        "malware_probability": probability,
+                    })
 
             self.add_recommendation(
-
                 recommendations,
-
-                action=
-                    "QUARANTINE_REVIEW",
-
-                priority=
-                    (
-                        "CRITICAL"
-                        if malware_probability >= 0.90
-                        else "HIGH"
-                    ),
-
-                reason=
-                    (
-                        "One or more files have elevated malware-model probability. "
-                        "Analyst validation is required before quarantine."
-                    ),
-
-                requires_approval=
-                    True,
-
-                target={
-
-                    "files":
-                        suspicious_files,
-                },
+                action="QUARANTINE_REVIEW",
+                priority=(
+                    "CRITICAL"
+                    if malware_probability >= 0.90
+                    else "HIGH"
+                ),
+                reason=(
+                    "One or more files have elevated malware-model "
+                    "probability. Analyst validation is required before "
+                    "quarantine."
+                ),
+                requires_approval=True,
+                target={"files": suspicious_files},
             )
-
-
-        # ========================================================
-        # PROCESS TERMINATION REVIEW
-        # ========================================================
 
         if process_score >= 60:
-
             suspicious_processes = []
 
-
             for process in self.safe_list(
-                evidence.get(
-                    "processes"
-                )
+                evidence.get("processes")
             ):
-
                 combined_score = max(
-
                     self.safe_int(
-                        process.get(
-                            "behavior_score"
-                        ),
+                        process.get("behavior_score"),
                         0,
                     ),
-
                     self.safe_int(
-                        process.get(
-                            "anomaly_score"
-                        ),
+                        process.get("anomaly_score"),
                         0,
                     ),
-
                     self.safe_int(
-                        process.get(
-                            "combined_threat_score"
-                        ),
+                        process.get("combined_threat_score"),
+                        0,
+                    ),
+                    self.safe_int(
+                        process.get("detection_risk_score"),
+                        0,
+                    ),
+                    self.safe_int(
+                        process.get("fusion_score"),
                         0,
                     ),
                 )
-
 
                 if combined_score >= 60:
-
-                    suspicious_processes.append(
-                        {
-
-                            "pid":
-                                process.get(
-                                    "pid"
-                                ),
-
-                            "name":
-                                process.get(
-                                    "name"
-                                ),
-
-                            "exe":
-                                process.get(
-                                    "exe"
-                                ),
-
-                            "threat_score":
-                                combined_score,
-                        }
-                    )
-
+                    suspicious_processes.append({
+                        "pid": process.get("pid"),
+                        "name": process.get("name"),
+                        "exe": process.get("exe"),
+                        "threat_score": combined_score,
+                        "threat_type": process.get("threat_type"),
+                    })
 
             self.add_recommendation(
-
                 recommendations,
-
-                action=
-                    "PROCESS_TERMINATION_REVIEW",
-
-                priority=
-                    (
-                        "CRITICAL"
-                        if process_score >= 80
-                        else "HIGH"
-                    ),
-
-                reason=
-                    (
-                        "High process behavior or anomaly score observed. "
-                        "Review the process before termination."
-                    ),
-
-                requires_approval=
-                    True,
-
-                target={
-
-                    "processes":
-                        suspicious_processes,
-                },
+                action="PROCESS_TERMINATION_REVIEW",
+                priority=(
+                    "CRITICAL"
+                    if process_score >= 80
+                    else "HIGH"
+                ),
+                reason=(
+                    "High detector-grounded process risk was observed. "
+                    "Simulate and review process termination before any action."
+                ),
+                requires_approval=True,
+                target={"processes": suspicious_processes},
             )
 
-
-        # ========================================================
-        # NETWORK BLOCK REVIEW
-        # ========================================================
-
-        if (
-            network_activity
-
-            and risk_score >= 60
-        ):
-
+        if network_activity and risk_score >= 60:
             remote_endpoints = []
 
-
             for item in self.safe_list(
-                evidence.get(
-                    "network_connections"
-                )
+                evidence.get("network_connections")
             ):
-
-                remote_ip = (
-                    item.get(
-                        "remote_ip"
-                    )
-                )
-
+                remote_ip = item.get("remote_ip")
 
                 if remote_ip:
-
                     entry = {
-
-                        "remote_ip":
-                            remote_ip,
-
-                        "remote_port":
-                            item.get(
-                                "remote_port"
-                            ),
-
-                        "pid":
-                            item.get(
-                                "pid"
-                            ),
-
-                        "process_name":
-                            item.get(
-                                "process_name"
-                            ),
+                        "remote_ip": remote_ip,
+                        "remote_port": item.get("remote_port"),
+                        "pid": item.get("pid"),
+                        "process_name": item.get("process_name"),
                     }
 
-
                     if entry not in remote_endpoints:
-
-                        remote_endpoints.append(
-                            entry
-                        )
-
+                        remote_endpoints.append(entry)
 
             self.add_recommendation(
-
                 recommendations,
+                action="NETWORK_BLOCK_REVIEW",
+                priority=(
+                    "CRITICAL"
+                    if risk_level == "CRITICAL"
+                    else "HIGH"
+                ),
+                reason=(
+                    "Network communication is associated with a high-risk "
+                    "incident. Simulate and validate the destination before "
+                    "any block."
+                ),
+                requires_approval=True,
+                target={"connections": remote_endpoints},
+            )
 
-                action=
-                    "NETWORK_BLOCK_REVIEW",
-
-                priority=
-                    (
-                        "CRITICAL"
-                        if risk_level
-                        == "CRITICAL"
-                        else "HIGH"
-                    ),
-
-                reason=
-                    (
-                        "Network communication is associated with a high-risk incident. "
-                        "Validate the destination before applying any block."
-                    ),
-
-                requires_approval=
-                    True,
-
+        if persistence_activity and risk_score >= 60:
+            self.add_recommendation(
+                recommendations,
+                action="PERSISTENCE_REMEDIATION_REVIEW",
+                priority=(
+                    "CRITICAL"
+                    if risk_level == "CRITICAL"
+                    else "HIGH"
+                ),
+                reason=(
+                    "Possible persistence-related activity is associated "
+                    "with the incident. Simulate remediation before removal."
+                ),
+                requires_approval=True,
                 target={
-
-                    "connections":
-                        remote_endpoints,
+                    "registry_artifacts": self.safe_list(
+                        evidence.get("registry_artifacts")
+                    )
                 },
             )
 
-
-        # ========================================================
-        # PERSISTENCE REMEDIATION REVIEW
-        # ========================================================
-
         if (
-            persistence_activity
-
-            and risk_score >= 60
-        ):
-
-            self.add_recommendation(
-
-                recommendations,
-
-                action=
-                    "PERSISTENCE_REMEDIATION_REVIEW",
-
-                priority=
-                    (
-                        "CRITICAL"
-                        if risk_level
-                        == "CRITICAL"
-                        else "HIGH"
-                    ),
-
-                reason=
-                    (
-                        "Possible persistence-related activity is associated with "
-                        "the incident. Review the artifact before removal."
-                    ),
-
-                requires_approval=
-                    True,
-
-                target={
-
-                    "registry_artifacts":
-                        self.safe_list(
-                            evidence.get(
-                                "registry_artifacts"
-                            )
-                        ),
-                },
-            )
-
-
-        # ========================================================
-        # ENDPOINT ISOLATION REVIEW
-        # ========================================================
-
-        if (
-            consensus_decision
-            == "CONTAINMENT_RECOMMENDED"
-
+            consensus_decision == "CONTAINMENT_RECOMMENDED"
             and risk_score >= 80
-
             and consensus_confidence >= 70
         ):
-
             self.add_recommendation(
-
                 recommendations,
-
-                action=
-                    "ENDPOINT_ISOLATION_REVIEW",
-
-                priority=
-                    "CRITICAL",
-
-                reason=
-                    (
-                        "Agents recommend containment and the incident has a "
-                        "critical risk score. Human approval is required before "
-                        "endpoint isolation."
-                    ),
-
-                requires_approval=
-                    True,
+                action="ENDPOINT_ISOLATION_REVIEW",
+                priority="CRITICAL",
+                reason=(
+                    "Agents recommend containment and the incident has a "
+                    "critical review score. Human approval is required."
+                ),
+                requires_approval=True,
             )
 
-
-        # ========================================================
-        # RESPONSE LEVEL
-        # ========================================================
-
-        response_level = (
-            self.determine_response_level(
+        if simulation_candidate_allowed and risk_score >= 60:
+            response_level = "RESPONSE_REVIEW"
+        else:
+            response_level = self.determine_response_level(
                 consensus_decision,
                 risk_level,
             )
-        )
-
 
         return {
-
-            "agent":
-                self.name,
-
-            "generated_at":
-                self.now_iso(),
-
-            "response_level":
-                response_level,
-
-            "consensus_decision":
-                consensus_decision,
-
-            "consensus_confidence":
-                consensus_confidence,
-
-            "risk_score":
-                risk_score,
-
-            "risk_level":
-                risk_level,
-
-            "recommendation_count":
-                len(
-                    recommendations
-                ),
-
-            "recommendations":
-                recommendations,
-
-            "execution_allowed":
-                False,
-
-            "note":
-                (
-                    "Recommendations are advisory only. "
-                    "No containment or remediation action was executed."
-                ),
+            "agent": self.name,
+            "generated_at": self.now_iso(),
+            "response_level": response_level,
+            "consensus_decision": consensus_decision,
+            "consensus_confidence": consensus_confidence,
+            "risk_score": risk_score,
+            "risk_level": risk_level,
+            "recommendation_count": len(recommendations),
+            "recommendations": recommendations,
+            "execution_allowed": False,
+            "evidence_authorized": fully_authorized_evidence,
+            "simulation_candidate_allowed": (
+                simulation_candidate_allowed
+            ),
+            "simulation_only": not fully_authorized_evidence,
+            "note": (
+                "Response candidates are advisory and simulation-only. "
+                "No containment or remediation action was executed."
+            ),
         }
+

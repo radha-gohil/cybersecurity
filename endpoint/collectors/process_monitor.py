@@ -1,13 +1,6 @@
 import math
 import time
-
-
-
 import psutil
-
-
-
-
 
 from detection.behavior.process_behavior_detector import (
 
@@ -15,7 +8,9 @@ from detection.behavior.process_behavior_detector import (
 
 )
 
-
+from config import (
+    IS_VALIDATION_MODE,
+)
 
 from endpoint.agent.telemetry_manager import (
 
@@ -1972,9 +1967,628 @@ class ProcessMonitor:
 
 
 
-
+    # ============================================================
+    # CLASSIFY PROCESS THREAT
     # ============================================================
 
+    # ============================================================
+    # CLASSIFY PROCESS THREAT
+    # ============================================================
+
+    def classify_process_threat(
+        self,
+        process_info: dict,
+    ) -> str:
+
+        if not isinstance(
+            process_info,
+            dict,
+        ):
+
+            process_info = {}
+
+
+        # ========================================================
+        # PROCESS NAME
+        # ========================================================
+
+        raw_name = str(
+
+            process_info.get(
+                "name"
+            )
+
+            or process_info.get(
+                "process_name"
+            )
+
+            or process_info.get(
+                "exe"
+            )
+
+            or ""
+        ).strip().lower()
+
+
+        raw_name = (
+            raw_name.replace(
+                "/",
+                "\\",
+            )
+        )
+
+
+        process_name = (
+            raw_name.rsplit(
+                "\\",
+                1,
+            )[-1]
+        )
+
+
+        # ========================================================
+        # PARENT NAME
+        # ========================================================
+
+        raw_parent = str(
+
+            process_info.get(
+                "parent_name"
+            )
+
+            or process_info.get(
+                "parent_process"
+            )
+
+            or ""
+        ).strip().lower()
+
+
+        raw_parent = (
+            raw_parent.replace(
+                "/",
+                "\\",
+            )
+        )
+
+
+        parent_name = (
+            raw_parent.rsplit(
+                "\\",
+                1,
+            )[-1]
+        )
+
+
+        # ========================================================
+        # COMMAND LINE
+        # ========================================================
+
+        raw_command = (
+
+            process_info.get(
+                "cmdline"
+            )
+
+            or process_info.get(
+                "command_line"
+            )
+
+            or ""
+        )
+
+
+        if isinstance(
+            raw_command,
+            (
+                list,
+                tuple,
+            ),
+        ):
+
+            command_line = " ".join(
+
+                str(value)
+
+                for value
+                in raw_command
+
+            ).lower()
+
+        else:
+
+            command_line = str(
+                raw_command
+            ).lower()
+
+
+        # ========================================================
+        # COMMON FLAGS
+        # ========================================================
+
+        has_url = any(
+
+            marker
+            in command_line
+
+            for marker
+            in (
+                "http://",
+                "https://",
+            )
+        )
+
+
+        encoded = any(
+
+            marker
+            in command_line
+
+            for marker
+            in (
+                "-encodedcommand",
+                "-encoded-command",
+                "-enc ",
+                "frombase64string",
+            )
+        )
+
+
+        hidden = any(
+
+            marker
+            in command_line
+
+            for marker
+            in (
+                "-windowstyle hidden",
+                "-window hidden",
+                "-w hidden",
+            )
+        )
+
+
+        download = any(
+
+            marker
+            in command_line
+
+            for marker
+            in (
+                "downloadstring",
+                "invoke-webrequest",
+                "invoke-restmethod",
+                "start-bitstransfer",
+            )
+        )
+
+
+        execute = any(
+
+            marker
+            in command_line
+
+            for marker
+            in (
+                "invoke-expression",
+                "iex ",
+                "iex(",
+            )
+        )
+
+
+        document_parent = (
+
+            parent_name
+            in {
+                "winword.exe",
+                "excel.exe",
+                "powerpnt.exe",
+                "outlook.exe",
+            }
+        )
+
+
+        powershell = (
+
+            process_name
+            in {
+                "powershell.exe",
+                "powershell",
+                "pwsh.exe",
+                "pwsh",
+            }
+        )
+
+
+        # ========================================================
+        # DOCUMENT → PROCESS CHAINS
+        # ========================================================
+
+        if (
+            document_parent
+
+            and
+
+            process_name
+            == "cmd.exe"
+
+            and
+
+            encoded
+        ):
+
+            return (
+                "DOCUMENT_TO_CMD"
+            )
+
+
+        if (
+            document_parent
+
+            and
+
+            powershell
+
+            and
+
+            encoded
+        ):
+
+            return (
+                "DOCUMENT_TO_POWERSHELL"
+            )
+
+
+        if (
+            document_parent
+
+            and
+
+            process_name
+            == "wscript.exe"
+
+            and
+
+            has_url
+        ):
+
+            return (
+                "DOCUMENT_TO_WSCRIPT"
+            )
+
+
+        if (
+            document_parent
+
+            and
+
+            process_name
+            == "cscript.exe"
+
+            and
+
+            has_url
+        ):
+
+            return (
+                "DOCUMENT_TO_CSCRIPT"
+            )
+
+
+        if (
+            document_parent
+
+            and
+
+            process_name
+            == "mshta.exe"
+
+            and
+
+            has_url
+        ):
+
+            return (
+                "DOCUMENT_TO_MSHTA"
+            )
+
+
+        # ========================================================
+        # CERTUTIL
+        # ========================================================
+
+        if (
+            process_name
+            == "certutil.exe"
+
+            and
+
+            has_url
+
+            and
+
+            "-urlcache"
+            in command_line
+        ):
+
+            return (
+                "CERTUTIL_DOWNLOAD"
+            )
+
+
+        # ========================================================
+        # BITSADMIN
+        # ========================================================
+
+        if (
+            process_name
+            == "bitsadmin.exe"
+
+            and
+
+            has_url
+
+            and
+
+            "/transfer"
+            in command_line
+        ):
+
+            return (
+                "BITSADMIN_TRANSFER"
+            )
+
+
+        # ========================================================
+        # RUNDLL32
+        # ========================================================
+
+        if (
+            process_name
+            == "rundll32.exe"
+
+            and
+
+            any(
+
+                marker
+                in command_line
+
+                for marker
+                in (
+                    "javascript:",
+                    "vbscript:",
+                    "mshtml,runhtmlapplication",
+                )
+            )
+        ):
+
+            return (
+                "RUNDLL32_SCRIPT_EXECUTION"
+            )
+
+
+        # ========================================================
+        # REGSVR32
+        # ========================================================
+
+        if (
+            process_name
+            == "regsvr32.exe"
+
+            and
+
+            has_url
+
+            and
+
+            "/i:"
+            in command_line
+
+            and
+
+            "scrobj.dll"
+            in command_line
+        ):
+
+            return (
+                "REGSVR32_REMOTE_SCRIPTLET"
+            )
+
+
+        # ========================================================
+        # REMOTE SCRIPT ENGINES
+        # ========================================================
+
+        if (
+            process_name
+            == "mshta.exe"
+
+            and
+
+            has_url
+        ):
+
+            return (
+                "MSHTA_REMOTE_PAYLOAD"
+            )
+
+
+        if (
+            process_name
+            == "wscript.exe"
+
+            and
+
+            has_url
+        ):
+
+            return (
+                "WSCRIPT_REMOTE_SCRIPT"
+            )
+
+
+        if (
+            process_name
+            == "cscript.exe"
+
+            and
+
+            has_url
+        ):
+
+            return (
+                "CSCRIPT_REMOTE_SCRIPT"
+            )
+
+
+        # ========================================================
+        # POWERSHELL
+        # ========================================================
+
+        if (
+            powershell
+
+            and
+
+            download
+
+            and
+
+            execute
+        ):
+
+            return (
+                "POWERSHELL_DOWNLOAD_EXECUTION"
+            )
+
+
+        if (
+            powershell
+
+            and
+
+            encoded
+
+            and
+
+            hidden
+        ):
+
+            return (
+                "HIDDEN_ENCODED_POWERSHELL"
+            )
+
+
+        if (
+            powershell
+
+            and
+
+            encoded
+        ):
+
+            return (
+                "ENCODED_POWERSHELL"
+            )
+
+
+        if (
+            powershell
+
+            and
+
+            hidden
+        ):
+
+            return (
+                "HIDDEN_POWERSHELL"
+            )
+
+
+        # ========================================================
+        # DOCUMENT PARENT WITHOUT EXTRA INDICATOR
+        # ========================================================
+
+        if (
+            document_parent
+
+            and
+
+            process_name
+            == "cmd.exe"
+        ):
+
+            return (
+                "DOCUMENT_TO_CMD"
+            )
+
+
+        if (
+            document_parent
+
+            and
+
+            process_name
+            == "wscript.exe"
+        ):
+
+            return (
+                "DOCUMENT_TO_WSCRIPT"
+            )
+
+
+        if (
+            document_parent
+
+            and
+
+            process_name
+            == "cscript.exe"
+        ):
+
+            return (
+                "DOCUMENT_TO_CSCRIPT"
+            )
+
+
+        if (
+            document_parent
+
+            and
+
+            process_name
+            == "mshta.exe"
+        ):
+
+            return (
+                "DOCUMENT_TO_MSHTA"
+            )
+
+
+        # ========================================================
+        # CMD → ENCODED POWERSHELL
+        # ========================================================
+
+        if (
+            process_name
+            == "cmd.exe"
+
+            and
+
+            encoded
+        ):
+
+            return (
+                "CMD_TO_ENCODED_POWERSHELL"
+            )
+
+
+        return (
+            "SUSPICIOUS_PROCESS_BEHAVIOR"
+        )
+    # ============================================================
     # SAVE FINAL FUSION DETECTION
 
     # ============================================================
@@ -1982,33 +2596,12 @@ class ProcessMonitor:
 
 
     def save_fusion_detection(
-
-
-
         self,
-
-
-
         event,
-
-
-
         process_info: dict,
-
-
-
         fusion_result: dict,
-
-
-
         feature_record_id: int | None,
-
-
-
     ) -> None:
-
-
-
 
 
         if not fusion_result.get(
@@ -2016,17 +2609,29 @@ class ProcessMonitor:
             "suspicious",
 
             False,
-
         ):
-
-
 
             return
 
+        primary_engine = (
+
+            fusion_result.get(
+                "primary_engine"
+            )
+
+            or fusion_result.get(
+                "fusion_name"
+            )
+
+            or "process_threat_fusion_v3"
+        )
 
 
-
-
+        threat_type = (
+            self.classify_process_threat(
+                process_info
+            )
+        )
         ai_consensus = (
 
 
@@ -2060,14 +2665,16 @@ class ProcessMonitor:
 
 
             "engine":
+                primary_engine,
 
-                "process_threat_fusion_v2",
+            "detected":
+                True,
 
-
+            "threat_type":
+                threat_type,
 
             "detection_type":
-
-                "dual_ai_fused_process_threat",
+                threat_type,
 
 
 
@@ -2537,7 +3144,7 @@ class ProcessMonitor:
 
 
 
-                "FUSION V2 DETECTION | "
+                "PROCESS FUSION DETECTION | "
 
                 "PID=%s | "
 
@@ -3364,13 +3971,81 @@ class ProcessMonitor:
 
 
         process_info: dict,
-
-
-
+ 
     ):
 
 
+        # ========================================================
+        # VALIDATION MODE — LIVE TELEMETRY ONLY
+        #
+        # Real endpoint processes must remain visible in
+        # Live Monitor, but they must NOT run through:
+        #
+        #   Rules
+        #   Statistical detector
+        #   Isolation Forest
+        #   Autoencoder
+        #   Temporal Transformer
+        #   Fusion
+        #
+        # Controlled synthetic scenarios will exercise those
+        # engines separately.
+        # ========================================================
 
+        if IS_VALIDATION_MODE:
+
+            event = (
+                self.telemetry.emit(
+
+                    event_type=
+                        "process_start",
+
+                    source=
+                        "process_monitor",
+
+                    severity=
+                        "INFO",
+
+                    process=
+                        dict(
+                            process_info
+                        ),
+
+                    metadata={
+
+                        "collector":
+                            "ProcessMonitor",
+
+                        "runtime_path":
+                            "LIVE_ONLY",
+
+                        "detection_pipeline":
+                            "DISABLED_DURING_VALIDATION",
+                    },
+                )
+            )
+
+
+            logger.info(
+
+                "PROCESS_START LIVE_ONLY | "
+                "PID=%s | "
+                "Process=%s | "
+                "EventID=%s",
+
+                process_info.get(
+                    "pid"
+                ),
+
+                process_info.get(
+                    "name"
+                ),
+
+                event.event_id,
+            )
+
+
+            return event
         # ========================================================
 
         # RULE DETECTOR
@@ -4390,28 +5065,21 @@ class ProcessMonitor:
 
 
     def sample_process_intelligence(
-
-
-
         self,
-
-
-
         current_processes: dict,
-
-
-
     ) -> None:
+        # ========================================================
+        # VALIDATION MODE
+        #
+        # Periodic model inference belongs to controlled synthetic
+        # validation, not the real endpoint while validation mode
+        # is active.
+        # ========================================================
 
+        if IS_VALIDATION_MODE:
 
-
-
-
+            return
         now = time.time()
-
-
-
-
 
         for (
 
@@ -4780,21 +5448,57 @@ class ProcessMonitor:
         self,
 
     ):
-
-
-
-
-
+        
         logger.info(
 
             "Building initial process baseline..."
 
         )
 
+        # ========================================================
+        # VALIDATION MODE
+        #
+        # Establish only the PID snapshot necessary to detect
+        # future process starts/stops.
+        #
+        # Do NOT:
+        #
+        #   seed statistical history
+        #   extract AI features
+        #   run IF / AE
+        #   run Temporal AI
+        #   run Fusion
+        #
+        # on the real endpoint.
+        # ========================================================
+
+        if IS_VALIDATION_MODE:
+
+            self.previous_processes = (
+                self.get_process_snapshot()
+            )
 
 
+            self.last_ai_feature_sample.clear()
 
 
+            logger.warning(
+                "Process detector validation isolation ACTIVE | "
+                "Live processes=%s | "
+                "Rules=OFF | "
+                "Statistical=OFF | "
+                "IF=OFF | "
+                "AE=OFF | "
+                "Temporal=OFF | "
+                "Fusion=OFF",
+
+                len(
+                    self.previous_processes
+                ),
+            )
+
+
+            return
         # ========================================================
 
         # ISOLATION FOREST STATUS
@@ -5674,9 +6378,5 @@ if __name__ == "__main__":
         )
 
     )
-
-
-
-
 
     monitor.start()

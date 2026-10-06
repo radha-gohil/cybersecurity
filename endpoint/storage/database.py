@@ -4,11 +4,15 @@ import sqlite3
 from collections import Counter
 from contextlib import closing
 
-from config import ENDPOINT_DATABASE_PATH
-
 from endpoint.models.security_event import SecurityEvent
 from endpoint.utils.logger import get_logger
 
+from config import (
+    ENDPOINT_DATABASE_PATH,
+    IS_VALIDATION_MODE,
+    DATA_SOURCE_LIVE,
+    DATA_SOURCE_VALIDATION,
+)
 
 logger = get_logger(__name__)
 
@@ -326,7 +330,71 @@ def initialize_database():
         ENDPOINT_DATABASE_PATH,
     )
 
+# ============================================================
+# EVENT DATA SOURCE
+# ============================================================
 
+def get_event_data_source(
+    event_id: str,
+):
+
+    if not event_id:
+
+        return None
+
+
+    with closing(
+        get_connection()
+    ) as connection:
+
+        row = connection.execute(
+            """
+            SELECT metadata
+            FROM events
+            WHERE event_id = ?
+            """,
+            (
+                event_id,
+            ),
+        ).fetchone()
+
+
+    if row is None:
+
+        return None
+
+
+    metadata = (
+        safe_json_loads(
+            row["metadata"],
+            {},
+        )
+    )
+
+
+    if not isinstance(
+        metadata,
+        dict,
+    ):
+
+        return None
+
+
+    value = metadata.get(
+        "data_source"
+    )
+
+
+    if value is None:
+
+        return None
+
+
+    return str(
+        value
+    ).strip().upper()
+    
+    
 # ============================================================
 # SAVE SECURITY EVENT
 # ============================================================
@@ -337,7 +405,82 @@ def save_event(
 
     data = event.to_dict()
 
+    metadata = (
+        data.get(
+            "metadata",
+            {},
+        )
+        or {}
+    )
 
+
+    if not isinstance(
+        metadata,
+        dict,
+    ):
+
+        metadata = {}
+
+
+    data_source = str(
+        metadata.get(
+            "data_source",
+            ""
+        )
+        or ""
+    ).strip().upper()
+
+
+    # ========================================================
+    # VALIDATION MODE SAFETY
+    #
+    # sentinel_validation.db must contain ONLY controlled
+    # synthetic validation events.
+    # ========================================================
+
+    if IS_VALIDATION_MODE:
+
+        if (
+            data_source
+            != DATA_SOURCE_VALIDATION
+        ):
+
+            logger.warning(
+                "Blocked non-validation event persistence | "
+                "EventID=%s | "
+                "Type=%s | "
+                "DataSource=%s",
+
+                data.get("event_id"),
+                data.get("event_type"),
+                data_source or "MISSING",
+            )
+
+            return False
+
+
+    # ========================================================
+    # LIVE MODE SAFETY
+    #
+    # Never accidentally persist synthetic validation events
+    # into the real endpoint database.
+    # ========================================================
+
+    else:
+
+        if (
+            data_source
+            == DATA_SOURCE_VALIDATION
+        ):
+
+            logger.warning(
+                "Blocked synthetic validation event "
+                "from LIVE database | EventID=%s",
+
+                data.get("event_id"),
+            )
+
+            return False
     query = """
     INSERT INTO events (
         event_id,
@@ -427,6 +570,7 @@ def save_event(
         data["event_id"],
         data["event_type"],
     )
+    return True
 
 
 # ============================================================
@@ -604,13 +748,135 @@ def save_detection(
     event_id: str,
     detection: dict,
 ):
+    # ========================================================
+    # VERIFY LINKED EVENT SOURCE
+    # ========================================================
 
+    event_data_source = (
+        get_event_data_source(
+            event_id
+        )
+    )
+
+
+    # ========================================================
+    # VALIDATION MODE
+    #
+    # Only detections belonging to an explicitly persisted
+    # synthetic validation event may enter the database.
+    # ========================================================
+
+    if IS_VALIDATION_MODE:
+
+        if (
+            event_data_source
+            != DATA_SOURCE_VALIDATION
+        ):
+
+            logger.warning(
+                "Blocked detection persistence | "
+                "EventID=%s | "
+                "Expected=%s | "
+                "Actual=%s",
+
+                event_id,
+                DATA_SOURCE_VALIDATION,
+                event_data_source or "EVENT_NOT_FOUND",
+            )
+
+            return False
+
+
+    # ========================================================
+    # LIVE MODE
+    # ========================================================
+
+    else:
+
+        if (
+            event_data_source
+            == DATA_SOURCE_VALIDATION
+        ):
+
+            logger.warning(
+                "Blocked validation detection "
+                "from LIVE database | EventID=%s",
+
+                event_id,
+            )
+
+            return False
     normalized = (
         normalize_detection(
             detection
         )
     )
+        # ========================================================
+    # IDEMPOTENT DETECTION PERSISTENCE
+    #
+    # The same detector must not store the exact same threat
+    # twice for the same SecurityEvent.
+    # ========================================================
 
+    with closing(
+        get_connection()
+    ) as connection:
+
+        existing = connection.execute(
+            """
+            SELECT id
+
+            FROM detections
+
+            WHERE event_id = ?
+              AND engine = ?
+              AND threat_type = ?
+              AND detected = ?
+
+            ORDER BY id ASC
+
+            LIMIT 1
+            """,
+            (
+                event_id,
+
+                normalized[
+                    "engine"
+                ],
+
+                normalized[
+                    "threat_type"
+                ],
+
+                int(
+                    normalized[
+                        "detected"
+                    ]
+                ),
+            ),
+        ).fetchone()
+
+
+    if existing is not None:
+
+        logger.info(
+            "Duplicate detection skipped | "
+            "Event=%s | "
+            "Engine=%s | "
+            "Type=%s",
+
+            event_id,
+
+            normalized[
+                "engine"
+            ],
+
+            normalized[
+                "threat_type"
+            ],
+        )
+
+        return False
 
     query = """
     INSERT INTO detections (
@@ -705,7 +971,7 @@ def save_detection(
             "severity"
         ],
     )
-
+    return True
 
 # ============================================================
 # EVENT COUNT

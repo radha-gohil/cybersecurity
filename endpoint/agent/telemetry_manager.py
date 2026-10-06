@@ -3,7 +3,12 @@ from __future__ import annotations
 import threading
 import time
 from datetime import datetime, timezone
-
+from config import (
+    SENTINEL_RUNTIME_MODE,
+    IS_VALIDATION_MODE,
+    DATA_SOURCE_LIVE,
+    DATA_SOURCE_VALIDATION,
+)
 
 from endpoint.models.security_event import (
     SecurityEvent,
@@ -1151,6 +1156,129 @@ class TelemetryManager:
     #     ↓
     # Incident creation / update
     # ============================================================
+    
+    # ============================================================
+    # BUILD SECURITY EVENT
+    # ============================================================
+
+    def build_security_event(
+        self,
+        *,
+        event_type: str,
+        source: str,
+        severity: str = "INFO",
+        process: dict = None,
+        file: dict = None,
+        network: dict = None,
+        registry: dict = None,
+        metadata: dict = None,
+        data_source: str,
+        scenario_id=None,
+        validation_run_id=None,
+    ):
+
+        process = process or {}
+        file = file or {}
+        network = network or {}
+        registry = registry or {}
+
+        metadata = dict(
+            metadata or {}
+        )
+
+        category = (
+            self.get_event_category(
+                event_type
+            )
+        )
+
+        # ========================================================
+        # AUTHORITATIVE SOURCE METADATA
+        #
+        # Do not allow callers to spoof these fields.
+        # ========================================================
+
+        metadata.update(
+            {
+                "event_category":
+                    category,
+
+                "device_id":
+                    self.device_id,
+
+                "data_source":
+                    data_source,
+
+                "sentinel_runtime_mode":
+                    SENTINEL_RUNTIME_MODE,
+
+                "synthetic":
+                    data_source
+                    == DATA_SOURCE_VALIDATION,
+            }
+        )
+
+        if scenario_id is not None:
+
+            metadata[
+                "scenario_id"
+            ] = str(
+                scenario_id
+            )
+
+        if validation_run_id is not None:
+
+            metadata[
+                "validation_run_id"
+            ] = str(
+                validation_run_id
+            )
+
+        event = SecurityEvent(
+
+            event_type=
+                event_type,
+
+            source=
+                source,
+
+            device_id=
+                self.device_id,
+
+            severity=
+                severity,
+
+            process=
+                process,
+
+            file=
+                file,
+
+            network=
+                network,
+
+            registry=
+                registry,
+
+            metadata=
+                metadata,
+        )
+
+        return (
+            event,
+            category,
+        )
+    # ============================================================
+    # LIVE TELEMETRY
+    #
+    # VALIDATION MODE:
+    #
+    #     Real telemetry powers Live Monitor only.
+    #
+    # LIVE MODE:
+    #
+    #     Preserve the normal production pipeline.
+    # ============================================================
 
     def emit(
         self,
@@ -1164,88 +1292,14 @@ class TelemetryManager:
         metadata: dict = None,
     ):
 
-        # ========================================================
-        # NORMALIZE INPUT
-        # ========================================================
-
-        process = (
-            process
-            or {}
-        )
-
-
-        file = (
-            file
-            or {}
-        )
-
-
-        network = (
-            network
-            or {}
-        )
-
-
-        registry = (
-            registry
-            or {}
-        )
-
-
-        metadata = (
-            metadata
-            or {}
-        )
-
-
-        # ========================================================
-        # CATEGORY
-        # ========================================================
-
-        category = (
-            self.get_event_category(
-                event_type
-            )
-        )
-
-
-        # ========================================================
-        # CENTRAL TELEMETRY METADATA
-        # ========================================================
-
-        metadata = dict(
-            metadata
-        )
-
-
-        metadata.update(
-            {
-
-                "event_category":
-                    category,
-
-                "device_id":
-                    self.device_id,
-
-            }
-        )
-
-
-        # ========================================================
-        # CREATE SECURITY EVENT
-        # ========================================================
-
-        event = (
-            SecurityEvent(
+        event, category = (
+            self.build_security_event(
 
                 event_type=
                     event_type,
 
                 source=
                     source,
-
-                device_id=
-                    self.device_id,
 
                 severity=
                     severity,
@@ -1264,39 +1318,67 @@ class TelemetryManager:
 
                 metadata=
                     metadata,
+
+                data_source=
+                    DATA_SOURCE_LIVE,
             )
         )
 
 
         # ========================================================
-        # 1. SAVE RAW TELEMETRY
+        # VALIDATION MODE
         #
-        # Preserve your existing behaviour:
+        # Real machine telemetry must NEVER reach:
         #
-        # only count an event as live telemetry after the event
-        # has successfully reached central persistence.
+        #     endpoint DB
+        #     detections
+        #     provenance
+        #     correlation
+        #     incidents
+        #
+        # It powers only runtime telemetry / Live Monitor.
         # ========================================================
 
-        save_event(
-            event
+        if IS_VALIDATION_MODE:
+
+            self.record_runtime_event(
+                event=event,
+                category=category,
+            )
+
+            logger.debug(
+                "LIVE_ONLY telemetry | "
+                "Type=%s | "
+                "Category=%s | "
+                "EventID=%s",
+
+                event_type,
+                category,
+                event.event_id,
+            )
+
+            return event
+
+
+        # ========================================================
+        # LIVE MODE
+        #
+        # Normal production path.
+        # ========================================================
+
+        persisted = (
+            save_event(
+                event
+            )
         )
 
+        if persisted is False:
 
-        # ========================================================
-        # 2. RECORD LIVE RUNTIME EVENT
-        #
-        # Every successfully persisted telemetry event is recorded
-        # exactly once here.
-        #
-        # This is what powers:
-        #
-        #     Process Events
-        #     File Events
-        #     Network Events
-        #     System Events
-        #
-        # and the real-time line chart.
-        # ========================================================
+            raise RuntimeError(
+                "Live SecurityEvent persistence "
+                "was rejected."
+            )
+
 
         self.record_runtime_event(
             event=event,
@@ -1311,18 +1393,10 @@ class TelemetryManager:
             "EventID=%s",
 
             event_type,
-
             category,
-
             event.event_id,
         )
 
-
-        # ========================================================
-        # 3. PROVENANCE GRAPH
-        #
-        # Every SecurityEvent automatically updates the graph.
-        # ========================================================
 
         provenance_result = (
             self.write_provenance_graph(
@@ -1331,24 +1405,12 @@ class TelemetryManager:
         )
 
 
-        # ========================================================
-        # 4. CORRELATION
-        # ========================================================
-
         correlation_result = (
             self.process_correlation(
                 event
             )
         )
 
-
-        # ========================================================
-        # OPTIONAL RUNTIME METADATA
-        #
-        # This modifies only the returned in-memory SecurityEvent.
-        #
-        # Raw event persistence already happened above.
-        # ========================================================
 
         if isinstance(
             event.metadata,
@@ -1405,13 +1467,217 @@ class TelemetryManager:
             )
 
 
+        return event
+    
+        # ============================================================
+    # SYNTHETIC VALIDATION TELEMETRY
+    #
+    # This is the ONLY path synthetic scenarios should use.
+    #
+    # IMPORTANT:
+    #
+    # Validation events:
+    #
+    #       ARE persisted
+    #       DO enter provenance
+    #       DO enter correlation
+    #       DO create incidents when appropriate
+    #
+    # But:
+    #
+    #       DO NOT increment Live Monitor counters
+    # ============================================================
+
+    def emit_validation(
+        self,
+        *,
+        scenario_id: str,
+        event_type: str,
+        source: str = "synthetic_validation",
+        severity: str = "INFO",
+        process: dict = None,
+        file: dict = None,
+        network: dict = None,
+        registry: dict = None,
+        metadata: dict = None,
+        validation_run_id=None,
+    ):
+
+        if not IS_VALIDATION_MODE:
+
+            raise RuntimeError(
+                "emit_validation() is available only "
+                "when SENTINEL_RUNTIME_MODE=VALIDATION."
+            )
+
+
+        if not scenario_id:
+
+            raise ValueError(
+                "scenario_id is required for "
+                "synthetic validation telemetry."
+            )
+
+
+        event, category = (
+            self.build_security_event(
+
+                event_type=
+                    event_type,
+
+                source=
+                    source,
+
+                severity=
+                    severity,
+
+                process=
+                    process,
+
+                file=
+                    file,
+
+                network=
+                    network,
+
+                registry=
+                    registry,
+
+                metadata=
+                    metadata,
+
+                data_source=
+                    DATA_SOURCE_VALIDATION,
+
+                scenario_id=
+                    scenario_id,
+
+                validation_run_id=
+                    validation_run_id,
+            )
+        )
+
+
         # ========================================================
-        # RETURN SECURITY EVENT
+        # PERSIST VALIDATION EVENT
         # ========================================================
+
+        persisted = (
+            save_event(
+                event
+            )
+        )
+
+        if persisted is False:
+
+            raise RuntimeError(
+                "Validation SecurityEvent persistence "
+                "was rejected."
+            )
+
+
+        # ========================================================
+        # IMPORTANT
+        #
+        # Do NOT call record_runtime_event().
+        #
+        # Synthetic events must not appear as real Live Monitor
+        # activity.
+        # ========================================================
+
+
+        # ========================================================
+        # PROVENANCE
+        # ========================================================
+
+        provenance_result = (
+            self.write_provenance_graph(
+                event
+            )
+        )
+
+
+        # ========================================================
+        # CORRELATION
+        # ========================================================
+
+        correlation_result = (
+            self.process_correlation(
+                event
+            )
+        )
+
+
+        if isinstance(
+            event.metadata,
+            dict,
+        ):
+
+            event.metadata[
+                "provenance_graph"
+            ] = {
+
+                "processed":
+                    provenance_result
+                    is not None,
+
+                "node_count":
+                    (
+                        len(
+                            provenance_result.get(
+                                "nodes",
+                                {},
+                            )
+                        )
+
+                        if isinstance(
+                            provenance_result,
+                            dict,
+                        )
+
+                        else 0
+                    ),
+
+                "edge_count":
+                    (
+                        provenance_result.get(
+                            "edge_count",
+                            0,
+                        )
+
+                        if isinstance(
+                            provenance_result,
+                            dict,
+                        )
+
+                        else 0
+                    ),
+            }
+
+
+            event.metadata[
+                "correlation_processed"
+            ] = (
+                correlation_result
+                is not None
+            )
+
+
+        logger.info(
+            "VALIDATION telemetry emitted | "
+            "Scenario=%s | "
+            "Type=%s | "
+            "Category=%s | "
+            "EventID=%s",
+
+            scenario_id,
+            event_type,
+            category,
+            event.event_id,
+        )
+
 
         return event
-
-
 # ================================================================
 # SHARED PRODUCTION TELEMETRY MANAGER
 #

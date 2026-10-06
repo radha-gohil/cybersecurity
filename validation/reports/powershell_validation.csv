@@ -1,0 +1,11 @@
+scenario_id,scenario_name,rule_score,rule_suspicious,statistical_score,if_score,if_label,ae_score,ae_label,temporal_state,temporal_score,fusion_score,severity,should_alert,active_signals,strong_signals,stored_detections,stored_engine,stored_threat_type,failure_layers,passed
+P1-01,Benign PowerShell Get-Process,5,False,0,27.12,NORMAL,40.08,UNUSUAL,COLLECTING_HISTORY,,13.5333,INFO,False,,,0,,,,True
+P1-02,Benign PowerShell Get-Service,5,False,0,27.12,NORMAL,40.08,UNUSUAL,COLLECTING_HISTORY,,13.5333,INFO,False,,,0,,,,True
+P1-03,PowerShell Invoke-WebRequest,30,False,0,27.73,NORMAL,34.43,NORMAL,COLLECTING_HISTORY,,24.36,LOW,False,,,0,,,,True
+P1-04,Encoded PowerShell,35,True,0,27.02,NORMAL,44.96,UNUSUAL,COLLECTING_HISTORY,,32.6655,LOW,False,rules,,0,,,,True
+P1-05,Hidden Encoded PowerShell,50,True,0,27.15,NORMAL,40.31,UNUSUAL,COLLECTING_HISTORY,,44.6018,MEDIUM,False,rules,,0,,,,True
+P1-06,Word spawning encoded PowerShell,75,True,0,43.29,UNUSUAL,70.72,SUSPICIOUS,COLLECTING_HISTORY,,65.7227,HIGH,True,rules,rules,1,process_threat_fusion_v3,DOCUMENT_TO_POWERSHELL,,True
+P1-07,PowerShell download and execution pattern,70,True,0,27.65,NORMAL,34.84,NORMAL,COLLECTING_HISTORY,,60.5792,HIGH,True,rules,rules,1,process_threat_fusion_v3,POWERSHELL_DOWNLOAD_EXECUTION,,True
+P1-08,Eight-step temporal PowerShell sequence,100,True,0,29.06,NORMAL,23.26,NORMAL,TEMPORAL_INFERENCE_COMPLETE,100.0,92.289,CRITICAL,True,"rules,temporal_ai","rules,temporal_ai",1,process_threat_fusion_v3,POWERSHELL_DOWNLOAD_EXECUTION,,True
+P1-09,Duplicate detection persistence,80,True,0,44.38,UNUSUAL,55.23,UNUSUAL,COLLECTING_HISTORY,,70.8767,HIGH,True,rules,rules,1,process_threat_fusion_v3,DOCUMENT_TO_POWERSHELL,,True
+P1-10,Incomplete PowerShell telemetry,5,False,0,26.24,NORMAL,70.13,SUSPICIOUS,COLLECTING_HISTORY,,14.6033,INFO,False,,,0,,,,True

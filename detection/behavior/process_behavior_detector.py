@@ -5,11 +5,9 @@ class ProcessBehaviorDetector:
 
     def __init__(self):
 
-        # --------------------------------------------------------
-        # Windows binaries that are legitimate but are commonly
-        # relevant during security investigations.
-        # Their presence alone does NOT mean malicious activity.
-        # --------------------------------------------------------
+        # ========================================================
+        # MONITORED WINDOWS BINARIES
+        # ========================================================
 
         self.monitored_binaries = {
             "powershell.exe",
@@ -25,41 +23,44 @@ class ProcessBehaviorDetector:
         }
 
 
-        # --------------------------------------------------------
-        # Command-line characteristics worth investigating.
-        # --------------------------------------------------------
+        # ========================================================
+        # GENERIC COMMAND INDICATORS
+        # ========================================================
 
         self.command_indicators = {
-            "-encodedcommand":
-                30,
 
-            "-enc":
-                30,
+            # Encoded PowerShell
+            "-encodedcommand": 30,
+            "-encoded-command": 30,
 
-            "-windowstyle hidden":
-                15,
+            # IMPORTANT:
+            # trailing space prevents matching
+            # "-EncodedCommand" as "-enc"
+            "-enc ": 30,
 
-            "-w hidden":
-                15,
 
-            "invoke-webrequest":
-                10,
+            # Hidden PowerShell
+            "-windowstyle hidden": 15,
+            "-window hidden": 15,
+            "-w hidden": 15,
 
-            "invoke-restmethod":
-                10,
 
-            "downloadstring":
-                20,
+            # Download / network behavior
+            "invoke-webrequest": 10,
+            "invoke-restmethod": 10,
+            "downloadstring": 20,
+            "frombase64string": 20,
 
-            "frombase64string":
-                20,
+
+            # Downloaded/script execution
+            "invoke-expression": 30,
+            "iex ": 30,
         }
 
 
-        # --------------------------------------------------------
-        # Parent applications that normally should not frequently
-        # launch scripting interpreters.
-        # --------------------------------------------------------
+        # ========================================================
+        # DOCUMENT PARENTS
+        # ========================================================
 
         self.document_parents = {
             "winword.exe",
@@ -68,6 +69,10 @@ class ProcessBehaviorDetector:
             "outlook.exe",
         }
 
+
+        # ========================================================
+        # SCRIPT CHILDREN
+        # ========================================================
 
         self.script_children = {
             "powershell.exe",
@@ -80,7 +85,7 @@ class ProcessBehaviorDetector:
 
 
     # ============================================================
-    # NORMALIZE TEXT
+    # NORMALIZE
     # ============================================================
 
     def normalize(
@@ -93,7 +98,10 @@ class ProcessBehaviorDetector:
 
         if isinstance(
             value,
-            list,
+            (
+                list,
+                tuple,
+            ),
         ):
 
             value = " ".join(
@@ -107,7 +115,7 @@ class ProcessBehaviorDetector:
 
 
     # ============================================================
-    # EXTRACT EXECUTABLE NAME
+    # EXECUTABLE NAME
     # ============================================================
 
     def get_executable_name(
@@ -122,11 +130,21 @@ class ProcessBehaviorDetector:
         if not value:
             return ""
 
+        value = value.replace(
+            "/",
+            "\\",
+        )
+
         try:
 
-            return Path(
+            return (
                 value
-            ).name.lower()
+                .rsplit(
+                    "\\",
+                    1,
+                )[-1]
+                .lower()
+            )
 
         except Exception:
 
@@ -134,7 +152,7 @@ class ProcessBehaviorDetector:
 
 
     # ============================================================
-    # CONVERT SCORE TO SEVERITY
+    # SEVERITY
     # ============================================================
 
     def score_to_severity(
@@ -158,13 +176,21 @@ class ProcessBehaviorDetector:
 
 
     # ============================================================
-    # ANALYZE PROCESS BEHAVIOR
+    # ANALYZE
     # ============================================================
 
     def analyze(
         self,
         process: dict,
     ) -> dict:
+
+        if not isinstance(
+            process,
+            dict,
+        ):
+
+            process = {}
+
 
         score = 0
 
@@ -173,65 +199,85 @@ class ProcessBehaviorDetector:
         indicators = []
 
 
-        # --------------------------------------------------------
-        # SUPPORT MULTIPLE POSSIBLE FIELD NAMES
-        # --------------------------------------------------------
+        # ========================================================
+        # PROCESS INFORMATION
+        # ========================================================
 
-        process_name = self.get_executable_name(
-            process.get(
-                "name"
-            )
-            or process.get(
-                "process_name"
-            )
-            or process.get(
-                "exe"
+        process_name = (
+            self.get_executable_name(
+
+                process.get(
+                    "name"
+                )
+
+                or process.get(
+                    "process_name"
+                )
+
+                or process.get(
+                    "exe"
+                )
             )
         )
 
 
-        process_path = self.normalize(
-            process.get(
-                "exe"
-            )
-            or process.get(
-                "path"
-            )
-            or process.get(
-                "process_path"
+        process_path = (
+            self.normalize(
+
+                process.get(
+                    "exe"
+                )
+
+                or process.get(
+                    "path"
+                )
+
+                or process.get(
+                    "process_path"
+                )
             )
         )
 
 
-        command_line = self.normalize(
-            process.get(
-                "cmdline"
-            )
-            or process.get(
-                "command_line"
-            )
-            or process.get(
-                "command"
+        command_line = (
+            self.normalize(
+
+                process.get(
+                    "cmdline"
+                )
+
+                or process.get(
+                    "command_line"
+                )
+
+                or process.get(
+                    "command"
+                )
             )
         )
 
 
-        parent_name = self.get_executable_name(
-            process.get(
-                "parent_name"
-            )
-            or process.get(
-                "parent_process"
-            )
-            or process.get(
-                "pprocess_name"
+        parent_name = (
+            self.get_executable_name(
+
+                process.get(
+                    "parent_name"
+                )
+
+                or process.get(
+                    "parent_process"
+                )
+
+                or process.get(
+                    "pprocess_name"
+                )
             )
         )
 
 
-        # --------------------------------------------------------
-        # CHECK MONITORED SYSTEM BINARIES
-        # --------------------------------------------------------
+        # ========================================================
+        # MONITORED SYSTEM BINARY
+        # ========================================================
 
         if (
             process_name
@@ -249,9 +295,9 @@ class ProcessBehaviorDetector:
             )
 
 
-        # --------------------------------------------------------
-        # COMMAND-LINE INDICATORS
-        # --------------------------------------------------------
+        # ========================================================
+        # GENERIC COMMAND-LINE INDICATORS
+        # ========================================================
 
         for (
             indicator,
@@ -268,7 +314,7 @@ class ProcessBehaviorDetector:
                 )
 
                 reasons.append(
-                    f"Command-line indicator observed: "
+                    "Command-line indicator observed: "
                     f"{indicator}"
                 )
 
@@ -277,14 +323,17 @@ class ProcessBehaviorDetector:
                 )
 
 
-        # --------------------------------------------------------
-        # DOCUMENT APPLICATION SPAWNING SCRIPT ENGINE
-        # --------------------------------------------------------
+        # ========================================================
+        # DOCUMENT APPLICATION → SCRIPT ENGINE
+        # ========================================================
 
         if (
             parent_name
             in self.document_parents
-            and process_name
+
+            and
+
+            process_name
             in self.script_children
         ):
 
@@ -300,9 +349,9 @@ class ProcessBehaviorDetector:
             )
 
 
-        # --------------------------------------------------------
+        # ========================================================
         # TEMP DIRECTORY EXECUTION
-        # --------------------------------------------------------
+        # ========================================================
 
         temp_locations = (
             "\\appdata\\local\\temp\\",
@@ -314,6 +363,7 @@ class ProcessBehaviorDetector:
         if any(
             location
             in process_path
+
             for location
             in temp_locations
         ):
@@ -329,25 +379,34 @@ class ProcessBehaviorDetector:
             )
 
 
-        # --------------------------------------------------------
-        # SCRIPT ENGINE WITH NETWORK-RELATED COMMAND LINE
-        # --------------------------------------------------------
+        # ========================================================
+        # NETWORK URL
+        # ========================================================
 
-        network_terms = (
-            "http://",
-            "https://",
+        has_network_url = any(
+
+            marker
+            in command_line
+
+            for marker
+            in (
+                "http://",
+                "https://",
+            )
         )
 
+
+        # ========================================================
+        # GENERIC SCRIPT ENGINE + URL
+        # ========================================================
 
         if (
             process_name
             in self.script_children
-            and any(
-                term
-                in command_line
-                for term
-                in network_terms
-            )
+
+            and
+
+            has_network_url
         ):
 
             score += 15
@@ -362,9 +421,170 @@ class ProcessBehaviorDetector:
             )
 
 
-        # --------------------------------------------------------
-        # CAP SCORE
-        # --------------------------------------------------------
+        # ========================================================
+        # REMOTE WSCRIPT / CSCRIPT / MSHTA
+        #
+        # 5 monitored
+        # +15 URL
+        # +55 remote script execution
+        # =75
+        # ========================================================
+
+        if (
+            process_name
+            in {
+                "wscript.exe",
+                "cscript.exe",
+                "mshta.exe",
+            }
+
+            and
+
+            has_network_url
+        ):
+
+            score += 55
+
+            reasons.append(
+                "Windows script interpreter is executing "
+                "remote network content"
+            )
+
+            indicators.append(
+                "remote_script_execution"
+            )
+
+
+        # ========================================================
+        # CERTUTIL DOWNLOAD
+        # ========================================================
+
+        if (
+            process_name
+            == "certutil.exe"
+
+            and
+
+            has_network_url
+
+            and
+
+            "-urlcache"
+            in command_line
+        ):
+
+            score += 70
+
+            reasons.append(
+                "CertUtil remote URL-cache download behavior"
+            )
+
+            indicators.append(
+                "certutil_remote_download"
+            )
+
+
+        # ========================================================
+        # BITSADMIN TRANSFER
+        # ========================================================
+
+        if (
+            process_name
+            == "bitsadmin.exe"
+
+            and
+
+            has_network_url
+
+            and
+
+            "/transfer"
+            in command_line
+        ):
+
+            score += 70
+
+            reasons.append(
+                "BITSAdmin remote transfer behavior"
+            )
+
+            indicators.append(
+                "bitsadmin_remote_transfer"
+            )
+
+
+        # ========================================================
+        # RUNDLL32 SCRIPT EXECUTION
+        # ========================================================
+
+        if (
+            process_name
+            == "rundll32.exe"
+
+            and
+
+            any(
+
+                marker
+                in command_line
+
+                for marker
+                in (
+                    "javascript:",
+                    "vbscript:",
+                    "mshtml,runhtmlapplication",
+                )
+            )
+        ):
+
+            score += 70
+
+            reasons.append(
+                "Rundll32 script-based execution behavior"
+            )
+
+            indicators.append(
+                "rundll32_script_execution"
+            )
+
+
+        # ========================================================
+        # REGSVR32 REMOTE SCRIPTLET
+        # ========================================================
+
+        if (
+            process_name
+            == "regsvr32.exe"
+
+            and
+
+            has_network_url
+
+            and
+
+            "/i:"
+            in command_line
+
+            and
+
+            "scrobj.dll"
+            in command_line
+        ):
+
+            score += 70
+
+            reasons.append(
+                "Regsvr32 remote scriptlet execution behavior"
+            )
+
+            indicators.append(
+                "regsvr32_remote_scriptlet"
+            )
+
+
+        # ========================================================
+        # FINAL SCORE
+        # ========================================================
 
         score = min(
             score,

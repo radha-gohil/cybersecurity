@@ -1,0 +1,97 @@
+{
+  "suite": "SENTINEL-X REGISTRY MONITOR INTEGRATION",
+  "passed": 10,
+  "failed": 0,
+  "results": [
+    {
+      "scenario_id": "RI-01",
+      "scenario_name": "Registry collector coverage contract",
+      "mode": "SHADOW",
+      "detections": "defender_policy,defender_realtime_policy,hkcu_run,hkcu_runonce,hklm_run,hklm_runonce,lsa_policy,services,uac_policy,winlogon",
+      "expected": "R1_R2_R3_SCOPES_PRESENT",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "RI-02",
+      "scenario_name": "Run key benign persistence signal",
+      "mode": "SHADOW",
+      "detections": "REGISTRY_AUTORUN_PERSISTENCE",
+      "expected": "REGISTRY_AUTORUN_PERSISTENCE",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "RI-03",
+      "scenario_name": "Run key suspicious PowerShell persistence",
+      "mode": "SHADOW",
+      "detections": "SUSPICIOUS_RUN_KEY_PERSISTENCE",
+      "expected": "SUSPICIOUS_RUN_KEY_PERSISTENCE",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "RI-04",
+      "scenario_name": "Suspicious service persistence",
+      "mode": "SHADOW",
+      "detections": "SUSPICIOUS_SERVICE_PERSISTENCE",
+      "expected": "SUSPICIOUS_SERVICE_PERSISTENCE",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "RI-05",
+      "scenario_name": "Standard Winlogon shell remains quiet",
+      "mode": "SHADOW",
+      "detections": "",
+      "expected": "NO_ALERT",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "RI-06",
+      "scenario_name": "Nonstandard Winlogon shell",
+      "mode": "SHADOW",
+      "detections": "WINLOGON_PERSISTENCE_CHANGE",
+      "expected": "WINLOGON_PERSISTENCE_CHANGE",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "RI-07",
+      "scenario_name": "Defender realtime protection disabled",
+      "mode": "SHADOW",
+      "detections": "SECURITY_DEFENDER_TAMPERING",
+      "expected": "SECURITY_DEFENDER_TAMPERING",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "RI-08",
+      "scenario_name": "Unrelated registry value remains quiet",
+      "mode": "SHADOW",
+      "detections": "",
+      "expected": "NO_ALERT",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "RI-09",
+      "scenario_name": "Registry detector defaults to SHADOW",
+      "mode": "SHADOW",
+      "detections": "",
+      "expected": "SHADOW",
+      "failure_layers": "",
+      "passed": true
+    },
+    {
+      "scenario_id": "RI-10",
+      "scenario_name": "Incomplete registry evidence fails quiet",
+      "mode": "SHADOW",
+      "detections": "",
+      "expected": "NO_ALERT",
+      "failure_layers": "",
+      "passed": true
+    }
+  ]
+}

@@ -36,7 +36,22 @@ class MultiAgentSecurityPipeline:
     # ============================================================
 
     def validate_evidence(self, incident: dict) -> dict:
+        incident = self.safe_dict(incident)
         events = self.safe_list(incident.get("timeline"))
+        detections = [
+            item
+            for item in self.safe_list(incident.get("detections"))
+            if isinstance(item, dict)
+            and item.get("detected") is not False
+            and item.get("stored_detection_record") is True
+        ]
+
+        analysis_context = self.safe_dict(
+            incident.get("analysis_context")
+        )
+        validation_mode = bool(
+            analysis_context.get("validation_mode", False)
+        )
 
         seen_ids = set()
         authoritative = []
@@ -47,9 +62,7 @@ class MultiAgentSecurityPipeline:
                 rejected.append("INVALID_EVENT")
                 continue
 
-            event_id = str(
-                event.get("event_id") or ""
-            ).strip()
+            event_id = str(event.get("event_id") or "").strip()
 
             if not event_id or event_id in seen_ids:
                 rejected.append("MISSING_OR_DUPLICATE_ID")
@@ -61,15 +74,11 @@ class MultiAgentSecurityPipeline:
                 event.get("severity") or "INFO"
             ).upper()
 
-            if severity not in {
-                "MEDIUM", "HIGH", "CRITICAL"
-            }:
+            if severity not in {"MEDIUM", "HIGH", "CRITICAL"}:
                 rejected.append("INFORMATIONAL_OR_LOW")
                 continue
 
-            metadata = self.safe_dict(
-                event.get("metadata")
-            )
+            metadata = self.safe_dict(event.get("metadata"))
 
             mode = str(
                 metadata.get("detection_mode")
@@ -80,20 +89,21 @@ class MultiAgentSecurityPipeline:
                 or ""
             ).upper()
 
-            if (
-                "SHADOW" in mode
-                or mode in {"OFF", "DISABLED", "SIMULATION"}
-            ):
-                rejected.append("NON_AUTHORITATIVE_MODE")
-                continue
+            if not validation_mode:
+                if (
+                    "SHADOW" in mode
+                    or mode in {"OFF", "DISABLED", "SIMULATION"}
+                ):
+                    rejected.append("NON_AUTHORITATIVE_MODE")
+                    continue
 
-            if (
-                event.get("simulation_mode") is True
-                or metadata.get("simulation_mode") is True
-                or metadata.get("synthetic") is True
-            ):
-                rejected.append("SYNTHETIC_EVENT")
-                continue
+                if (
+                    event.get("simulation_mode") is True
+                    or metadata.get("simulation_mode") is True
+                    or metadata.get("synthetic") is True
+                ):
+                    rejected.append("SYNTHETIC_EVENT")
+                    continue
 
             device = str(
                 event.get("device_id")
@@ -124,7 +134,7 @@ class MultiAgentSecurityPipeline:
                     category = "NETWORK"
                 elif event_type.startswith("file"):
                     category = "FILE"
-                elif event_type.startswith("registry"):
+                elif event_type.startswith(("registry", "startup")):
                     category = "REGISTRY"
                 else:
                     rejected.append("UNKNOWN_CATEGORY")
@@ -142,7 +152,7 @@ class MultiAgentSecurityPipeline:
 
                 try:
                     pid = int(pid)
-                except (TypeError, ValueError):
+                except (TypeError, ValueError, OverflowError):
                     pid = None
 
                 if pid is None or pid in {0, 4} or pid < 0:
@@ -164,44 +174,125 @@ class MultiAgentSecurityPipeline:
                 event["category"]
             )
 
-        corroborated = any(
+        cross_category_corroboration = any(
             len(categories) >= 2
             for categories in categories_by_device.values()
         )
 
+        timeline_event_ids = {
+            str(event.get("event_id"))
+            for event in events
+            if isinstance(event, dict)
+            and event.get("event_id")
+        }
+
+        strong_detections = []
+
+        for detection in detections:
+            event_id = str(detection.get("event_id") or "")
+            if event_id and event_id not in timeline_event_ids:
+                continue
+
+            severity = str(
+                detection.get("severity") or "INFO"
+            ).upper()
+
+            try:
+                risk_score = float(
+                    detection.get("risk_score")
+                    or detection.get("fusion_score")
+                    or 0
+                )
+            except (TypeError, ValueError, OverflowError):
+                risk_score = 0.0
+
+            try:
+                signal_count = int(
+                    detection.get("independent_signal_count")
+                    or 0
+                )
+            except (TypeError, ValueError, OverflowError):
+                signal_count = 0
+
+            if (
+                risk_score >= 60
+                and severity in {"HIGH", "CRITICAL"}
+                and signal_count >= 2
+            ):
+                strong_detections.append(detection)
+
+        detection_signal_corroboration = bool(
+            strong_detections
+        )
+
+        live_policy_passed = (
+            len(authoritative) >= 2
+            and cross_category_corroboration
+        )
+
+        validation_policy_passed = (
+            validation_mode
+            and detection_signal_corroboration
+        )
+
+        passed = (
+            live_policy_passed
+            or validation_policy_passed
+        )
+
         reasons = []
 
-        if len(authoritative) < 2:
-            reasons.append(
-                "Fewer than two authoritative events."
-            )
+        if not passed:
+            if len(authoritative) < 2:
+                reasons.append(
+                    "Fewer than two authoritative events."
+                )
 
-        if not corroborated:
+            if not cross_category_corroboration:
+                reasons.append(
+                    "No two independent event categories are "
+                    "corroborated on one identified device."
+                )
+
+            if validation_mode and not detection_signal_corroboration:
+                reasons.append(
+                    "Validation incident lacks a persisted HIGH/CRITICAL "
+                    "detection with at least two supporting detector signals."
+                )
+
+        elif validation_policy_passed and not live_policy_passed:
             reasons.append(
-                "No two independent event categories "
-                "are corroborated on one identified device."
+                "VALIDATION-ONLY promotion gate passed using a persisted "
+                "HIGH/CRITICAL detector result with multi-signal corroboration. "
+                "This evidence is not production eligible."
             )
 
         return {
-            "passed": (
-                len(authoritative) >= 2
-                and corroborated
-            ),
+            "passed": passed,
             "authoritative_event_count": len(authoritative),
             "categories_by_device": {
                 device: sorted(categories)
-                for device, categories
-                in categories_by_device.items()
+                for device, categories in categories_by_device.items()
             },
+            "cross_category_corroboration": (
+                cross_category_corroboration
+            ),
+            "stored_detection_count": len(detections),
+            "strong_detection_count": len(strong_detections),
+            "detection_signal_corroboration": (
+                detection_signal_corroboration
+            ),
             "rejected_event_count": len(rejected),
             "rejected_reasons": rejected,
             "reasons": reasons,
-            "validation_policy": "CONSERVATIVE_V1",
+            "validation_only": validation_mode,
+            "production_eligible": not validation_mode,
+            "validation_policy": (
+                "VALIDATION_STRONG_DETECTION_V1"
+                if validation_mode
+                else "CONSERVATIVE_V1"
+            ),
         }
-
-    # ============================================================
-    # AGENT DECISIONS
-    # ============================================================
 
     def build_decisions(self, coordinated_result: dict) -> list:
         outputs = self.safe_dict(
@@ -267,10 +358,16 @@ class MultiAgentSecurityPipeline:
         ):
             return "CRITICAL_RESPONSE_REVIEW"
 
-        if decision in {
-            "RESPONSE_RECOMMENDED",
-            "RESPONSE_REVIEW",
-        }:
+        if (
+            decision in {
+                "RESPONSE_RECOMMENDED",
+                "RESPONSE_REVIEW",
+            }
+            or (
+                risk_level == "HIGH"
+                and risk.get("requires_response") is True
+            )
+        ):
             return "RESPONSE_REVIEW"
 
         if decision in {
@@ -526,6 +623,8 @@ class MultiAgentSecurityPipeline:
                 "final_decision", "MONITOR"
             ),
             "execution_enabled": False,
+            "validation_only": validation.get("validation_only", False),
+            "production_eligible": validation.get("production_eligible", True),
             "note": (
                 "Analysis and recommendations only. "
                 "Real containment execution is disabled."

@@ -406,25 +406,58 @@ class NetworkMonitor:
             self.known_connections.values()
         ):
 
-            pid = connection_info.get("pid")
+            pid = connection_info.get(
+                "pid"
+            )
 
-            # Avoid attributing unknown socket ownership
-            # to the Windows idle process.
+            try:
 
-            if pid is None or pid == 0:
+                attributed_pid = int(
+                    pid
+                )
+
+            except (
+                TypeError,
+                ValueError,
+                OverflowError,
+            ):
+
                 continue
+
+
+            if (
+                attributed_pid <= 0
+
+                or isinstance(
+                    pid,
+                    bool,
+                )
+            ):
+
+                continue
+
 
             try:
 
                 shared_process_behavior_context.record_network_activity(
-                    pid=attributed_pid,
-                    remote_ip=connection_info.get(
-                        "remote_ip"
-                    ),
+
+                    pid=
+                        attributed_pid,
+
+                    remote_ip=
+                        connection_info.get(
+                            "remote_ip"
+                        ),
                 )
 
                 seeded += 1
 
+            except Exception as error:
+
+                logger.debug(
+                    "Unable to seed network AI context | %s",
+                    error,
+                )
             except Exception as error:
 
                 logger.debug(

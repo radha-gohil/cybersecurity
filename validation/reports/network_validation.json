@@ -1,0 +1,158 @@
+{
+  "run_id": "NETWORK-BATCH-FC40883C",
+  "results": [
+    {
+      "scenario_id": "N1-01",
+      "family": "BASELINE",
+      "scenario_name": "Single normal outbound connection",
+      "sample_count": 1,
+      "detection_types": [],
+      "expected_type": null,
+      "finding_count": 0,
+      "persistence": null,
+      "failures": [],
+      "passed": true
+    },
+    {
+      "scenario_id": "N1-02",
+      "family": "CONNECTION_BURST",
+      "scenario_name": "Nineteen rapid connections",
+      "sample_count": 19,
+      "detection_types": [],
+      "expected_type": null,
+      "finding_count": 0,
+      "persistence": null,
+      "failures": [],
+      "passed": true
+    },
+    {
+      "scenario_id": "N1-03",
+      "family": "CONNECTION_BURST",
+      "scenario_name": "Twenty rapid connections",
+      "sample_count": 20,
+      "detection_types": [
+        "CONNECTION_BURST"
+      ],
+      "expected_type": "CONNECTION_BURST",
+      "finding_count": 1,
+      "persistence": {
+        "event_id": "481ecfd9-f90e-4b9a-a1ef-0c374686449b",
+        "saved": true,
+        "live_isolation_ok": true
+      },
+      "failures": [],
+      "passed": true
+    },
+    {
+      "scenario_id": "N2-01",
+      "family": "PORT_SCAN",
+      "scenario_name": "Nine destination ports",
+      "sample_count": 9,
+      "detection_types": [],
+      "expected_type": null,
+      "finding_count": 0,
+      "persistence": null,
+      "failures": [],
+      "passed": true
+    },
+    {
+      "scenario_id": "N2-02",
+      "family": "PORT_SCAN",
+      "scenario_name": "Ten unique destination ports",
+      "sample_count": 10,
+      "detection_types": [
+        "PORT_SCAN_BEHAVIOR"
+      ],
+      "expected_type": "PORT_SCAN_BEHAVIOR",
+      "finding_count": 1,
+      "persistence": {
+        "event_id": "4f12abf3-3b2d-4287-855e-0a8b31eb97f3",
+        "saved": true,
+        "live_isolation_ok": true
+      },
+      "failures": [],
+      "passed": true
+    },
+    {
+      "scenario_id": "N3-01",
+      "family": "DOS",
+      "scenario_name": "Twenty-nine same-target connections",
+      "sample_count": 29,
+      "detection_types": [
+        "CONNECTION_BURST"
+      ],
+      "expected_type": null,
+      "finding_count": 1,
+      "persistence": null,
+      "failures": [],
+      "passed": true
+    },
+    {
+      "scenario_id": "N3-02",
+      "family": "DOS",
+      "scenario_name": "Thirty same-target connections",
+      "sample_count": 30,
+      "detection_types": [
+        "CONNECTION_BURST",
+        "POSSIBLE_DOS_BEHAVIOR"
+      ],
+      "expected_type": "POSSIBLE_DOS_BEHAVIOR",
+      "finding_count": 2,
+      "persistence": {
+        "event_id": "6ee64944-39b2-4f84-8b5c-3b59431899e3",
+        "saved": true,
+        "live_isolation_ok": true
+      },
+      "failures": [],
+      "passed": true
+    },
+    {
+      "scenario_id": "N4-01",
+      "family": "BEACONING",
+      "scenario_name": "Irregular repeated connections",
+      "sample_count": 5,
+      "detection_types": [],
+      "expected_type": null,
+      "finding_count": 0,
+      "persistence": null,
+      "failures": [],
+      "passed": true
+    },
+    {
+      "scenario_id": "N4-02",
+      "family": "BEACONING",
+      "scenario_name": "Regular ten-second beacon",
+      "sample_count": 5,
+      "detection_types": [
+        "SUSPICIOUS_BEACONING"
+      ],
+      "expected_type": "SUSPICIOUS_BEACONING",
+      "finding_count": 1,
+      "persistence": {
+        "event_id": "01b258d0-dc30-4d9a-9014-7e83d513b0bf",
+        "saved": true,
+        "live_isolation_ok": true
+      },
+      "failures": [],
+      "passed": true
+    },
+    {
+      "scenario_id": "N5-01",
+      "family": "DDOS",
+      "scenario_name": "Multi-source distributed target flood",
+      "sample_count": 40,
+      "detection_types": [
+        "DISTRIBUTED_DOS_BEHAVIOR"
+      ],
+      "expected_type": "DISTRIBUTED_DOS_BEHAVIOR",
+      "finding_count": 1,
+      "persistence": {
+        "event_id": "3852e14c-6cbc-4834-b398-97f3ec1626d8",
+        "saved": true,
+        "live_isolation_ok": true
+      },
+      "failures": [],
+      "passed": true
+    }
+  ]
+}

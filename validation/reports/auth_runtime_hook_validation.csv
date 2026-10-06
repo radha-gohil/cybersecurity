@@ -1,0 +1,11 @@
+scenario_id,scenario_name,observed,expected,failure_layers,passed
+AH-01,SentinelAgent imports WindowsAuthCollector,True,True,,True
+AH-02,SentinelAgent constructs auth collector in SHADOW,True,True,,True
+AH-03,Authentication collector is registered in generic collector lifecycle,True,True,,True
+AH-04,Runtime WindowsAuthCollector remains SHADOW,SHADOW,SHADOW,,True
+AH-05,Windows Event Log backend dependency is available,True,True,,True
+AH-06,/telemetry/live exposes auth collector,True,True,,True
+AH-07,Live collector health count includes all registered collector types,True,True,,True
+AH-08,/endpoint/overview exposes auth collector state,True,True,,True
+AH-09,Authentication collector uses read-only Security Event Log query path,True,True,,True
+AH-10,Auth parser remains functional after runtime hookup,"{""event_type"": ""login_failure"", ""windows_event_id"": 4625, ""record_id"": 12345, ""timestamp"": ""2026-10-06T12:00:00.0000000Z"", ""username"": ""test_user"", ""domain"": ""TEST"", ""source_ip"": ""198.51.100.125"", ""source_port"": ""51515"", ""workstation"": ""TESTHOST"", ""logon_type"": ""3"", ""process_name"": ""C:\\Windows\\System32\\svchost.exe"", ""result"": ""failed"", ""status_code"": ""0xC000006D"", ""sub_status"": ""0xC000006A"", ""source"": ""windows_security_log"", ""synthetic_test"": false}",normalized 4625,,True

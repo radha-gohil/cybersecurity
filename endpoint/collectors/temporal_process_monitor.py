@@ -12,7 +12,9 @@ from typing import (
     Dict,
     Optional,
 )
-
+from config import (
+    ACTIVE_SOC_DATABASE_PATH,
+)
 
 # ================================================================
 # EXISTING WORKING PROCESS MONITOR
@@ -79,10 +81,9 @@ PROJECT_ROOT = (
 
 
 DEFAULT_DATABASE_PATH = (
-    PROJECT_ROOT
-    / "data"
-    / "database"
-    / "sentinel_endpoint.db"
+    Path(
+        ACTIVE_SOC_DATABASE_PATH
+    )
 )
 
 

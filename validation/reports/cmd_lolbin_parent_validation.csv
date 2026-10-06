@@ -1,0 +1,25 @@
+scenario_id,family,scenario_name,rule_score,rule_suspicious,statistical_score,if_score,if_label,ae_score,ae_label,fusion_score,severity,should_alert,stored,engine,threat_type,failure_layers,passed
+P2-01,CMD_SCRIPT,Benign CMD directory listing,5,False,0,26.93,NORMAL,67.88,SUSPICIOUS,14.31,INFO,False,0,,,,True
+P2-02,CMD_SCRIPT,Benign CMD whoami,5,False,0,26.21,NORMAL,75.47,SUSPICIOUS,15.4,LOW,False,0,,,,True
+P2-03,CMD_SCRIPT,Benign local WScript,5,False,0,26.71,NORMAL,81.43,HIGH_ANOMALY,16.33,LOW,False,0,,,,True
+P2-04,CMD_SCRIPT,Benign local CScript,5,False,0,26.47,NORMAL,81.41,HIGH_ANOMALY,16.31,LOW,False,0,,,,True
+P2-05,CMD_SCRIPT,CMD launches encoded PowerShell,35,True,0,27.31,NORMAL,61.75,SUSPICIOUS,32.3458,LOW,False,0,,,,True
+P2-06,CMD_SCRIPT,CMD launches hidden encoded PowerShell,50,True,0,28.08,NORMAL,50.86,UNUSUAL,45.2715,MEDIUM,False,0,,,,True
+P2-07,CMD_SCRIPT,Remote WScript payload,75,True,0,26.62,NORMAL,81.53,HIGH_ANOMALY,65.9012,HIGH,True,1,process_threat_fusion_v3,WSCRIPT_REMOTE_SCRIPT,,True
+P2-08,CMD_SCRIPT,Remote MSHTA payload,75,True,0,26.67,NORMAL,81.48,HIGH_ANOMALY,65.9,HIGH,True,1,process_threat_fusion_v3,MSHTA_REMOTE_PAYLOAD,,True
+P3-01,LOLBIN,Benign CertUtil hash operation,5,False,0,3.22,NORMAL,20.86,NORMAL,6.3467,INFO,False,0,,,,True
+P3-02,LOLBIN,CertUtil remote download,75,True,0,4.28,NORMAL,22.94,NORMAL,62.5878,HIGH,True,1,process_threat_fusion_v3,CERTUTIL_DOWNLOAD,,True
+P3-03,LOLBIN,BITSAdmin remote transfer,75,True,0,4.01,NORMAL,21.97,NORMAL,62.5155,HIGH,True,1,process_threat_fusion_v3,BITSADMIN_TRANSFER,,True
+P3-04,LOLBIN,Benign Rundll32 control panel,5,False,0,2.52,NORMAL,18.27,NORMAL,5.7967,INFO,False,0,,,,True
+P3-05,LOLBIN,Rundll32 script execution,75,True,0,2.43,NORMAL,18.46,NORMAL,62.2192,HIGH,True,1,process_threat_fusion_v3,RUNDLL32_SCRIPT_EXECUTION,,True
+P3-06,LOLBIN,Regsvr32 remote scriptlet,75,True,0,4.12,NORMAL,22.9,NORMAL,62.5762,HIGH,True,1,process_threat_fusion_v3,REGSVR32_REMOTE_SCRIPTLET,,True
+P3-07,LOLBIN,Benign local MSHTA,5,False,0,26.43,NORMAL,81.38,HIGH_ANOMALY,16.3033,LOW,False,0,,,,True
+P3-08,LOLBIN,Remote MSHTA execution,75,True,0,26.67,NORMAL,81.5,HIGH_ANOMALY,65.9012,HIGH,True,1,process_threat_fusion_v3,MSHTA_REMOTE_PAYLOAD,,True
+P4-01,PARENT_CHILD,Explorer launches CMD,5,False,0,26.23,NORMAL,75.37,SUSPICIOUS,15.3867,LOW,False,0,,,,True
+P4-02,PARENT_CHILD,Explorer launches local WScript,5,False,0,26.47,NORMAL,81.39,HIGH_ANOMALY,16.3067,LOW,False,0,,,,True
+P4-03,PARENT_CHILD,Word launches CMD,45,True,0,40.6,UNUSUAL,85.67,HIGH_ANOMALY,42.0448,MEDIUM,False,0,,,,True
+P4-04,PARENT_CHILD,Excel launches WScript,45,True,0,41.13,UNUSUAL,87.85,HIGH_ANOMALY,42.172,MEDIUM,False,0,,,,True
+P4-05,PARENT_CHILD,Outlook launches CMD,45,True,0,40.6,UNUSUAL,85.67,HIGH_ANOMALY,42.0448,MEDIUM,False,0,,,,True
+P4-06,PARENT_CHILD,Word launches encoded CMD chain,75,True,0,43.14,UNUSUAL,82.51,HIGH_ANOMALY,66.3387,HIGH,True,1,process_threat_fusion_v3,DOCUMENT_TO_CMD,,True
+P4-07,PARENT_CHILD,Excel launches remote WScript,100,True,0,41.51,UNUSUAL,88.04,HIGH_ANOMALY,79.0,HIGH,True,1,process_threat_fusion_v3,DOCUMENT_TO_WSCRIPT,,True
+P4-08,PARENT_CHILD,Outlook launches remote MSHTA,100,True,0,41.61,UNUSUAL,87.99,HIGH_ANOMALY,79.0,HIGH,True,1,process_threat_fusion_v3,DOCUMENT_TO_MSHTA,,True

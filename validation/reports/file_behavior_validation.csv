@@ -1,0 +1,11 @@
+scenario_id,family,scenario_name,sample_count,detections,expected,static_risk,static_severity,failure_layers,passed,notes
+F1-01,FILE_CREATE,Benign text file creation,1,,NO_ALERT,0,INFO,,True,False-positive control.
+F1-02,FILE_CREATE,Low-entropy PE-like executable,1,,NO_HIGH_ALERT,20,LOW,,True,Benign-looking executable must not become HIGH/CRITICAL from extension/MZ signature alone.
+F1-03,FILE_CREATE,High-entropy PE-like executable creation,1,SUSPICIOUS_EXECUTABLE_CREATION,SUSPICIOUS_EXECUTABLE_CREATION,40,MEDIUM,,True,Static evidence is promoted to the dedicated F1 detector without claiming malware classification.
+F2-01,MASS_MODIFICATION,Fourteen distinct modifications,14,,NO_FILE_MODIFICATION_BURST,,,,True,Boundary test below threshold 15.
+F2-02,MASS_MODIFICATION,Fifteen distinct modifications,15,FILE_MODIFICATION_BURST,FILE_MODIFICATION_BURST,,,,True,Exact modification threshold.
+F2-03,MASS_RENAME,Seven same-extension renames,7,,NO_MASS_FILE_RENAME,,,,True,Boundary test below rename threshold 8.
+F2-04,MASS_RENAME,Eight same-extension renames,8,MASS_FILE_RENAME,MASS_FILE_RENAME,,,,True,Exact rename threshold.
+F3-01,RANSOMWARE_BEHAVIOR,Five extension changes,5,,NO_EXTENSION_CHANGE_BURST,,,,True,Below extension threshold 6.
+F3-02,RANSOMWARE_BEHAVIOR,Six extension changes,6,EXTENSION_CHANGE_BURST,EXTENSION_CHANGE_BURST,,,,True,Exact extension-change threshold.
+F3-03,RANSOMWARE_BEHAVIOR,Eight rapid extension-changing renames,8,"EXTENSION_CHANGE_BURST,MASS_FILE_RENAME,POSSIBLE_RANSOMWARE_BEHAVIOR",POSSIBLE_RANSOMWARE_BEHAVIOR,,,,True,"Combined ransomware scoring must use active recent signals, not only alerts emitted on the current event."

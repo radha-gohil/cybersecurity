@@ -18,6 +18,10 @@ from detection.behavior.ransomware_behavior_detector import (
     RansomwareBehaviorDetector,
 )
 
+from detection.behavior.suspicious_file_creation_detector import (
+    SuspiciousFileCreationDetector,
+)
+
 from endpoint.agent.telemetry_manager import (
     shared_telemetry_manager,
 )
@@ -42,13 +46,20 @@ class SentinelFileEventHandler(
         self,
         malware_detection_enabled: bool = False,
         ransomware_detection_mode: str = "SHADOW",
+        file_detection_mode: str = "SHADOW",
     ):
 
         super().__init__()
+
         mode = str(ransomware_detection_mode).upper().strip()
         if mode not in {"OFF", "SHADOW", "EMIT"}:
             raise ValueError("ransomware_detection_mode must be OFF, SHADOW, or EMIT")
         self.ransomware_detection_mode = mode
+
+        file_mode = str(file_detection_mode).upper().strip()
+        if file_mode not in {"OFF", "SHADOW", "EMIT"}:
+            raise ValueError("file_detection_mode must be OFF, SHADOW, or EMIT")
+        self.file_detection_mode = file_mode
         # Fail closed until EMBER feature parity and real PE inference are verified.
         self.malware_detection_enabled = bool(malware_detection_enabled)
 
@@ -66,6 +77,16 @@ class SentinelFileEventHandler(
 
         self.static_analyzer = (
             StaticFileAnalyzer()
+        )
+
+        # ========================================================
+        # SUSPICIOUS FILE-CREATION DETECTOR
+        # ========================================================
+
+        self.file_creation_detector = (
+            SuspiciousFileCreationDetector(
+                static_risk_threshold=30,
+            )
         )
 
         # ========================================================
@@ -220,6 +241,71 @@ class SentinelFileEventHandler(
             )
 
             return {}
+
+    # ============================================================
+    # SUSPICIOUS FILE-CREATION ANALYSIS
+    # ============================================================
+
+    def analyze_static_file_behavior(
+        self,
+        event_type: str,
+        file_path: str,
+        static_analysis: dict,
+    ):
+        if self.file_detection_mode == "OFF":
+            return []
+
+        detection = (
+            self.file_creation_detector.analyze(
+                event_type=event_type,
+                file_path=file_path,
+                static_analysis=static_analysis,
+            )
+        )
+
+        return (
+            [detection]
+            if detection
+            else []
+        )
+
+    # ============================================================
+    # SAVE STATIC FILE DETECTIONS
+    # ============================================================
+
+    def save_static_file_detections(
+        self,
+        event,
+        detections,
+    ):
+        for detection in (
+            detections
+            or []
+        ):
+            try:
+                save_detection(
+                    event.event_id,
+                    dict(detection),
+                )
+
+                logger.warning(
+                    "STATIC FILE DETECTION | EventID=%s | "
+                    "Type=%s | Severity=%s | Risk=%s | File=%s",
+                    event.event_id,
+                    detection.get("detection_type"),
+                    detection.get("severity"),
+                    detection.get("risk_score"),
+                    detection.get("file_path"),
+                )
+
+            except Exception as error:
+                logger.error(
+                    "Failed to save static file detection | "
+                    "EventID=%s | Type=%s | %s",
+                    event.event_id,
+                    detection.get("detection_type"),
+                    error,
+                )
 
     # ============================================================
     # RUN RANSOMWARE BEHAVIOR ANALYSIS
@@ -701,6 +787,18 @@ class SentinelFileEventHandler(
                 )
 
         # --------------------------------------------------------
+        # SUSPICIOUS FILE-CREATION ANALYSIS
+        # --------------------------------------------------------
+
+        static_behavior_detections = (
+            self.analyze_static_file_behavior(
+                event_type=event_type,
+                file_path=file_path,
+                static_analysis=static_analysis,
+            )
+        )
+
+        # --------------------------------------------------------
         # RANSOMWARE BEHAVIOR ANALYSIS
         #
         # This can run even when a synthetic/nonexistent file path
@@ -823,6 +921,23 @@ class SentinelFileEventHandler(
                 "FileMonitor",
 
             "malware_ml_enabled": self.malware_detection_enabled,
+
+            "file_detection_mode":
+                self.file_detection_mode,
+
+            "static_file_detection_count":
+                len(
+                    static_behavior_detections
+                ),
+
+            "static_file_detection_types":
+                [
+                    detection.get(
+                        "detection_type"
+                    )
+                    for detection
+                    in static_behavior_detections
+                ],
 
             "ransomware_behavior_analysis":
                 self.ransomware_detection_mode != "OFF",
@@ -955,6 +1070,19 @@ class SentinelFileEventHandler(
                     metadata,
             )
         )
+
+        # ========================================================
+        # SAVE STATIC FILE DETECTIONS
+        # ========================================================
+
+        if (
+            static_behavior_detections
+            and self.file_detection_mode == "EMIT"
+        ):
+            self.save_static_file_detections(
+                event,
+                static_behavior_detections,
+            )
 
         # ========================================================
         # SAVE MALWARE DETECTION
@@ -1197,6 +1325,9 @@ class SentinelFileEventHandler(
             "event":
                 event,
 
+            "static_file_detections":
+                static_behavior_detections,
+
             "malware_detection":
                 malware_detection,
 
@@ -1313,12 +1444,18 @@ class FileMonitor:
         watch_path=None,
         malware_detection_enabled: bool = False,
         ransomware_detection_mode: str = "SHADOW",
+        file_detection_mode: str = "SHADOW",
     ):
 
         mode = str(ransomware_detection_mode).upper().strip()
         if mode not in {"OFF", "SHADOW", "EMIT"}:
             raise ValueError("ransomware_detection_mode must be OFF, SHADOW, or EMIT")
         self.ransomware_detection_mode = mode
+
+        file_mode = str(file_detection_mode).upper().strip()
+        if file_mode not in {"OFF", "SHADOW", "EMIT"}:
+            raise ValueError("file_detection_mode must be OFF, SHADOW, or EMIT")
+        self.file_detection_mode = file_mode
 
         if watch_path is None:
 
@@ -1366,6 +1503,11 @@ class FileMonitor:
         )
 
         logger.info(
+            "Static file detection mode: %s",
+            self.file_detection_mode,
+        )
+
+        logger.info(
             "Ransomware detection mode: %s",
             self.ransomware_detection_mode,
         )
@@ -1374,6 +1516,7 @@ class FileMonitor:
             SentinelFileEventHandler(
                 malware_detection_enabled=self.malware_detection_enabled,
                 ransomware_detection_mode=self.ransomware_detection_mode,
+                file_detection_mode=self.file_detection_mode,
             )
         )
 

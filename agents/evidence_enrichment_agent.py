@@ -46,7 +46,44 @@ class EvidenceEnrichmentAgent:
     # ============================================================
 
     def extract_processes(self, events: list) -> list:
-        processes = []
+        """
+        Convert repeated process observations into canonical process entities.
+
+        Identity preference:
+            device_id + pid + process creation time
+
+        Fallback:
+            device_id + pid + process name + executable
+
+        A temporal sequence may contain many observations of the same process.
+        Those observations must not become many Digital Twin process entities.
+        """
+
+        def safe_number(value):
+            try:
+                return float(value)
+            except (TypeError, ValueError, OverflowError):
+                return 0.0
+
+        def normalize_pid(value):
+            try:
+                if value is None or isinstance(value, bool):
+                    return None
+                pid = int(value)
+                return pid if pid > 0 else None
+            except (TypeError, ValueError, OverflowError):
+                return None
+
+        def normalize_create_time(value):
+            if value is None or isinstance(value, bool):
+                return None
+            try:
+                return round(float(value), 6)
+            except (TypeError, ValueError, OverflowError):
+                text = str(value).strip()
+                return text or None
+
+        canonical = {}
 
         for event in events:
             if not isinstance(event, dict):
@@ -58,8 +95,11 @@ class EvidenceEnrichmentAgent:
             network = self.safe_dict(
                 event.get("network")
             )
+            metadata = self.safe_dict(
+                event.get("metadata")
+            )
 
-            pid = (
+            pid = normalize_pid(
                 process.get("pid")
                 if process.get("pid") is not None
                 else network.get("pid")
@@ -72,28 +112,134 @@ class EvidenceEnrichmentAgent:
 
             exe = process.get("exe")
 
+            device_id = str(
+                event.get("device_id")
+                or metadata.get("device_id")
+                or ""
+            ).strip() or None
+
+            create_time = normalize_create_time(
+                process.get("create_time")
+                if process.get("create_time") is not None
+                else process.get("process_create_time")
+            )
+
             if pid is None and not name and not exe:
                 continue
 
-            item = {
-                "pid": pid,
-                "ppid": process.get("ppid"),
-                "name": name,
-                "exe": exe,
-                "cmdline": process.get("cmdline"),
-                "parent_name":
-                    process.get("parent_name"),
-                "behavior_score":
-                    process.get("behavior_score"),
-                "anomaly_score":
-                    process.get("anomaly_score"),
-                "combined_threat_score":
-                    process.get("combined_threat_score"),
-            }
+            if (
+                device_id is not None
+                and pid is not None
+                and create_time is not None
+            ):
+                identity_key = (
+                    "PROCESS_IDENTITY",
+                    device_id,
+                    pid,
+                    create_time,
+                )
+                identity_complete = True
+            else:
+                identity_key = (
+                    "PROCESS_FALLBACK",
+                    device_id or "UNSCOPED",
+                    pid,
+                    str(name or "").lower(),
+                    str(exe or "").lower(),
+                )
+                identity_complete = False
 
-            self.add_unique(processes, item)
+            item = canonical.get(
+                identity_key
+            )
 
-        return processes
+            if item is None:
+                item = {
+                    "pid": pid,
+                    "ppid": process.get("ppid"),
+                    "name": name,
+                    "exe": exe,
+                    "cmdline": process.get("cmdline"),
+                    "username": process.get("username"),
+                    "parent_name": process.get("parent_name"),
+                    "device_id": device_id,
+                    "create_time": create_time,
+                    "process_create_time": create_time,
+                    "identity_complete": identity_complete,
+
+                    # Complete identifiers are observed from raw telemetry.
+                    # They are suitable for canonicalization, but are not
+                    # represented as cryptographically verified attribution.
+                    "identity_verified": False,
+                    "identity_source": (
+                        "RAW_TELEMETRY_IDENTIFIERS"
+                        if identity_complete
+                        else "PARTIAL_TELEMETRY_IDENTIFIERS"
+                    ),
+                    "provenance_status": (
+                        "OBSERVED_IDENTIFIERS_UNVERIFIED"
+                        if identity_complete
+                        else "PARTIAL_IDENTIFIERS"
+                    ),
+
+                    "behavior_score": process.get("behavior_score"),
+                    "anomaly_score": process.get("anomaly_score"),
+                    "combined_threat_score": process.get(
+                        "combined_threat_score"
+                    ),
+                    "observation_count": 0,
+                    "event_ids": [],
+                    "first_seen": event.get("timestamp"),
+                    "last_seen": event.get("timestamp"),
+                }
+                canonical[identity_key] = item
+
+            item["observation_count"] += 1
+
+            event_id = event.get("event_id")
+            if (
+                event_id
+                and event_id not in item["event_ids"]
+            ):
+                item["event_ids"].append(event_id)
+
+            if item.get("first_seen") is None:
+                item["first_seen"] = event.get("timestamp")
+
+            if event.get("timestamp") is not None:
+                item["last_seen"] = event.get("timestamp")
+
+            # Retain the strongest observed process evidence.
+            for field in (
+                "behavior_score",
+                "anomaly_score",
+                "combined_threat_score",
+            ):
+                current = safe_number(item.get(field))
+                candidate = safe_number(process.get(field))
+                if candidate > current:
+                    item[field] = process.get(field)
+
+            # Prefer richer/latest descriptive values.
+            for field, value in (
+                ("ppid", process.get("ppid")),
+                ("name", name),
+                ("exe", exe),
+                ("username", process.get("username")),
+                ("parent_name", process.get("parent_name")),
+            ):
+                if value not in (None, ""):
+                    item[field] = value
+
+            candidate_cmd = process.get("cmdline")
+            if candidate_cmd:
+                current_cmd = str(item.get("cmdline") or "")
+                if len(str(candidate_cmd)) >= len(current_cmd):
+                    item["cmdline"] = candidate_cmd
+
+        return list(
+            canonical.values()
+        )
 
     # ============================================================
     # EXTRACT FILE EVIDENCE
@@ -883,6 +1029,172 @@ class EvidenceEnrichmentAgent:
     # ENRICH INCIDENT
     # ============================================================
 
+    def extract_detections(self, incident: dict) -> list:
+        detections = []
+
+        for item in self.safe_list(
+            self.safe_dict(incident).get("detections")
+        ):
+            if not isinstance(item, dict):
+                continue
+
+            if item.get("detected") is False:
+                continue
+
+            if item.get("stored_detection_record") is not True:
+                continue
+
+            detections.append(dict(item))
+
+        return detections
+
+    def merge_detection_context(
+        self,
+        processes: list,
+        detections: list,
+    ) -> list:
+        processes = [
+            dict(item)
+            for item in processes
+            if isinstance(item, dict)
+        ]
+
+        def safe_number(value):
+            try:
+                number = float(value)
+                return number
+            except (TypeError, ValueError, OverflowError):
+                return 0.0
+
+        for detection in detections:
+            pid = detection.get("pid")
+            process_name = str(
+                detection.get("process_name") or ""
+            ).lower()
+
+            match = None
+
+            for process in processes:
+                same_pid = (
+                    pid is not None
+                    and process.get("pid") == pid
+                )
+                same_name = (
+                    process_name
+                    and str(
+                        process.get("name") or ""
+                    ).lower() == process_name
+                )
+
+                if same_pid or (pid is None and same_name):
+                    match = process
+                    break
+
+            if match is None and (pid is not None or process_name):
+                match = {
+                    "pid": pid,
+                    "ppid": detection.get("ppid"),
+                    "name": detection.get("process_name"),
+                    "exe": None,
+                    "cmdline": None,
+                    "parent_name": detection.get(
+                        "parent_process_name"
+                    ),
+                    "behavior_score": detection.get("rule_score"),
+                    "anomaly_score": None,
+                    "combined_threat_score": None,
+                }
+                processes.append(match)
+
+            if match is None:
+                continue
+
+            detection_score = max(
+                safe_number(detection.get("risk_score")),
+                safe_number(detection.get("fusion_score")),
+            )
+            current_combined = safe_number(
+                match.get("combined_threat_score")
+            )
+
+            if detection_score > current_combined:
+                match["combined_threat_score"] = detection_score
+
+            if match.get("behavior_score") is None:
+                match["behavior_score"] = detection.get("rule_score")
+
+            match["rule_score"] = detection.get("rule_score")
+            match["fusion_score"] = detection.get("fusion_score")
+            match["temporal_score"] = detection.get("temporal_score")
+            match["detection_risk_score"] = detection.get("risk_score")
+            match["detection_severity"] = detection.get("severity")
+            match["detection_engine"] = detection.get("engine")
+            match["threat_type"] = detection.get("threat_type")
+            match["supporting_signals"] = detection.get(
+                "supporting_signals", []
+            )
+
+        return processes
+
+    def summarize_detections(self, detections: list) -> dict:
+        max_risk = 0.0
+        max_signal_count = 0
+        strong_count = 0
+        engines = []
+        threat_types = []
+
+        for detection in detections:
+            try:
+                risk = float(
+                    detection.get("risk_score")
+                    or detection.get("fusion_score")
+                    or 0
+                )
+            except (TypeError, ValueError, OverflowError):
+                risk = 0.0
+
+            try:
+                signal_count = int(
+                    detection.get("independent_signal_count")
+                    or 0
+                )
+            except (TypeError, ValueError, OverflowError):
+                signal_count = 0
+
+            severity = str(
+                detection.get("severity") or "INFO"
+            ).upper()
+
+            if (
+                risk >= 60
+                and severity in {"HIGH", "CRITICAL"}
+                and signal_count >= 2
+            ):
+                strong_count += 1
+
+            max_risk = max(max_risk, risk)
+            max_signal_count = max(
+                max_signal_count,
+                signal_count,
+            )
+
+            engine = detection.get("engine")
+            if engine and engine not in engines:
+                engines.append(engine)
+
+            threat = detection.get("threat_type")
+            if threat and threat not in threat_types:
+                threat_types.append(threat)
+
+        return {
+            "stored_detection_count": len(detections),
+            "strong_detection_count": strong_count,
+            "max_detection_risk": round(max_risk, 4),
+            "max_signal_count": max_signal_count,
+            "engines": engines,
+            "threat_types": threat_types,
+        }
+
     def enrich(self, incident: dict) -> dict:
         incident = self.safe_dict(incident)
 
@@ -890,39 +1202,28 @@ class EvidenceEnrichmentAgent:
             incident.get("timeline")
         )
 
-        # ========================================================
-        # EXISTING EVIDENCE EXTRACTION
-        # ========================================================
+        detections = self.extract_detections(
+            incident
+        )
 
         processes = self.extract_processes(
             events
         )
-
-        files = self.extract_files(
-            events
+        processes = self.merge_detection_context(
+            processes,
+            detections,
         )
 
-        network = self.extract_network(
-            events
-        )
-
-        registry = self.extract_registry(
-            events
-        )
-
-        indicators = self.extract_indicators(
-            events
-        )
+        files = self.extract_files(events)
+        network = self.extract_network(events)
+        registry = self.extract_registry(events)
+        indicators = self.extract_indicators(events)
 
         iocs = self.build_iocs(
             files,
             network,
             registry,
         )
-
-        # ========================================================
-        # EXISTING RELATIONSHIPS
-        # ========================================================
 
         relationships = self.build_relationships(
             processes,
@@ -931,39 +1232,35 @@ class EvidenceEnrichmentAgent:
             registry,
         )
 
-        # Preserve original heuristic matching values
-        # without representing them as verified confidence.
         for relationship in relationships:
             original_score = relationship.get(
                 "confidence", 0
             )
-
             relationship["match_score"] = original_score
             relationship["confidence"] = 0
             relationship["verified"] = False
             relationship["provenance_status"] = "INFERRED"
             relationship["requires_validation"] = True
 
-        # ========================================================
-        # NEW: RAW-TELEMETRY IDENTITY LINKS
-        # ========================================================
-
         identity_links = self.build_identity_links(
             events
         )
 
-        # ========================================================
-        # FINAL ENRICHED EVIDENCE
-        # ========================================================
+        detection_summary = self.summarize_detections(
+            detections
+        )
+
+        analysis_context = self.safe_dict(
+            incident.get("analysis_context")
+        )
+        validation_only = bool(
+            analysis_context.get("validation_mode", False)
+        )
 
         return {
-            "incident_id": incident.get(
-                "incident_id"
-            ),
+            "incident_id": incident.get("incident_id"),
             "agent": self.name,
             "enriched_at": self.now_iso(),
-
-            # Original result fields retained.
             "processes": processes,
             "files": files,
             "network_connections": network,
@@ -971,21 +1268,28 @@ class EvidenceEnrichmentAgent:
             "indicators": indicators,
             "iocs": iocs,
             "relationships": relationships,
-
-            # Supplemental candidate links.
             "identity_links": identity_links,
-
+            "detections": detections,
+            "detection_summary": detection_summary,
+            "validation_only": validation_only,
+            "production_eligible": not validation_only,
             "summary": {
                 "process_count": len(processes),
+                "process_observation_count": sum(
+                    int(item.get("observation_count") or 1)
+                    for item in processes
+                    if isinstance(item, dict)
+                ),
                 "file_count": len(files),
                 "network_count": len(network),
                 "registry_count": len(registry),
                 "indicator_count": len(indicators),
-                "relationship_count":
-                    len(relationships),
-
-                # New summary field.
-                "identity_link_count":
-                    len(identity_links),
+                "relationship_count": len(relationships),
+                "identity_link_count": len(identity_links),
+                "stored_detection_count": len(detections),
+                "strong_detection_count": detection_summary.get(
+                    "strong_detection_count", 0
+                ),
             },
         }
+

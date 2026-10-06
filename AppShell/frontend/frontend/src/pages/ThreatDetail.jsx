@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import {
   useLocation,
@@ -74,6 +73,24 @@ function key(value) {
   return String(value ?? "").trim().toLowerCase();
 }
 
+function humanizeThreatType(value) {
+  if (!value) return "";
+
+  const text = String(value)
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+
+  return text
+    .replace(/Powershell/g, "PowerShell")
+    .replace(/Cmd/g, "CMD")
+    .replace(/Mshta/g, "MSHTA")
+    .replace(/Wscript/g, "WScript")
+    .replace(/Cscript/g, "CScript")
+    .replace(/Regsvr32/g, "Regsvr32")
+    .replace(/Rundll32/g, "Rundll32");
+}
+
 function reasonsOf(value) {
   if (Array.isArray(value)) {
     return value
@@ -145,12 +162,48 @@ function getExplanation(detection) {
   const scores = detection.model_scores || {};
   const forest = process.isolation_forest || {};
   const encoder = process.autoencoder || {};
+  const temporal = process.temporal || {};
 
   const statements = [];
 
-  if (forest.available === true && forest.model_outlier === true) {
+  const ruleScore = numeric(
+    scores.rule_score ?? process.behavior_score
+  );
+
+  const temporalScore = numeric(
+    scores.temporal_score ?? temporal.score
+  );
+
+  const fusionScore = numeric(
+    scores.fusion_score ?? process.fusion_score
+  );
+
+  if (ruleScore !== null) {
     statements.push(
-      "Isolation Forest classified the recorded process features as anomalous."
+      `Rule evidence score: ${ruleScore}.`
+    );
+  }
+
+  if (temporalScore !== null) {
+    statements.push(
+      `Temporal AI score: ${temporalScore}` +
+      `${temporal.label ? ` (${show(temporal.label).replace(/_/g, " ")})` : ""}.`
+    );
+  }
+
+  if (fusionScore !== null) {
+    statements.push(
+      `Fusion-v3 combined evidence score: ${fusionScore}` +
+      `${process.fusion_severity ? ` (${show(process.fusion_severity)})` : ""}.`
+    );
+  }
+
+  if (forest.available === true) {
+    statements.push(
+      `Isolation Forest result: ${show(
+        forest.anomaly_label,
+        forest.model_outlier === true ? "ANOMALOUS" : "NORMAL"
+      )} (${show(forest.anomaly_confidence)}).`
     );
   }
 
@@ -163,7 +216,7 @@ function getExplanation(detection) {
       `Autoencoder result: ${show(
         encoder.anomaly_label,
         "Anomaly measure recorded"
-      )}.`
+      )} (${show(encoder.anomaly_confidence)}).`
     );
   }
 
@@ -637,11 +690,18 @@ export default function ThreatDetail() {
     process.process_name ||
     null;
 
-  const title = processName
-    ? `Behavioral AI alert — ${processName}`
-    : detection.display_title ||
-      show(detection.threat_type, "Security detection")
-        .replace(/_/g, " ");
+  const threatLabel =
+    humanizeThreatType(detection.threat_type) ||
+    detection.display_title ||
+    "Security Detection";
+
+  const title =
+    processName &&
+    !String(threatLabel)
+      .toLowerCase()
+      .includes(String(processName).toLowerCase())
+      ? `${threatLabel} - ${processName}`
+      : threatLabel;
 
   const severity = String(
     detection.severity || "UNKNOWN"
@@ -653,6 +713,34 @@ export default function ThreatDetail() {
   const reasons = reasonsOf(
     detection.detection_reason ?? process.fusion_reasons
   );
+
+  const ruleScore = numeric(
+    scores.rule_score ?? process.behavior_score
+  );
+  const statisticalScore = numeric(
+    scores.statistical_score ?? process.statistical_score
+  );
+  const temporalScore = numeric(
+    scores.temporal_score ?? process.temporal?.score
+  );
+  const behavioralAiScore = numeric(
+    scores.ai_consensus_score ??
+      process.ai_consensus_score ??
+      process.behavior_ai_score
+  );
+
+  const corroboratingSignals = [
+    ...(ruleScore !== null && ruleScore >= 35 ? ["Rules"] : []),
+    ...(statisticalScore !== null && statisticalScore >= 35
+      ? ["Statistical"]
+      : []),
+    ...(behavioralAiScore !== null && behavioralAiScore >= 60
+      ? ["Behavioral AI"]
+      : []),
+    ...(temporalScore !== null && temporalScore >= 60
+      ? ["Temporal AI"]
+      : []),
+  ];
 
   const timeline = Array.isArray(incident?.timeline)
     ? incident.timeline
@@ -817,30 +905,31 @@ export default function ThreatDetail() {
             <Stack direction="row" spacing={1} alignItems="center">
               <PsychologyRounded sx={{ color: "#a78bfa" }} />
               <Typography variant="h6">
-                Evidence Confidence
+                Evidence Corroboration
               </Typography>
             </Stack>
 
             <Typography sx={{ fontSize: 28, fontWeight: 750, mt: 2 }}>
-              {show(
-                process.fusion_confidence ??
-                  scores.evidence_confidence
-              )}
+              {corroboratingSignals.length
+                ? `${corroboratingSignals.length} independent signal${
+                    corroboratingSignals.length === 1 ? "" : "s"
+                  }`
+                : "No corroboration reported"}
             </Typography>
 
             <Typography
               sx={{ color: "#94a3b8", mt: 1, fontSize: 13 }}
             >
-              Model agreement:
-              {" "}
-              {show(scores.ai_agreement)}
+              {corroboratingSignals.length
+                ? corroboratingSignals.join(" + ")
+                : "No independently active evidence categories were available."}
             </Typography>
 
             <Typography
               sx={{ color: "#64748b", mt: 1, fontSize: 12 }}
             >
-              Model agreement and overall evidence confidence
-              measure different things.
+              Corroboration is not a calibrated probability of
+              malicious activity and does not authorize containment.
             </Typography>
           </CardContent>
         </Card>
@@ -954,9 +1043,11 @@ export default function ThreatDetail() {
           </Stack>
 
           <Alert severity="warning" sx={{ mt: 2 }}>
-            Attack classification not established. A model
-            anomaly alone does not confirm malware,
-            ransomware or another specific attack.
+            {detection.threat_type
+              ? `Detector classification: ${humanizeThreatType(
+                  detection.threat_type
+                )}. This classification is supported by recorded detection evidence, but it still requires analyst validation and does not authorize containment.`
+              : "No specific detector classification was stored. Model anomaly evidence alone does not establish an attack type."}
           </Alert>
 
           {processAgeFlag && (
@@ -1148,7 +1239,7 @@ export default function ThreatDetail() {
                 sx={{ mt: 1, color: "#94a3b8" }}
               >
                 {incident
-                  ? `Recorded incident status: ${show(
+                  ? `Correlation incident status: ${show(
                       incident.status
                     )}`
                   : "Incident relationship not verified"}

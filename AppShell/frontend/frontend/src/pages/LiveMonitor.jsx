@@ -27,9 +27,6 @@ import {
     useState,
 } from "react";
 
-import SecurityDetectionFeed from
-    "../components/SecurityDetectionFeed";
-
 import {
     ResponsiveContainer,
     LineChart,
@@ -42,7 +39,6 @@ import {
 } from "recharts";
 
 import {
-    getEndpointOverview,
     getSecurityRuntime,
     getLiveTelemetry,
 } from "../api/sentinelApi";
@@ -204,8 +200,6 @@ function LiveMonitor() {
     /* STATE */
     /* ======================================================== */
 
-    const [overview, setOverview] =
-        useState(null);
 
     const [runtime, setRuntime] =
         useState(null);
@@ -411,13 +405,9 @@ function LiveMonitor() {
                 const livePromise =
                     getLiveTelemetry();
 
-                let overviewPromise = null;
                 let runtimePromise = null;
 
                 if (shouldRefreshSummary) {
-                    overviewPromise =
-                        getEndpointOverview();
-
                     runtimePromise =
                         getSecurityRuntime();
                 }
@@ -444,20 +434,11 @@ function LiveMonitor() {
 
                     const results =
                         await Promise.allSettled([
-                            overviewPromise,
                             runtimePromise,
                         ]);
 
                     if (!mountedRef.current) {
                         return;
-                    }
-
-                    if (
-                        results[0].status === "fulfilled"
-                    ) {
-                        setOverview(
-                            results[0].value
-                        );
                     }
 
                     if (
@@ -543,8 +524,7 @@ function LiveMonitor() {
 
     if (
         loading &&
-        !live &&
-        !overview
+        !live 
     ) {
 
         return (
@@ -576,24 +556,21 @@ function LiveMonitor() {
     }
 
 
-    /* ======================================================== */
-    /* REAL HISTORICAL COUNTS */
-    /* ======================================================== */
 
-    const categoryCounts =
-        overview?.event_category_counts || {};
+    /* ======================================================== */
+    /* REAL LIVE RUNTIME COUNTS */
+    /* ======================================================== */
 
     const eventCounts =
-        normalizeCounts(categoryCounts);
+        normalizeCounts(
+            live?.runtime_counts || {}
+        );
+
 
     const totalEvents =
-        asCount(overview?.event_count);
-
-    const detectionCount =
-        asCount(overview?.detection_count);
-
-    const incidentCount =
-        asCount(overview?.incident_count);
+        asCount(
+            live?.runtime_event_count
+        );
 
 
     /* ======================================================== */
@@ -1075,18 +1052,28 @@ function LiveMonitor() {
 
 
                         <SummaryRow
-                            label="Total monitored events"
+                            label="Live events this runtime"
                             value={totalEvents.toLocaleString()}
                         />
 
                         <SummaryRow
-                            label="Security detections"
-                            value={detectionCount.toLocaleString()}
+                            label="Process events"
+                            value={eventCounts.process.toLocaleString()}
                         />
 
                         <SummaryRow
-                            label="Security incidents"
-                            value={incidentCount.toLocaleString()}
+                            label="File events"
+                            value={eventCounts.file.toLocaleString()}
+                        />
+
+                        <SummaryRow
+                            label="Network events"
+                            value={eventCounts.network.toLocaleString()}
+                        />
+
+                        <SummaryRow
+                            label="System / registry events"
+                            value={eventCounts.system.toLocaleString()}
                         />
 
                         <SummaryRow
