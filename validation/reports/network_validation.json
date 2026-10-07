@@ -1,5 +1,5 @@
 {
-  "run_id": "NETWORK-BATCH-FC40883C",
+  "run_id": "NETWORK-BATCH-C7E8C22C",
   "results": [
     {
       "scenario_id": "N1-01",
@@ -36,7 +36,7 @@
       "expected_type": "CONNECTION_BURST",
       "finding_count": 1,
       "persistence": {
-        "event_id": "481ecfd9-f90e-4b9a-a1ef-0c374686449b",
+        "event_id": "6585a36f-263b-4a63-946d-6076a6f6bfcc",
         "saved": true,
         "live_isolation_ok": true
       },
@@ -66,7 +66,7 @@
       "expected_type": "PORT_SCAN_BEHAVIOR",
       "finding_count": 1,
       "persistence": {
-        "event_id": "4f12abf3-3b2d-4287-855e-0a8b31eb97f3",
+        "event_id": "5b62a2bb-0ef1-4f76-9c6b-8be192695312",
         "saved": true,
         "live_isolation_ok": true
       },
@@ -99,7 +99,7 @@
       "expected_type": "POSSIBLE_DOS_BEHAVIOR",
       "finding_count": 2,
       "persistence": {
-        "event_id": "6ee64944-39b2-4f84-8b5c-3b59431899e3",
+        "event_id": "aca86a7a-4c47-4630-85c4-a44655c6d6fc",
         "saved": true,
         "live_isolation_ok": true
       },
@@ -129,7 +129,7 @@
       "expected_type": "SUSPICIOUS_BEACONING",
       "finding_count": 1,
       "persistence": {
-        "event_id": "01b258d0-dc30-4d9a-9014-7e83d513b0bf",
+        "event_id": "532d4c38-e1fc-46e0-a0a7-ff05768cc8b1",
         "saved": true,
         "live_isolation_ok": true
       },
@@ -147,7 +147,7 @@
       "expected_type": "DISTRIBUTED_DOS_BEHAVIOR",
       "finding_count": 1,
       "persistence": {
-        "event_id": "3852e14c-6cbc-4834-b398-97f3ec1626d8",
+        "event_id": "8ea114f7-8c06-44a7-9e10-484f665d5856",
         "saved": true,
         "live_isolation_ok": true
       },

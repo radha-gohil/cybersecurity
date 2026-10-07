@@ -1,11 +1,11 @@
 scenario_id,family,scenario_name,observed,expected,failure_layers,passed,notes
 7B-01,SOC_APPROVAL_E2E,Validation SOC stores are isolated from live database,active=sentinel_validation.db;case=sentinel_validation.db;action=sentinel_validation.db;evidence=sentinel_validation.db;workflow_ticket=sentinel_validation.db;ticket=sentinel_validation.db,all SOC stores -> sentinel_validation.db,,True,
 7B-02,SOC_APPROVAL_E2E,Digital Twin produces approval-required response plan,plan=Minimal Targeted Response;actions=1;approval=True;simulation=True,plan exists with approval-required response action,,True,
-7B-03,SOC_APPROVAL_E2E,Controlled SOC case is visible through API,http=200;status=AWAITING_ANALYST_REVIEW;ticket=TKT-FC2611460048;approval=PENDING,case visible with PENDING ticket,,True,
+7B-03,SOC_APPROVAL_E2E,Controlled SOC case is visible through API,http=200;status=AWAITING_ANALYST_REVIEW;ticket=TKT-2EE47F95411D;approval=PENDING,case visible with PENDING ticket,,True,
 7B-04,SOC_APPROVAL_E2E,Response action begins in safe PENDING state,http=200;actions=1;pending=1,approval=PENDING and execution=NOT_EXECUTED,,True,
 7B-05,SOC_APPROVAL_E2E,SOC ticket persists with analyst approval pending,http=200;tickets=1;pending=1,ticket approval=PENDING,,True,
 7B-06,SOC_APPROVAL_E2E,Analyst approval routes actions through simulation only,http=200;success=True;status=SIMULATED_RESPONSE_COMPLETED;routes=1;safe_routes=1;real_execution=False,SIMULATED_RESPONSE_COMPLETED / executed=False,,True,
-7B-07,SOC_APPROVAL_E2E,Approved simulated action state persists,http=200;actions=1;approved_success=0,all actions APPROVED + SUCCESS,ACTION_PERSISTENCE,False,
+7B-07,SOC_APPROVAL_E2E,Approved simulated action state persists,http=200;actions=1;approved_success=1,all actions APPROVED + SUCCESS,,True,
 7B-08,SOC_APPROVAL_E2E,SOC ticket approval state persists,http=200;tickets=1;approved=1,ticket approval=APPROVED,,True,
 7B-09,SOC_APPROVAL_E2E,Already-approved ticket cannot be approved again,http=409;detail=SOC ticket is already approved.,HTTP 409 on duplicate approval,,True,
 7B-10,SOC_APPROVAL_E2E,Simulated response reaches mitigation verification and full incident view,verify_http=200;verify_status=SIMULATION_VERIFIED;full_http=200;incident_visible=True;real_execution=False,SIMULATION_VERIFIED + complete persisted incident view,,True,

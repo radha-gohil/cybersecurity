@@ -148,27 +148,144 @@ class DigitalTwinVisualPreview:
         self.predictor = DigitalTwinRiskPredictor()
         self.integration = DigitalTwinDecisionIntegration()
 
-    def evidence_from(self, incident, intelligence):
-        incident = obj(incident)
-        intelligence = obj(intelligence)
+    def evidence_from(
+        self,
+        incident,
+        intelligence,
+    ):
+        """
+        Build Digital Twin evidence while preserving source-event provenance.
+
+        IMPORTANT:
+
+        Investigation-agent enrichment is useful for normalized entity
+        information, but enriched entities may not preserve the source
+        event_id / severity / detection mode required by the Digital Twin
+        safety gate.
+
+        Therefore:
+
+            raw persisted timeline
+                    ↓
+            observed entity + provenance
+                    ↓
+            optional enrichment merged into observation
+                    ↓
+            Digital Twin
+
+        The raw event remains the authority for:
+
+        - event_id
+        - device_id
+        - observed severity
+        - source/detection mode
+
+        Enrichment may add descriptive/contextual information but may not
+        invent source provenance.
+        """
+
+        incident = obj(
+            incident
+        )
+
+        intelligence = obj(
+            intelligence
+        )
+        # ============================================================
+        # STORED DETECTION PROVENANCE
+        # ============================================================
+
+        detections_by_event = {}
+
+        for detection in items(
+            incident.get("detections")
+        ):
+
+            event_id = str(
+                detection.get("event_id")
+                or ""
+            ).strip()
+
+            if not event_id:
+                continue
+
+            if detection.get("detected") is False:
+                continue
+
+            current = detections_by_event.get(
+                event_id
+            )
+
+            def detection_risk(record):
+                try:
+                    return float(
+                        record.get("risk_score")
+                        or 0
+                    )
+                except (
+                    TypeError,
+                    ValueError,
+                ):
+                    return 0.0
+
+            # If multiple detector records exist for one event,
+            # retain the highest stored detector-risk record.
+            if (
+                current is None
+                or detection_risk(detection)
+                >
+                detection_risk(current)
+            ):
+                detections_by_event[
+                    event_id
+                ] = detection
+        # ============================================================
+        # AGENT-ENRICHED EVIDENCE
+        # ============================================================
 
         coordinated = obj(
-            intelligence.get("coordinated_analysis")
+            intelligence.get(
+                "coordinated_analysis"
+            )
         )
-        context = obj(coordinated.get("context"))
+
+        context = obj(
+            coordinated.get(
+                "context"
+            )
+        )
 
         enriched = (
-            obj(coordinated.get("evidence"))
-            or obj(context.get("evidence"))
+            obj(
+                coordinated.get(
+                    "evidence"
+                )
+            )
+            or
+            obj(
+                context.get(
+                    "evidence"
+                )
+            )
         )
 
-        evidence = {
-            category: deduplicate(
-                category,
-                enriched.get(category),
-            )
-            for category in CATEGORIES
+        enriched_evidence = {
+
+            category:
+                deduplicate(
+                    category,
+                    enriched.get(
+                        category
+                    ),
+                )
+
+            for category
+            in CATEGORIES
         }
+
+        # ============================================================
+        # RAW TIMELINE OBSERVATIONS
+        # ============================================================
 
         observations = {
             category: []
@@ -178,57 +295,647 @@ class DigitalTwinVisualPreview:
         for event in items(
             incident.get("timeline")
         )[:200]:
+
+            # --------------------------------------------------------
+            # EVENT ID + LINKED DETECTION
+            #
+            # IMPORTANT:
+            # These must be calculated INSIDE the event loop.
+            # --------------------------------------------------------
+
+            event_id = str(
+                event.get("event_id")
+                or ""
+            ).strip()
+
+            detection = obj(
+                detections_by_event.get(
+                    event_id
+                )
+            )
+
+            metadata = obj(
+                event.get("metadata")
+            )
+
+            # Prefer an explicit recorded category.
+            # Fall back to the event type when required.
             category_name = str(
                 event.get("event_category")
+                or metadata.get("event_category")
                 or event.get("event_type")
                 or ""
             ).upper()
 
-            metadata = obj(event.get("metadata"))
+            # --------------------------------------------------------
+            # MAP RAW EVENT TO DIGITAL-TWIN EVIDENCE CATEGORY
+            # --------------------------------------------------------
 
-            for keyword, (category, field) in (
-                CATEGORY_MAP.items()
-            ):
+            for keyword, (
+                category,
+                field,
+            ) in CATEGORY_MAP.items():
+
                 if keyword not in category_name:
                     continue
 
                 part = (
-                    obj(event.get(field))
-                    or obj(metadata.get(field))
+                    obj(
+                        event.get(
+                            field
+                        )
+                    )
+                    or
+                    obj(
+                        metadata.get(
+                            field
+                        )
+                    )
                 )
 
-                if part:
-                    observations[category].append({
-                        **deepcopy(part),
-                        "event_id": event.get("event_id"),
-                        "device_id": (
-                            event.get("device_id")
-                            or part.get("device_id")
+                # We identified the category, but this
+                # event contains no entity payload for it.
+                if not part:
+                    break
+
+                # ----------------------------------------------------
+                # SOURCE / DETECTION MODE
+                # ----------------------------------------------------
+
+                source_mode = (
+                    metadata.get(
+                        "detection_mode"
+                    )
+                    or
+                    metadata.get(
+                        "operating_mode"
+                    )
+                    or
+                    metadata.get(
+                        "mode"
+                    )
+                    or
+                    event.get(
+                        "detection_mode"
+                    )
+                    or
+                    event.get(
+                        "mode"
+                    )
+                    or
+                    "UNKNOWN"
+                )
+
+                # ----------------------------------------------------
+                # OBSERVED ENTITY
+                # ----------------------------------------------------
+
+                observation = {
+                    **deepcopy(
+                        part
+                    ),
+
+                    # ------------------------------------------------
+                    # SOURCE PROVENANCE
+                    # ------------------------------------------------
+
+                    "event_id":
+                        event_id or None,
+
+                    "device_id":
+                        (
+                            event.get(
+                                "device_id"
+                            )
+                            or
+                            metadata.get(
+                                "device_id"
+                            )
+                            or
+                            part.get(
+                                "device_id"
+                            )
                         ),
-                        "source_mode": metadata.get(
-                            "detection_mode",
-                            "UNKNOWN",
+
+                    "source_mode":
+                        source_mode,
+
+                    "observed_severity":
+                        event.get(
+                            "severity"
                         ),
-                        "observed_severity":
-                            event.get("severity"),
-                    })
+
+                    "observed_event_type":
+                        event.get(
+                            "event_type"
+                        ),
+
+                    "observed_category":
+                        (
+                            event.get(
+                                "event_category"
+                            )
+                            or
+                            metadata.get(
+                                "event_category"
+                            )
+                        ),
+
+                    # ------------------------------------------------
+                    # STORED DETECTOR PROVENANCE
+                    #
+                    # These remain detector observations.
+                    # risk_score is NOT converted into a malware
+                    # probability.
+                    # ------------------------------------------------
+
+                    "observed_detection_risk":
+                        detection.get(
+                            "risk_score"
+                        ),
+
+                    "detection_engine":
+                        detection.get(
+                            "engine"
+                        ),
+
+                    "detection_threat_type":
+                        detection.get(
+                            "threat_type"
+                        ),
+
+                    "detection_severity":
+                        detection.get(
+                            "severity"
+                        ),
+
+                    "detection_confidence":
+                        detection.get(
+                            "confidence"
+                        ),
+
+                    # ------------------------------------------------
+                    # VALIDATION MARKER
+                    # ------------------------------------------------
+
+                    "synthetic":
+                        bool(
+                            metadata.get(
+                                "synthetic"
+                            )
+                            or
+                            event.get(
+                                "synthetic"
+                            )
+                        ),
+                }
+
+                observations[
+                    category
+                ].append(
+                    observation
+                )
+
+                # One persisted event belongs to one
+                # primary telemetry category here.
                 break
+        # ============================================================
+        # MATCH ENRICHED ENTITY TO A RAW OBSERVATION
+        # ============================================================
+
+        def matches(
+            category,
+            enriched_item,
+            observation,
+        ):
+            enriched_item = obj(
+                enriched_item
+            )
+
+            observation = obj(
+                observation
+            )
+
+            # --------------------------------------------------------
+            # DEVICE
+            # --------------------------------------------------------
+
+            enriched_device = str(
+                enriched_item.get(
+                    "device_id"
+                )
+                or
+                ""
+            )
+
+            observed_device = str(
+                observation.get(
+                    "device_id"
+                )
+                or
+                ""
+            )
+
+            if (
+                enriched_device
+                and
+                observed_device
+                and
+                enriched_device
+                !=
+                observed_device
+            ):
+
+                return False
+
+            # --------------------------------------------------------
+            # PROCESS
+            # --------------------------------------------------------
+
+            if category == "processes":
+
+                enriched_pid = valid_pid(
+                    enriched_item.get(
+                        "pid"
+                    )
+                )
+
+                observed_pid = valid_pid(
+                    observation.get(
+                        "pid"
+                    )
+                )
+
+                return (
+                    enriched_pid is not None
+                    and
+                    observed_pid is not None
+                    and
+                    enriched_pid
+                    ==
+                    observed_pid
+                )
+
+            # --------------------------------------------------------
+            # FILE
+            # --------------------------------------------------------
+
+            if category == "files":
+
+                enriched_sha = str(
+                    enriched_item.get(
+                        "sha256"
+                    )
+                    or
+                    ""
+                ).lower()
+
+                observed_sha = str(
+                    observation.get(
+                        "sha256"
+                    )
+                    or
+                    ""
+                ).lower()
+
+                if (
+                    enriched_sha
+                    and
+                    observed_sha
+                ):
+
+                    return (
+                        enriched_sha
+                        ==
+                        observed_sha
+                    )
+
+                enriched_path = str(
+                    enriched_item.get(
+                        "path"
+                    )
+                    or
+                    ""
+                ).lower()
+
+                observed_path = str(
+                    observation.get(
+                        "path"
+                    )
+                    or
+                    ""
+                ).lower()
+
+                return bool(
+                    enriched_path
+                    and
+                    observed_path
+                    and
+                    enriched_path
+                    ==
+                    observed_path
+                )
+
+            # --------------------------------------------------------
+            # NETWORK
+            # --------------------------------------------------------
+
+            if category == (
+                "network_connections"
+            ):
+
+                enriched_ip = str(
+                    enriched_item.get(
+                        "remote_ip"
+                    )
+                    or
+                    ""
+                )
+
+                observed_ip = str(
+                    observation.get(
+                        "remote_ip"
+                    )
+                    or
+                    ""
+                )
+
+                if (
+                    not enriched_ip
+                    or
+                    not observed_ip
+                    or
+                    enriched_ip
+                    !=
+                    observed_ip
+                ):
+
+                    return False
+
+                enriched_port = (
+                    enriched_item.get(
+                        "remote_port"
+                    )
+                )
+
+                observed_port = (
+                    observation.get(
+                        "remote_port"
+                    )
+                )
+
+                if (
+                    enriched_port is not None
+                    and
+                    observed_port is not None
+                    and
+                    str(
+                        enriched_port
+                    )
+                    !=
+                    str(
+                        observed_port
+                    )
+                ):
+
+                    return False
+
+                enriched_pid = valid_pid(
+                    enriched_item.get(
+                        "pid"
+                    )
+                )
+
+                observed_pid = valid_pid(
+                    observation.get(
+                        "pid"
+                    )
+                )
+
+                if (
+                    enriched_pid is not None
+                    and
+                    observed_pid is not None
+                    and
+                    enriched_pid
+                    !=
+                    observed_pid
+                ):
+
+                    return False
+
+                return True
+
+            # --------------------------------------------------------
+            # REGISTRY
+            # --------------------------------------------------------
+
+            if category == (
+                "registry_artifacts"
+            ):
+
+                enriched_key = str(
+                    enriched_item.get(
+                        "key"
+                    )
+                    or
+                    ""
+                ).lower()
+
+                observed_key = str(
+                    observation.get(
+                        "key"
+                    )
+                    or
+                    observation.get(
+                        "registry_key"
+                    )
+                    or
+                    ""
+                ).lower()
+
+                if (
+                    not enriched_key
+                    or
+                    not observed_key
+                    or
+                    enriched_key
+                    !=
+                    observed_key
+                ):
+
+                    return False
+
+                enriched_name = str(
+                    enriched_item.get(
+                        "value_name"
+                    )
+                    or
+                    ""
+                ).lower()
+
+                observed_name = str(
+                    observation.get(
+                        "value_name"
+                    )
+                    or
+                    ""
+                ).lower()
+
+                if (
+                    enriched_name
+                    and
+                    observed_name
+                ):
+
+                    return (
+                        enriched_name
+                        ==
+                        observed_name
+                    )
+
+                return True
+
+            return False
+
+        # ============================================================
+        # MERGE OBSERVATION + ENRICHMENT
+        #
+        # Raw observations own provenance.
+        # ============================================================
+
+        evidence = {
+
+            category: []
+
+            for category
+            in CATEGORIES
+        }
 
         for category in CATEGORIES:
-            if not evidence[category]:
-                evidence[category] = deduplicate(
-                    category,
-                    observations[category],
+
+            enriched_rows = list(
+                enriched_evidence.get(
+                    category
+                )
+            )
+
+            observation_rows = list(
+                observations.get(
+                    category
+                )
+            )
+
+            used_enriched = set()
+
+            # --------------------------------------------------------
+            # OBSERVED ENTITIES FIRST
+            # --------------------------------------------------------
+
+            for observation in observation_rows:
+
+                selected_index = None
+
+                selected_enriched = {}
+
+                for index, enriched_item in enumerate(
+                    enriched_rows
+                ):
+
+                    if index in used_enriched:
+
+                        continue
+
+                    if matches(
+                        category,
+                        enriched_item,
+                        observation,
+                    ):
+
+                        selected_index = (
+                            index
+                        )
+
+                        selected_enriched = (
+                            enriched_item
+                        )
+
+                        break
+
+                if selected_index is not None:
+
+                    used_enriched.add(
+                        selected_index
+                    )
+
+                # Enrichment is supplemental.
+                # Observation is applied last so an enrichment layer
+                # cannot replace persisted provenance.
+
+                merged = {
+
+                    **deepcopy(
+                        selected_enriched
+                    ),
+
+                    **deepcopy(
+                        observation
+                    ),
+                }
+
+                evidence[
+                    category
+                ].append(
+                    merged
                 )
 
-        # Historical malware probabilities must not be
-        # reused when their feature extraction version
-        # is incompatible with the current runtime.
-        for file_item in evidence["files"]:
-            file_item.pop("malware_probability", None)
+            # --------------------------------------------------------
+            # RETAIN UNMATCHED ENRICHMENT FOR CONTEXT ONLY
+            #
+            # These entities intentionally receive no fabricated
+            # event_id. target_eligible() will therefore prevent them
+            # from becoming response targets.
+            # --------------------------------------------------------
+
+            for index, enriched_item in enumerate(
+                enriched_rows
+            ):
+
+                if index in used_enriched:
+
+                    continue
+
+                evidence[
+                    category
+                ].append(
+                    deepcopy(
+                        enriched_item
+                    )
+                )
+
+            evidence[
+                category
+            ] = deduplicate(
+                category,
+                evidence[
+                    category
+                ],
+            )
+
+        # ============================================================
+        # HISTORICAL FILE MODEL SAFETY
+        # ============================================================
+
+        for file_item in evidence[
+            "files"
+        ]:
+
+            file_item.pop(
+                "malware_probability",
+                None,
+            )
 
         return evidence
-
     def qualifying_event_ids(self, incident):
         """
         Conservative source-level screening.
@@ -739,10 +1446,10 @@ class DigitalTwinVisualPreview:
                 "Evidence may be observational or uncertain.",
                 "Global evidence validation is distinct "
                 "from per-entity linkage quality.",
-                "A virtual success is not real containment.",
+                "A virtual success is not verified real-world protection.",
                 "Zero modeled risk does not prove safety.",
                 "Scores are heuristic, not AI outcome "
                 "probabilities.",
-                "No SOC case or real response created.",
+                "No persistent protection workflow or real endpoint action was created.",
             ],
         }

@@ -1,8 +1,8 @@
 {
   "suite": "SENTINEL-X PHASE 7B APPROVAL AND SIMULATED RESPONSE",
-  "incident_id": "PHASE7B-910B2DFC096B4210",
-  "passed": 9,
-  "failed": 1,
+  "incident_id": "PHASE7B-E2E4F18EC8BA4894",
+  "passed": 10,
+  "failed": 0,
   "results": [
     {
       "scenario_id": "7B-01",
@@ -28,7 +28,7 @@
       "scenario_id": "7B-03",
       "family": "SOC_APPROVAL_E2E",
       "scenario_name": "Controlled SOC case is visible through API",
-      "observed": "http=200;status=AWAITING_ANALYST_REVIEW;ticket=TKT-FC2611460048;approval=PENDING",
+      "observed": "http=200;status=AWAITING_ANALYST_REVIEW;ticket=TKT-2EE47F95411D;approval=PENDING",
       "expected": "case visible with PENDING ticket",
       "failure_layers": "",
       "passed": true,
@@ -68,10 +68,10 @@
       "scenario_id": "7B-07",
       "family": "SOC_APPROVAL_E2E",
       "scenario_name": "Approved simulated action state persists",
-      "observed": "http=200;actions=1;approved_success=0",
+      "observed": "http=200;actions=1;approved_success=1",
       "expected": "all actions APPROVED + SUCCESS",
-      "failure_layers": "ACTION_PERSISTENCE",
-      "passed": false,
+      "failure_layers": "",
+      "passed": true,
       "notes": ""
     },
     {

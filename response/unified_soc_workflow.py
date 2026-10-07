@@ -535,10 +535,6 @@ class UnifiedSOCWorkflow:
         }
 
 
-    # ============================================================
-    # APPROVE CASE
-    # ============================================================
-
     def approve_case(
         self,
         case_result,
@@ -550,7 +546,7 @@ class UnifiedSOCWorkflow:
         actions = (
             case_result.get(
                 "response_actions",
-                []
+                [],
             )
         )
 
@@ -558,12 +554,16 @@ class UnifiedSOCWorkflow:
 
         routing_results = []
 
+        successful_routes = 0
+
+        failed_routes = 0
+
 
         for action in actions:
 
-            # ----------------------------------------------------
-            # APPROVE TICKET + ACTION
-            # ----------------------------------------------------
+            # ========================================================
+            # 1. ANALYST APPROVAL
+            # ========================================================
 
             approval_result = (
                 self.bridge.approve(
@@ -588,9 +588,30 @@ class UnifiedSOCWorkflow:
             )
 
 
-            # ----------------------------------------------------
-            # MARK ACTION READY
-            # ----------------------------------------------------
+            if not approval_result.get(
+                "success",
+                False,
+            ):
+
+                action.mark_failed(
+
+                    actor=
+                        self.name,
+
+                    error=(
+                        "Action approval failed before "
+                        "simulation routing."
+                    ),
+                )
+
+                failed_routes += 1
+
+                continue
+
+
+            # ========================================================
+            # 2. MARK READY
+            # ========================================================
 
             ready_result = (
                 self.bridge.mark_action_ready(
@@ -604,16 +625,32 @@ class UnifiedSOCWorkflow:
             )
 
 
-            # ----------------------------------------------------
-            # ROUTE THROUGH SAFE RESPONSE ORCHESTRATOR
-            #
-            # ResponseOrchestrator remains simulation-only.
-            # ----------------------------------------------------
-
-            if ready_result.get(
+            if not ready_result.get(
                 "success",
                 False,
             ):
+
+                action.mark_failed(
+
+                    actor=
+                        self.name,
+
+                    error=(
+                        "Action could not be marked READY "
+                        "after analyst approval."
+                    ),
+                )
+
+                failed_routes += 1
+
+                continue
+
+
+            # ========================================================
+            # 3. SAFE SIMULATION ROUTING
+            # ========================================================
+
+            try:
 
                 route_result = (
                     self.orchestrator.execute(
@@ -626,11 +663,217 @@ class UnifiedSOCWorkflow:
                     )
                 )
 
+            except Exception as error:
 
-                routing_results.append(
-                    route_result
+                action.mark_failed(
+
+                    actor=
+                        self.name,
+
+                    error=
+                        str(
+                            error
+                        ),
                 )
 
+
+                routing_results.append(
+                    {
+                        "success":
+                            False,
+
+                        "status":
+                            "SIMULATION_FAILED",
+
+                        "action_id":
+                            action.action_id,
+
+                        "incident_id":
+                            action.incident_id,
+
+                        "action_type":
+                            action.action_type,
+
+                        "simulation_mode":
+                            self.simulation_mode,
+
+                        "executed":
+                            False,
+
+                        "error":
+                            str(
+                                error
+                            ),
+                    }
+                )
+
+
+                failed_routes += 1
+
+                continue
+
+
+            routing_results.append(
+                route_result
+            )
+
+
+            # ========================================================
+            # 4. VERIFY SIMULATION RESULT
+            # ========================================================
+
+            route_success = bool(
+                route_result.get(
+                    "success",
+                    False,
+                )
+            )
+
+
+            route_status = str(
+                route_result.get(
+                    "status",
+                    "",
+                )
+                or ""
+            ).upper()
+
+
+            route_simulation_mode = (
+                route_result.get(
+                    "simulation_mode",
+                    self.simulation_mode,
+                )
+            )
+
+
+            route_executed = bool(
+                route_result.get(
+                    "executed",
+                    False,
+                )
+            )
+
+
+            # ========================================================
+            # 5. FINAL SUCCESS STATE
+            #
+            # SUCCESS here means:
+            #
+            #     simulation completed successfully
+            #
+            # NOT:
+            #
+            #     real endpoint action executed
+            #
+            # ========================================================
+
+            if (
+                route_success
+                and
+                route_status == "SIMULATED"
+                and
+                route_simulation_mode is True
+                and
+                route_executed is False
+            ):
+
+                action.mark_success(
+
+                    actor=
+                        self.name,
+
+                    details={
+                        "result_type":
+                            "SIMULATED_RESPONSE",
+
+                        "route_status":
+                            route_status,
+
+                        "simulation_mode":
+                            True,
+
+                        "executed":
+                            False,
+
+                        "real_endpoint_modified":
+                            False,
+
+                        "message":
+                            (
+                                "Simulation handler completed "
+                                "successfully. No real endpoint "
+                                "response was executed."
+                            ),
+                    },
+                )
+
+
+                successful_routes += 1
+
+
+            elif route_success:
+
+                action.mark_failed(
+
+                    actor=
+                        self.name,
+
+                    error=(
+                        "Unexpected response result. "
+                        "SENTINEL-X expected a successful "
+                        "simulation-only route."
+                    ),
+                )
+
+
+                failed_routes += 1
+
+
+            else:
+
+                error_message = (
+
+                    route_result.get(
+                        "error"
+                    )
+
+                    or
+
+                    route_result.get(
+                        "message"
+                    )
+
+                    or
+
+                    route_result.get(
+                        "status"
+                    )
+
+                    or
+
+                    "Simulation handler reported failure."
+                )
+
+
+                action.mark_failed(
+
+                    actor=
+                        self.name,
+
+                    error=
+                        str(
+                            error_message
+                        ),
+                )
+
+
+                failed_routes += 1
+
+
+        # ============================================================
+        # OVERALL STATUS
+        # ============================================================
 
         approval_success = all(
 
@@ -645,10 +888,49 @@ class UnifiedSOCWorkflow:
         ) if approval_results else True
 
 
+        if (
+            actions
+            and
+            successful_routes
+            == len(
+                actions
+            )
+        ):
+
+            overall_status = (
+                "SIMULATED_RESPONSE_COMPLETED"
+            )
+
+
+        elif successful_routes > 0:
+
+            overall_status = (
+                "SIMULATED_RESPONSE_PARTIAL"
+            )
+
+
+        elif actions:
+
+            overall_status = (
+                "SIMULATED_RESPONSE_FAILED"
+            )
+
+
+        else:
+
+            overall_status = (
+                "NO_RESPONSE_ACTIONS"
+            )
+
+
         return {
 
             "success":
-                approval_success,
+                (
+                    approval_success
+                    and
+                    failed_routes == 0
+                ),
 
             "ticket_id":
                 ticket.ticket_id,
@@ -660,8 +942,16 @@ class UnifiedSOCWorkflow:
                 analyst,
 
             "approved_action_count":
-                len(
-                    approval_results
+                sum(
+                    1
+
+                    for result
+                    in approval_results
+
+                    if result.get(
+                        "success",
+                        False,
+                    )
                 ),
 
             "approval_results":
@@ -670,6 +960,12 @@ class UnifiedSOCWorkflow:
             "routing_results":
                 routing_results,
 
+            "successful_simulation_count":
+                successful_routes,
+
+            "failed_simulation_count":
+                failed_routes,
+
             "simulation_mode":
                 self.simulation_mode,
 
@@ -677,10 +973,8 @@ class UnifiedSOCWorkflow:
                 False,
 
             "status":
-                "SIMULATED_RESPONSE_COMPLETED",
+                overall_status,
         }
-
-
     # ============================================================
     # REJECT CASE
     # ============================================================

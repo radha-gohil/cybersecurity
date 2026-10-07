@@ -108,7 +108,105 @@ def make_event(
     event.update(extra)
     return event
 
+# ================================================================
+# INERT PE-LIKE VALIDATION PAYLOAD
+# ================================================================
 
+def build_inert_pe_like_bytes(
+    payload: bytes,
+) -> bytes:
+    """
+    Construct deterministic inert validation bytes containing:
+
+        MZ
+        valid e_lfanew pointer
+        PE\\0\\0 signature
+
+    This is NOT a functioning executable and is never executed.
+
+    It exists only to test Sentinel-X lightweight PE structure
+    recognition deterministically.
+    """
+
+    header = bytearray(
+        512
+    )
+
+    # DOS signature
+    header[0:2] = b"MZ"
+
+    # PE header position
+    pe_offset = 0x80
+
+    header[
+        0x3C:0x40
+    ] = pe_offset.to_bytes(
+        4,
+        byteorder="little",
+        signed=False,
+    )
+
+    # PE signature
+    header[
+        pe_offset:
+        pe_offset + 4
+    ] = b"PE\x00\x00"
+
+    return (
+        bytes(header)
+        +
+        bytes(payload)
+    )
+    
+    # ================================================================
+# INERT PE-LIKE VALIDATION PAYLOAD
+# ================================================================
+
+def build_inert_pe_like_bytes(
+    payload: bytes,
+) -> bytes:
+    """
+    Construct deterministic inert validation bytes containing:
+
+        MZ
+        valid e_lfanew pointer
+        PE\\0\\0 signature
+
+    This is NOT a functioning executable and is never executed.
+
+    It exists only to test Sentinel-X lightweight PE structure
+    recognition deterministically.
+    """
+
+    header = bytearray(
+        512
+    )
+
+    # DOS signature
+    header[0:2] = b"MZ"
+
+    # PE header position
+    pe_offset = 0x80
+
+    header[
+        0x3C:0x40
+    ] = pe_offset.to_bytes(
+        4,
+        byteorder="little",
+        signed=False,
+    )
+
+    # PE signature
+    header[
+        pe_offset:
+        pe_offset + 4
+    ] = b"PE\x00\x00"
+
+    return (
+        bytes(header)
+        +
+        bytes(payload)
+    )
 # ================================================================
 # F1 — SUSPICIOUS EXECUTABLE CREATION / STATIC BASELINE
 # ================================================================
@@ -158,7 +256,9 @@ def run_f1(results):
     # ------------------------------------------------------------
     path = TMP_DIR / "benign_like.exe"
     path.write_bytes(
-        b"MZ" + (b"\x00" * 8190)
+        build_inert_pe_like_bytes(
+            b"\x00" * 8192
+        )
     )
 
     analysis = analyzer.analyze(str(path))
@@ -187,19 +287,38 @@ def run_f1(results):
         ),
     )
 
-    # ------------------------------------------------------------
-    # F1-03 — HIGH-ENTROPY PE-LIKE EXECUTABLE
+        # ------------------------------------------------------------
+    # F3-03 — 8 RAPID RENAMES + EXTENSION CHANGES
     #
-    # Current production code performs static scoring, but there is
-    # no dedicated persisted F1 suspicious-executable detector yet.
+    # Expected:
     #
-    # This scenario is expected to expose that gap.
+    #   EXTENSION_CHANGE_BURST
+    #   MASS_FILE_RENAME
+    #   POSSIBLE_RANSOMWARE_BEHAVIOR
+    #
+    # The detector preserves active recent signal state across
+    # alert cooldowns. Therefore the extension-change signal that
+    # becomes active at rename #6 remains available when the
+    # mass-rename threshold is reached at rename #8.
+    #
+    # Combined ransomware score:
+    #
+    #   MASS_FILE_RENAME        = 30
+    #   EXTENSION_CHANGE_BURST  = 40
+    #                            ----
+    #                            = 70
+    #
+    # Threshold = 70
+    #
+    # Therefore POSSIBLE_RANSOMWARE_BEHAVIOR must be produced.
     # ------------------------------------------------------------
     path = TMP_DIR / "packed_like.exe"
 
     deterministic_high_entropy = (
-        b"MZ"
-        + bytes(range(256)) * 32
+        build_inert_pe_like_bytes(
+            bytes(range(256))
+            * 32
+        )
     )
 
     path.write_bytes(

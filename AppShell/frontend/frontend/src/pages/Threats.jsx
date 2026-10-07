@@ -1,5 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
+import {
+  useNavigate,
+} from "react-router-dom";
 
 import {
   Alert,
@@ -10,7 +17,6 @@ import {
   Chip,
   CircularProgress,
   Divider,
-  LinearProgress,
   Stack,
   Tab,
   Tabs,
@@ -18,772 +24,2893 @@ import {
 } from "@mui/material";
 
 import {
-  ArrowForwardRounded,
   AccessTimeRounded,
+  ArrowForwardRounded,
   DevicesRounded,
   PsychologyRounded,
   ShieldRounded,
   WarningAmberRounded,
 } from "@mui/icons-material";
 
-import api, {
-  getLiveDetections,
-} from "../api/sentinelApi";
+import api from "../api/sentinelApi";
+
+
+// ================================================================
+// CONFIG
+// ================================================================
 
 const REFRESH_MS = 10000;
-const DETECTION_LIMIT = 100;
-const INCIDENT_LIMIT = 1000;
 
-const severityColor = (severity) => {
-  switch (String(severity || "").toUpperCase()) {
-    case "CRITICAL": return "#ef4444";
-    case "HIGH": return "#f97316";
-    case "MEDIUM": return "#f59e0b";
-    case "LOW": return "#3b82f6";
-    default: return "#94a3b8";
-  }
-};
+const THREAT_LIMIT = 100;
 
-function valueOrFallback(value, fallback = "Not reported") {
-  return value === null || value === undefined || value === ""
-    ? fallback
-    : String(value);
+const CONTRACT_VERSION =
+  "sentinelx.security.v1";
+
+
+// ================================================================
+// GENERIC HELPERS
+// ================================================================
+
+function object(
+  value,
+) {
+
+  return (
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value)
+  )
+    ? value
+    : {};
 }
 
-function formatTime(timestamp) {
-  if (!timestamp) return "Not reported";
 
-  // SQLite historically stores some timestamps without a timezone.
-  // Do not silently assume those values are UTC or local time.
-  const parsed = new Date(timestamp);
+function array(
+  value,
+) {
 
-  if (Number.isNaN(parsed.getTime())) {
-    return String(timestamp);
-  }
+  return Array.isArray(
+    value,
+  )
+    ? value
+    : [];
+}
+
+
+function valueOrFallback(
+  value,
+  fallback = "Not reported",
+) {
 
   if (
-    typeof timestamp === "string" &&
-    !/[zZ]$|[+-]\d\d:\d\d$/.test(timestamp)
+    value === null ||
+    value === undefined ||
+    value === ""
   ) {
-    return String(timestamp) + " (timezone unspecified)";
+
+    return fallback;
   }
 
-  return parsed.toLocaleString();
-}
-
-function eventKey(value) {
-  return String(value ?? "").trim().toLowerCase();
-}
-
-function titleCaseThreat(value) {
-  const text = String(value || "Security detection")
-    .replace(/_/g, " ")
-    .trim();
-
-  return text.replace(/\b\w/g, (character) =>
-    character.toUpperCase()
+  return String(
+    value,
   );
 }
 
-function buildDetectionScores(record, process) {
-  const stored = record.model_scores || {};
 
-  return {
-    ...stored,
+function humanize(
+  value,
+) {
 
-    rule_score:
-      stored.rule_score ??
-      process.rule_score ??
-      process.behavior_score ??
-      null,
+  if (!value) {
 
-    statistical_score:
-      stored.statistical_score ??
-      process.statistical_score ??
-      null,
+    return "";
+  }
 
-    isolation_forest_score:
-      stored.isolation_forest_score ??
-      process.isolation_forest?.anomaly_confidence ??
-      null,
-
-    autoencoder_score:
-      stored.autoencoder_score ??
-      process.autoencoder?.anomaly_confidence ??
-      null,
-
-    temporal_score:
-      stored.temporal_score ??
-      process.temporal?.score ??
-      null,
-
-    fusion_score:
-      stored.fusion_score ??
-      process.fusion_score ??
-      record.risk_score ??
-      null,
-
-    independent_signal_count:
-      stored.independent_signal_count ??
-      record.independent_signal_count ??
-      null,
-  };
+  return String(
+    value,
+  )
+    .replace(
+      /_/g,
+      " ",
+    )
+    .toLowerCase()
+    .replace(
+      /\b\w/g,
+      (character) =>
+        character.toUpperCase(),
+    )
+    .replace(
+      /Powershell/g,
+      "PowerShell",
+    )
+    .replace(
+      /Rundll32/g,
+      "rundll32",
+    )
+    .replace(
+      /Regsvr32/g,
+      "regsvr32",
+    )
+    .replace(
+      /Wscript/g,
+      "WScript",
+    )
+    .replace(
+      /Cscript/g,
+      "CScript",
+    )
+    .replace(
+      /Mshta/g,
+      "MSHTA",
+    );
 }
 
-function displayReasons(value) {
-  if (Array.isArray(value)) {
+
+function productTitle(
+  value,
+) {
+
+  return String(
+    value ||
+    "Security Detection",
+  )
+    .replace(
+      /Powershell/g,
+      "PowerShell",
+    );
+}
+
+
+// ================================================================
+// TIME
+// ================================================================
+
+function formatTime(
+  timestamp,
+) {
+
+  if (!timestamp) {
+
+    return "Not reported";
+  }
+
+  const parsed =
+    new Date(
+      timestamp,
+    );
+
+  if (
+    Number.isNaN(
+      parsed.getTime(),
+    )
+  ) {
+
+    return String(
+      timestamp,
+    );
+  }
+
+  if (
+    typeof timestamp ===
+      "string" &&
+    !/[zZ]$|[+-]\d\d:\d\d$/.test(
+      timestamp,
+    )
+  ) {
+
+    return (
+      String(timestamp) +
+      " (timezone unspecified)"
+    );
+  }
+
+  return (
+    parsed.toLocaleString()
+  );
+}
+
+
+// ================================================================
+// CONFIDENCE
+// ================================================================
+
+function formatConfidence(
+  value,
+) {
+
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+
+    return "Not reported";
+  }
+
+  const numeric =
+    Number(
+      value,
+    );
+
+  if (
+    !Number.isFinite(
+      numeric,
+    )
+  ) {
+
+    return String(
+      value,
+    );
+  }
+
+  const percentage =
+    numeric <= 1
+      ? numeric * 100
+      : numeric;
+
+  return (
+    `${Math.round(
+      percentage * 10,
+    ) / 10}%`
+  );
+}
+
+
+// ================================================================
+// SEVERITY
+// ================================================================
+
+function severityColor(
+  severity,
+) {
+
+  switch (
+    String(
+      severity || "",
+    ).toUpperCase()
+  ) {
+
+    case "CRITICAL":
+
+      return "#ef4444";
+
+    case "HIGH":
+
+      return "#f97316";
+
+    case "MEDIUM":
+
+      return "#f59e0b";
+
+    case "LOW":
+
+      return "#3b82f6";
+
+    case "INFO":
+
+      return "#22c55e";
+
+    default:
+
+      return "#94a3b8";
+  }
+}
+
+
+// ================================================================
+// VERDICT COLORS
+// ================================================================
+
+function verdictColor(
+  verdict,
+) {
+
+  switch (
+    String(
+      verdict || "",
+    ).toUpperCase()
+  ) {
+
+    case "CONFIRMED_THREAT":
+
+      return "error";
+
+    case "LIKELY_THREAT":
+
+      return "warning";
+
+    case "SUSPICIOUS":
+
+      return "warning";
+
+    case "SAFE":
+
+    case "BENIGN":
+
+      return "success";
+
+    default:
+
+      return "default";
+  }
+}
+
+
+// ================================================================
+// USER STATE COLORS
+// ================================================================
+
+function stateColor(
+  state,
+) {
+
+  switch (
+    String(
+      state || "",
+    ).toUpperCase()
+  ) {
+
+    case "PROTECTED":
+
+    case "QUARANTINED":
+
+    case "RESOLVED":
+
+    case "VERIFIED_SAFE":
+
+      return "success";
+
+    case "PROTECTION_RECOMMENDED":
+
+    case "USER_ACTION_REQUIRED":
+
+      return "warning";
+
+    case "PROTECTION_FAILED":
+
+      return "error";
+
+    case "NEEDS_ATTENTION":
+
+    case "SUSPICIOUS":
+
+      return "warning";
+
+    default:
+
+      return "default";
+  }
+}
+
+
+// ================================================================
+// OBSERVED EVIDENCE
+// ================================================================
+
+function observedEvidence(
+  threat,
+) {
+
+  return array(
+    object(
+      threat?.evidence,
+    ).observed,
+  );
+}
+
+
+function evidenceOfType(
+  threat,
+  type,
+) {
+
+  const row =
+    observedEvidence(
+      threat,
+    ).find(
+      (item) =>
+        String(
+          item?.type || "",
+        ).toUpperCase() ===
+        String(
+          type || "",
+        ).toUpperCase(),
+    );
+
+  return object(
+    row?.data,
+  );
+}
+
+
+// ================================================================
+// DETECTION REASONS
+// ================================================================
+
+function detectionReasons(
+  threat,
+) {
+
+  const value =
+    object(
+      threat?.source_reference,
+    ).detection_reason;
+
+  if (
+    Array.isArray(
+      value,
+    )
+  ) {
+
     return value
       .filter(Boolean)
-      .map((item) =>
-        typeof item === "string"
-          ? item.replace(/_/g, " ")
-          : JSON.stringify(item)
+      .map(
+        (item) =>
+          typeof item ===
+            "string"
+            ? item.replace(
+                /_/g,
+                " ",
+              )
+            : JSON.stringify(
+                item,
+              ),
       );
   }
 
-  if (typeof value === "string") {
+  if (
+    typeof value ===
+      "string"
+  ) {
+
     try {
-      const decoded = JSON.parse(value);
-      if (Array.isArray(decoded)) return displayReasons(decoded);
+
+      const parsed =
+        JSON.parse(
+          value,
+        );
+
+      if (
+        Array.isArray(
+          parsed,
+        )
+      ) {
+
+        return parsed
+          .filter(Boolean)
+          .map(
+            (item) =>
+              String(
+                item,
+              ).replace(
+                /_/g,
+                " ",
+              ),
+          );
+      }
+
     } catch {
-      // Treat as plain text.
+
+      // Plain recorded string.
     }
 
-    return value ? [value.replace(/_/g, " ")] : [];
+    return value
+      ? [
+          value.replace(
+            /_/g,
+            " ",
+          ),
+        ]
+      : [];
   }
 
   return [];
 }
 
-function modelFlag(model) {
-  if (!model || model.available !== true) {
-    return "Not available";
+
+// ================================================================
+// INCIDENT HELPERS
+// ================================================================
+
+function incidentIds(
+  threat,
+) {
+
+  const incident =
+    object(
+      threat?.incident,
+    );
+
+  const related =
+    array(
+      incident
+        .related_incident_ids,
+    )
+      .filter(Boolean)
+      .map(String);
+
+  if (
+    related.length
+  ) {
+
+    return [
+      ...new Set(
+        related,
+      ),
+    ];
   }
-  return valueOrFallback(model.anomaly_label, "Reported");
+
+  if (
+    threat?.incident_id
+  ) {
+
+    return [
+      String(
+        threat.incident_id,
+      ),
+    ];
+  }
+
+  return [];
 }
 
-async function fetchIncidentRecords() {
-  const response = await api.get("/detected-incidents", {
-    params: { limit: INCIDENT_LIMIT },
-  });
 
-  const data = response.data || {};
+function hasIncident(
+  threat,
+) {
 
-  const incidents = Array.isArray(data.incidents)
-    ? data.incidents
-    : Array.isArray(data)
-      ? data
-      : [];
-
-  return {
-    incidents,
-    potentiallyTruncated: incidents.length >= INCIDENT_LIMIT,
-  };
+  return (
+    incidentIds(
+      threat,
+    ).length > 0
+  );
 }
 
-function createIncidentIndex(incidents) {
-  const index = new Map();
 
-  for (const incident of incidents) {
-    if (!incident || !Array.isArray(incident.event_ids)) {
-      continue;
+// ================================================================
+// CATEGORY-SPECIFIC PRIMARY EVIDENCE
+// ================================================================
+
+function getPrimaryEvidence(
+  threat,
+) {
+
+  const category =
+    String(
+      threat?.category ||
+      "OTHER",
+    ).toUpperCase();
+
+  const process =
+    evidenceOfType(
+      threat,
+      "PROCESS",
+    );
+
+  const file =
+    evidenceOfType(
+      threat,
+      "FILE",
+    );
+
+  const network =
+    evidenceOfType(
+      threat,
+      "NETWORK",
+    );
+
+  const registry =
+    evidenceOfType(
+      threat,
+      "REGISTRY",
+    );
+
+  const authentication =
+    evidenceOfType(
+      threat,
+      "AUTHENTICATION",
+    );
+
+  const system =
+    evidenceOfType(
+      threat,
+      "SYSTEM",
+    );
+
+  const startup =
+    evidenceOfType(
+      threat,
+      "STARTUP",
+    );
+
+
+  switch (
+    category
+  ) {
+
+    case "PROCESS": {
+
+      const name =
+        process.process_name ||
+        process.name;
+
+      const pid =
+        process.pid;
+
+      return {
+
+        label:
+          "Process / PID",
+
+        value:
+          name
+            ? `${name} / ${valueOrFallback(
+                pid,
+              )}`
+            : (
+                pid !==
+                  undefined &&
+                pid !== null
+                  ? `PID ${pid}`
+                  : "Process evidence recorded"
+              ),
+      };
     }
 
-    for (const id of incident.event_ids) {
-      const key = eventKey(id);
-      if (!key) continue;
 
-      const existing = index.get(key) || [];
+    case "FILE":
+
+      return {
+
+        label:
+          "File Evidence",
+
+        value:
+          file.name ||
+          file.path ||
+          file.sha256 ||
+          "File evidence recorded",
+      };
+
+
+    case "NETWORK": {
 
       if (
-        !existing.some(
-          (item) => item.incident_id === incident.incident_id
-        )
+        network.remote_ip
       ) {
-        existing.push(incident);
+
+        return {
+
+          label:
+            "Network Evidence",
+
+          value:
+            network.remote_port
+              ? (
+                  `${network.remote_ip}:`
+                  +
+                  `${network.remote_port}`
+                )
+              : String(
+                  network.remote_ip,
+                ),
+        };
       }
 
-      index.set(key, existing);
+      if (
+        network.scanned_port_count
+      ) {
+
+        return {
+
+          label:
+            "Network Evidence",
+
+          value:
+            `${network.scanned_port_count} destination ports scanned`,
+        };
+      }
+
+      if (
+        network.connection_rate
+      ) {
+
+        return {
+
+          label:
+            "Network Evidence",
+
+          value:
+            (
+              `${network.connection_rate} connections`
+              +
+              (
+                network.unique_remote_count
+                  ? (
+                      ` / ${network.unique_remote_count}`
+                      +
+                      " remote hosts"
+                    )
+                  : ""
+              )
+            ),
+        };
+      }
+
+      return {
+
+        label:
+          "Network Evidence",
+
+        value:
+          "Network activity recorded",
+      };
+    }
+
+
+    case "REGISTRY":
+
+      return {
+
+        label:
+          "Registry Evidence",
+
+        value:
+          registry.key
+            ? (
+                registry.value_name
+                  ? (
+                      `${registry.key}`
+                      +
+                      ` • ${registry.value_name}`
+                    )
+                  : registry.key
+              )
+            : "Registry activity recorded",
+      };
+
+
+    case "AUTHENTICATION":
+
+      return {
+
+        label:
+          "Authentication",
+
+        value:
+          authentication.username ||
+          authentication.account ||
+          (
+            network.remote_ip
+              ? (
+                  `Source ${network.remote_ip}`
+                )
+              : "Authentication evidence recorded"
+          ),
+      };
+
+
+    case "SYSTEM":
+
+      return {
+
+        label:
+          "System Evidence",
+
+        value:
+          system.account ||
+          system.privilege ||
+          humanize(
+            threat.event_type,
+          ) ||
+          "System security event recorded",
+      };
+
+
+    case "STARTUP":
+
+      return {
+
+        label:
+          "Startup Entry",
+
+        value:
+          startup.entry_name ||
+          startup.path ||
+          "Startup evidence recorded",
+      };
+
+
+    default: {
+
+      const first =
+        observedEvidence(
+          threat,
+        )[0];
+
+      return {
+
+        label:
+          first?.type
+            ? (
+                `${humanize(
+                  first.type,
+                )} Evidence`
+              )
+            : "Security Evidence",
+
+        value:
+          humanize(
+            threat.event_type ||
+            threat.threat_type ||
+            "Security detection",
+          ),
+      };
     }
   }
-
-  return index;
 }
 
-function normalizeDetection(record, incidentIndex) {
-  const process = record.process_evidence || {};
-  const scores = buildDetectionScores(record, process);
 
-  const matchingIncidents =
-    incidentIndex.get(eventKey(record.event_id)) || [];
+// ================================================================
+// PROCESS FUSION
+// ================================================================
 
-  const directIncidentId = record.incident_id
-    ? String(record.incident_id)
-    : null;
+function isFusionThreat(
+  threat,
+) {
 
-  const incidentIds = [
-    ...new Set([
-      ...matchingIncidents
-        .map((item) => item.incident_id)
-        .filter(Boolean)
-        .map(String),
-      ...(directIncidentId ? [directIncidentId] : []),
-    ]),
-  ];
-
-  const name =
-    record.process_name ||
-    process.process_name ||
-    null;
-
-  const threatLabel = titleCaseThreat(
-    record.threat_type || "Security detection"
-  );
-
-  const title =
-    record.display_title ||
-    (name
-      ? `${threatLabel} - ${name}`
-      : threatLabel);
-
-  return {
-    ...record,
-    id: `detection-${record.detection_id}`,
-    title,
-    processName: name,
-    pid: record.pid ?? process.pid,
-    parentName:
-      record.parent_process_name ??
-      process.parent_process_name,
-    deviceId: record.device_id,
-    severity: String(record.severity || "UNKNOWN").toUpperCase(),
-    reasons: displayReasons(
-      record.detection_reason ?? process.fusion_reasons
-    ),
-    scores,
-    process,
-    matchingIncidents,
-    incidentIds,
-    linked: incidentIds.length > 0,
-  };
-}
-
-function InfoItem({ icon, label, value }) {
   return (
+    String(
+      threat?.model_evidence
+        ?.type ||
+      "",
+    ).toUpperCase() ===
+      "PROCESS_FUSION_V3"
+  );
+}
+
+// ================================================================
+// INFO ITEM
+// ================================================================
+
+function InfoItem({
+  icon,
+  label,
+  value,
+}) {
+
+  return (
+
     <Box
       sx={{
-        p: 1.7,
-        background: "#0f172a",
-        border: "1px solid #1e293b",
-        borderRadius: 2,
-        minWidth: 0,
+        p:
+          1.7,
+
+        background:
+          "#0f172a",
+
+        border:
+          "1px solid #1e293b",
+
+        borderRadius:
+          2,
+
+        minWidth:
+          0,
       }}
     >
-      <Stack direction="row" spacing={1} alignItems="center">
+
+      <Stack
+
+        direction="row"
+
+        spacing={1}
+
+        alignItems="center"
+
+      >
+
         {icon}
-        <Typography sx={{ color: "#94a3b8", fontSize: 12 }}>
+
+
+        <Typography
+          sx={{
+            color:
+              "#94a3b8",
+
+            fontSize:
+              12,
+          }}
+        >
+
           {label}
+
         </Typography>
+
       </Stack>
+
 
       <Typography
         sx={{
-          mt: 0.8,
-          fontSize: 14,
-          fontWeight: 650,
-          overflowWrap: "anywhere",
+          mt:
+            0.8,
+
+          fontSize:
+            14,
+
+          fontWeight:
+            650,
+
+          overflowWrap:
+            "anywhere",
         }}
       >
-        {valueOrFallback(value)}
+
+        {
+          valueOrFallback(
+            value,
+          )
+        }
+
       </Typography>
+
     </Box>
   );
 }
 
-function SummaryCard({ title, count, color }) {
+
+// ================================================================
+// SUMMARY
+// ================================================================
+
+function SummaryCard({
+  title,
+  count,
+  color,
+}) {
+
   return (
+
     <Card>
-      <CardContent sx={{ p: 2.5 }}>
-        <Typography sx={{ color: "#94a3b8", fontSize: 13 }}>
-          {title}
-        </Typography>
+
+      <CardContent
+        sx={{
+          p:
+            2.5,
+        }}
+      >
 
         <Typography
           sx={{
-            fontSize: 29,
-            fontWeight: 800,
-            color,
-            mt: 0.5,
+            color:
+              "#94a3b8",
+
+            fontSize:
+              13,
           }}
         >
-          {count}
+
+          {title}
+
         </Typography>
+
+
+        <Typography
+          sx={{
+            fontSize:
+              29,
+
+            fontWeight:
+              800,
+
+            color,
+
+            mt:
+              0.5,
+          }}
+        >
+
+          {count}
+
+        </Typography>
+
       </CardContent>
+
     </Card>
   );
 }
 
-function ThreatCard({ threat, onView, linksComplete }) {
-  const color = severityColor(threat.severity);
 
-  const isolationForest = threat.process.isolation_forest;
-  const autoencoder = threat.process.autoencoder;
+// ================================================================
+// MODEL SIGNAL
+// ================================================================
 
-  const reason =
-    threat.reasons.length > 0
-      ? threat.reasons.join(", ")
-      : "No specific detection reason provided";
+function ModelSignal({
+  title,
+  value,
+  detail,
+}) {
 
   return (
-    <Card
+
+    <Box
       sx={{
-        borderColor: `${color}55`,
-        "&:hover": { borderColor: color },
+        p:
+          1.5,
+
+        border:
+          "1px solid #1e293b",
+
+        borderRadius:
+          2,
+
+        background:
+          "#0f172a",
+
+        minWidth:
+          0,
       }}
     >
-      <CardContent sx={{ p: 3 }}>
-        <Stack
-          direction={{ xs: "column", md: "row" }}
-          justifyContent="space-between"
-          alignItems={{ xs: "flex-start", md: "center" }}
-          spacing={2}
-        >
-          <Stack direction="row" spacing={2}>
-            <Box
-              sx={{
-                width: 46,
-                height: 46,
-                borderRadius: 2,
-                background: `${color}18`,
-                color,
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-              }}
-            >
-              <WarningAmberRounded />
-            </Box>
 
-            <Box>
-              <Typography
-                sx={{
-                  fontWeight: 750,
-                  fontSize: 18,
-                  overflowWrap: "anywhere",
-                }}
-              >
-                {threat.title}
-              </Typography>
+      <Typography
+        sx={{
+          fontSize:
+            11,
 
-              <Typography
-                sx={{
-                  color: "#94a3b8",
-                  fontSize: 12,
-                  mt: 0.5,
-                }}
-              >
-                Detection #{threat.detection_id}
-                {" | "}
-                {valueOrFallback(threat.engine)}
-              </Typography>
-            </Box>
-          </Stack>
+          color:
+            "#94a3b8",
+        }}
+      >
 
-          <Stack direction="row" spacing={1} flexWrap="wrap">
-            <Chip
-              label={threat.severity}
-              size="small"
-              sx={{
-                color,
-                border: `1px solid ${color}`,
-                background: `${color}18`,
-              }}
-            />
+        {title}
 
-            <Chip
-              label={
-                threat.linked
-                  ? "Incident Linked"
-                  : "Link Not Verified"
-              }
-              size="small"
-              color={threat.linked ? "success" : "default"}
-              variant="outlined"
-            />
-          </Stack>
-        </Stack>
+      </Typography>
 
-        <Box
-          sx={{
-            display: "grid",
-            gridTemplateColumns: {
-              xs: "1fr",
-              sm: "repeat(2, minmax(0,1fr))",
-              lg: "repeat(4, minmax(0,1fr))",
-            },
-            gap: 1.5,
-            mt: 3,
-          }}
-        >
-          <InfoItem
-            icon={<DevicesRounded fontSize="small" />}
-            label="Process / PID"
-            value={
-              threat.processName
-                ? `${threat.processName} / ${valueOrFallback(threat.pid)}`
-                : "Process not reported"
-            }
-          />
 
-          <InfoItem
-            icon={<ShieldRounded fontSize="small" />}
-            label="Risk Score"
-            value={
-              threat.risk_score == null
-                ? "Not reported"
-                : `${threat.risk_score}/100`
-            }
-          />
+      <Typography
+        sx={{
+          mt:
+            0.5,
 
-          <InfoItem
-            icon={<PsychologyRounded fontSize="small" />}
-            label="Fusion Confidence"
-            value={
-              threat.process.fusion_confidence ??
-              threat.scores.evidence_confidence ??
-              "Not reported"
-            }
-          />
+          fontSize:
+            13,
 
-          <InfoItem
-            icon={<AccessTimeRounded fontSize="small" />}
-            label="Detected"
-            value={formatTime(threat.timestamp)}
-          />
-        </Box>
+          fontWeight:
+            700,
 
-        <Box sx={{ mt: 2 }}>
-          <Typography
-            sx={{ fontWeight: 700, fontSize: 13, mb: 0.7 }}
-          >
-            Recorded detection reason
-          </Typography>
+          overflowWrap:
+            "anywhere",
+        }}
+      >
+
+        {
+          valueOrFallback(
+            value,
+          )
+        }
+
+      </Typography>
+
+
+      {
+        detail
+        &&
+        (
 
           <Typography
             sx={{
-              fontSize: 13,
-              color: "#cbd5e1",
-              overflowWrap: "anywhere",
+              mt:
+                0.4,
+
+              fontSize:
+                11,
+
+              color:
+                "#64748b",
             }}
           >
-            {reason}
+
+            {detail}
+
           </Typography>
-        </Box>
+        )
+      }
+
+    </Box>
+  );
+}
+
+
+// ================================================================
+// FUSION EVIDENCE
+// ================================================================
+
+function FusionEvidence({
+  threat,
+}) {
+
+  if (
+    !isFusionThreat(
+      threat,
+    )
+  ) {
+
+    return null;
+  }
+
+  const model =
+    object(
+      threat.model_evidence,
+    );
+
+  const rules =
+    object(
+      model.rules,
+    );
+
+  const temporal =
+    object(
+      model.temporal_ai,
+    );
+
+  const forest =
+    object(
+      model.isolation_forest,
+    );
+
+  const encoder =
+    object(
+      model.autoencoder,
+    );
+
+  const fusion =
+    object(
+      model.fusion,
+    );
+
+  const consensus =
+    object(
+      model.consensus,
+    );
+
+
+  return (
+
+    <Box
+      sx={{
+        mt:
+          2,
+      }}
+    >
+
+      <Typography
+        sx={{
+          fontWeight:
+            700,
+
+          fontSize:
+            13,
+
+          mb:
+            1,
+        }}
+      >
+
+        Detection signals
+
+      </Typography>
+
+
+      <Box
+        sx={{
+          display:
+            "grid",
+
+          gridTemplateColumns:
+            {
+
+              xs:
+                "1fr",
+
+              sm:
+                "repeat(2,minmax(0,1fr))",
+
+              lg:
+                "repeat(5,minmax(0,1fr))",
+            },
+
+          gap:
+            1,
+        }}
+      >
+
+        <ModelSignal
+
+          title="Rules"
+
+          value={
+            rules.score ===
+              null ||
+            rules.score ===
+              undefined
+              ? "Not reported"
+              : `${rules.score}/100`
+          }
+
+          detail="Behavioral evidence"
+
+        />
+
+
+        <ModelSignal
+
+          title="Temporal AI"
+
+          value={
+            temporal.available ===
+              true
+              ? (
+                  temporal.score ===
+                    null ||
+                  temporal.score ===
+                    undefined
+                    ? (
+                        temporal.label ||
+                        temporal.severity ||
+                        "Reported"
+                      )
+                    : `${temporal.score}/100`
+                )
+              : "Not available"
+          }
+
+          detail={
+            temporal.label ||
+            temporal.severity ||
+            null
+          }
+
+        />
+
+
+        <ModelSignal
+
+          title="Isolation Forest"
+
+          value={
+            forest.available ===
+              true
+              ? (
+                  forest.anomaly_label ||
+                  "Reported"
+                )
+              : "Not available"
+          }
+
+          detail={
+            forest.available ===
+              true &&
+            forest.anomaly_confidence !==
+              null &&
+            forest.anomaly_confidence !==
+              undefined
+              ? (
+                  `${forest.anomaly_confidence}`
+                  +
+                  "/100 anomaly confidence"
+                )
+              : null
+          }
+
+        />
+
+
+        <ModelSignal
+
+          title="Autoencoder"
+
+          value={
+            encoder.available ===
+              true
+              ? (
+                  encoder.anomaly_label ||
+                  "Reported"
+                )
+              : "Not available"
+          }
+
+          detail={
+            encoder.available ===
+              true &&
+            encoder.anomaly_confidence !==
+              null &&
+            encoder.anomaly_confidence !==
+              undefined
+              ? (
+                  `${encoder.anomaly_confidence}`
+                  +
+                  "/100 anomaly confidence"
+                )
+              : null
+          }
+
+        />
+
+
+        <ModelSignal
+
+          title="Fusion-v3"
+
+          value={
+            fusion.score ===
+              null ||
+            fusion.score ===
+              undefined
+              ? "Not reported"
+              : `${fusion.score}/100`
+          }
+
+          detail={
+            fusion.severity ||
+            null
+          }
+
+        />
+
+      </Box>
+
+
+      {
+        consensus.label
+        &&
+        (
+
+          <Typography
+            sx={{
+              color:
+                "#94a3b8",
+
+              fontSize:
+                11,
+
+              mt:
+                1,
+            }}
+          >
+
+            Model consensus:
+            {" "}
+            {
+              humanize(
+                consensus.label,
+              )
+            }
+
+          </Typography>
+        )
+      }
+
+    </Box>
+  );
+}
+
+
+// ================================================================
+// THREAT CARD
+// ================================================================
+
+function ThreatCard({
+  threat,
+  onView,
+}) {
+
+  const severity =
+    String(
+      threat.severity ||
+      "UNKNOWN",
+    ).toUpperCase();
+
+  const color =
+    severityColor(
+      severity,
+    );
+
+  const primaryEvidence =
+    getPrimaryEvidence(
+      threat,
+    );
+
+  const reasons =
+    detectionReasons(
+      threat,
+    );
+
+  const reason =
+    reasons.length
+      ? reasons.join(
+          ", ",
+        )
+      : (
+          "No specific detection reason "
+          +
+          "was recorded."
+        );
+
+  const relatedIds =
+    incidentIds(
+      threat,
+    );
+
+  const linked =
+    relatedIds.length > 0;
+
+  const detectionRisk =
+    threat.risk
+      ?.detection
+      ?.score;
+
+  const fusion =
+    isFusionThreat(
+      threat,
+    );
+
+
+  return (
+
+    <Card
+      sx={{
+        borderColor:
+          `${color}55`,
+
+        transition:
+          "0.2s",
+
+        "&:hover":
+          {
+
+            borderColor:
+              color,
+
+            transform:
+              "translateY(-1px)",
+          },
+      }}
+    >
+
+      <CardContent
+        sx={{
+          p:
+            3,
+        }}
+      >
+
+        {/* ===================================================== */}
+        {/* HEADER */}
+        {/* ===================================================== */}
+
+        <Stack
+
+          direction={{
+            xs:
+              "column",
+
+            md:
+              "row",
+          }}
+
+          justifyContent="space-between"
+
+          alignItems={{
+            xs:
+              "flex-start",
+
+            md:
+              "center",
+          }}
+
+          spacing={2}
+
+        >
+
+          <Stack
+
+            direction="row"
+
+            spacing={2}
+
+          >
+
+            <Box
+              sx={{
+                width:
+                  46,
+
+                height:
+                  46,
+
+                borderRadius:
+                  2,
+
+                background:
+                  `${color}18`,
+
+                color,
+
+                display:
+                  "flex",
+
+                justifyContent:
+                  "center",
+
+                alignItems:
+                  "center",
+
+                flexShrink:
+                  0,
+              }}
+            >
+
+              <WarningAmberRounded />
+
+            </Box>
+
+
+            <Box
+              sx={{
+                minWidth:
+                  0,
+              }}
+            >
+
+              <Typography
+                sx={{
+                  fontWeight:
+                    750,
+
+                  fontSize:
+                    18,
+
+                  overflowWrap:
+                    "anywhere",
+                }}
+              >
+
+                {
+                  productTitle(
+                    threat.title,
+                  )
+                }
+
+              </Typography>
+
+
+              <Typography
+                sx={{
+                  color:
+                    "#94a3b8",
+
+                  fontSize:
+                    12,
+
+                  mt:
+                    0.5,
+                }}
+              >
+
+                Detection #
+                {
+                  valueOrFallback(
+                    threat.detection_id,
+                  )
+                }
+
+                {" | "}
+
+                {
+                  valueOrFallback(
+                    threat.engine,
+                  )
+                }
+
+              </Typography>
+
+            </Box>
+
+          </Stack>
+
+
+          <Stack
+
+            direction="row"
+
+            spacing={1}
+
+            flexWrap="wrap"
+
+            useFlexGap
+
+          >
+
+            <Chip
+
+              label={
+                severity
+              }
+
+              size="small"
+
+              sx={{
+                color,
+
+                border:
+                  `1px solid ${color}`,
+
+                background:
+                  `${color}18`,
+              }}
+
+            />
+
+
+            <Chip
+
+              label={
+                humanize(
+                  threat.category,
+                )
+              }
+
+              size="small"
+
+              variant="outlined"
+
+            />
+
+
+            <Chip
+
+              label={
+                humanize(
+                  threat.verdict,
+                )
+              }
+
+              size="small"
+
+              color={
+                verdictColor(
+                  threat.verdict,
+                )
+              }
+
+              variant="outlined"
+
+            />
+
+
+            <Chip
+
+              label={
+                humanize(
+                  threat.user_state,
+                )
+              }
+
+              size="small"
+
+              color={
+                stateColor(
+                  threat.user_state,
+                )
+              }
+
+              variant="outlined"
+
+            />
+
+          </Stack>
+
+        </Stack>
+
+
+        {/* ===================================================== */}
+        {/* PRIMARY INFORMATION */}
+        {/* ===================================================== */}
 
         <Box
           sx={{
-            display: "grid",
-            gridTemplateColumns: {
-              xs: "1fr",
-              sm: "1fr 1fr",
-            },
-            gap: 2,
-            mt: 2,
+            display:
+              "grid",
+
+            gridTemplateColumns:
+              {
+
+                xs:
+                  "1fr",
+
+                sm:
+                  "repeat(2,minmax(0,1fr))",
+
+                lg:
+                  "repeat(4,minmax(0,1fr))",
+              },
+
+            gap:
+              1.5,
+
+            mt:
+              3,
           }}
         >
-          <Box>
-            <Typography
-              sx={{ fontSize: 12, color: "#94a3b8", mb: 0.6 }}
-            >
-              Isolation Forest
-            </Typography>
-            <Typography sx={{ fontSize: 13 }}>
-              {modelFlag(isolationForest)}
-            </Typography>
-          </Box>
 
-          <Box>
-            <Typography
-              sx={{ fontSize: 12, color: "#94a3b8", mb: 0.6 }}
-            >
-              Autoencoder
-            </Typography>
-            <Typography sx={{ fontSize: 13 }}>
-              {modelFlag(autoencoder)}
-            </Typography>
-          </Box>
+          <InfoItem
+
+            icon={
+              <DevicesRounded
+                fontSize="small"
+              />
+            }
+
+            label={
+              primaryEvidence.label
+            }
+
+            value={
+              primaryEvidence.value
+            }
+
+          />
+
+
+          <InfoItem
+
+            icon={
+              <ShieldRounded
+                fontSize="small"
+              />
+            }
+
+            label="Detection Risk"
+
+            value={
+              detectionRisk ===
+                null ||
+              detectionRisk ===
+                undefined
+                ? "Not reported"
+                : `${detectionRisk}/100`
+            }
+
+          />
+
+
+          <InfoItem
+
+            icon={
+              <PsychologyRounded
+                fontSize="small"
+              />
+            }
+
+            label={
+              fusion
+                ? "Fusion Confidence"
+                : "Detection Confidence"
+            }
+
+            value={
+              formatConfidence(
+                threat.confidence,
+              )
+            }
+
+          />
+
+
+          <InfoItem
+
+            icon={
+              <AccessTimeRounded
+                fontSize="small"
+              />
+            }
+
+            label="Detected"
+
+            value={
+              formatTime(
+                threat.timestamp,
+              )
+            }
+
+          />
+
         </Box>
 
-        <Divider sx={{ my: 2 }} />
+
+        {/* ===================================================== */}
+        {/* RISK SEMANTICS */}
+        {/* ===================================================== */}
+
+        <Typography
+          sx={{
+            color:
+              "#64748b",
+
+            fontSize:
+              11,
+
+            mt:
+              1,
+          }}
+        >
+
+          {
+            detectionRisk ===
+              null ||
+            detectionRisk ===
+              undefined
+              ? (
+                  "No detector risk score was recorded."
+                )
+              : (
+                  "Detection risk is a detector score, not a calibrated probability of attack."
+                )
+          }
+
+        </Typography>
+
+
+        {/* ===================================================== */}
+        {/* RECORDED REASON */}
+        {/* ===================================================== */}
+
+        <Box
+          sx={{
+            mt:
+              2,
+          }}
+        >
+
+          <Typography
+            sx={{
+              fontWeight:
+                700,
+
+              fontSize:
+                13,
+
+              mb:
+                0.7,
+            }}
+          >
+
+            Recorded detection reason
+
+          </Typography>
+
+
+          <Typography
+            sx={{
+              fontSize:
+                13,
+
+              color:
+                "#cbd5e1",
+
+              overflowWrap:
+                "anywhere",
+            }}
+          >
+
+            {reason}
+
+          </Typography>
+
+        </Box>
+
+
+        {/* ===================================================== */}
+        {/* PROCESS MODEL EVIDENCE */}
+        {/* ===================================================== */}
+
+        <FusionEvidence
+          threat={
+            threat
+          }
+        />
+
+
+        <Divider
+          sx={{
+            my:
+              2,
+          }}
+        />
+
+
+        {/* ===================================================== */}
+        {/* INCIDENT RELATIONSHIP */}
+        {/* ===================================================== */}
 
         <Stack
-          direction={{ xs: "column", sm: "row" }}
-          alignItems={{ xs: "stretch", sm: "center" }}
+
+          direction={{
+            xs:
+              "column",
+
+            sm:
+              "row",
+          }}
+
+          alignItems={{
+            xs:
+              "stretch",
+
+            sm:
+              "center",
+          }}
+
           justifyContent="space-between"
+
           spacing={2}
+
         >
-          <Box sx={{ minWidth: 0 }}>
-            <Typography
-              sx={{ fontSize: 12, color: "#94a3b8" }}
-            >
-              Incident:
-              {" "}
-              {threat.incidentIds.length
-                ? threat.incidentIds.join(", ")
-                : "Link not verified"}
-            </Typography>
+
+          <Box
+            sx={{
+              minWidth:
+                0,
+            }}
+          >
 
             <Typography
-              sx={{ fontSize: 11, color: "#64748b", mt: 0.5 }}
+              sx={{
+                fontSize:
+                  12,
+
+                color:
+                  "#94a3b8",
+              }}
             >
-              {threat.linked
-                ? "Linked through a recorded incident ID or shared event ID."
-                : linksComplete
-                  ? "No link found in the retrieved incident records."
-                  : "Incident lookup is incomplete or unavailable."}
+
+              {
+                linked
+                  ? (
+                      relatedIds.length > 1
+                        ? "Related incidents: "
+                        : "Related incident: "
+                    )
+                  : "Correlation: "
+              }
+
+              {
+                linked
+                  ? relatedIds.join(
+                      ", ",
+                    )
+                  : "No correlated incident"
+              }
+
             </Typography>
+
+
+            <Typography
+              sx={{
+                fontSize:
+                  11,
+
+                color:
+                  "#64748b",
+
+                mt:
+                  0.5,
+              }}
+            >
+
+              {
+                linked
+                  ? (
+                      relatedIds.length > 1
+                        ? (
+                            `${relatedIds.length} related incident records were found. `
+                            +
+                            "The canonical primary incident will open first."
+                          )
+                        : (
+                            "This detection is linked to a recorded security incident."
+                          )
+                    )
+                  : (
+                      "This detection is currently standalone and has not been correlated into an incident."
+                    )
+              }
+
+            </Typography>
+
+
+            {
+              threat.visibility
+                ?.synthetic ===
+                true
+              &&
+              (
+
+                <Typography
+                  sx={{
+                    fontSize:
+                      11,
+
+                    color:
+                      "#64748b",
+
+                    mt:
+                      0.5,
+                  }}
+                >
+
+                  Synthetic validation evidence
+
+                </Typography>
+              )
+            }
+
           </Box>
 
+
           <Button
+
             variant="outlined"
-            endIcon={<ArrowForwardRounded />}
-            onClick={onView}
-            sx={{ flexShrink: 0 }}
+
+            endIcon={
+              <ArrowForwardRounded />
+            }
+
+            onClick={
+              onView
+            }
+
+            sx={{
+              flexShrink:
+                0,
+            }}
+
           >
+
             View Threat
+
           </Button>
+
         </Stack>
+
       </CardContent>
+
     </Card>
   );
 }
 
+
+// ================================================================
+// PAGE
+// ================================================================
+
 export default function Threats() {
-  const navigate = useNavigate();
 
-  const [tab, setTab] = useState("ALL");
-  const [detections, setDetections] = useState([]);
-  const [incidents, setIncidents] = useState([]);
-  const [storedCount, setStoredCount] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [incidentError, setIncidentError] = useState("");
-  const [incidentTruncated, setIncidentTruncated] = useState(false);
-  const [updated, setUpdated] = useState(null);
+  const navigate =
+    useNavigate();
 
-  useEffect(() => {
-    let active = true;
-    let busy = false;
 
-    async function load() {
-      if (busy) return;
-      busy = true;
+  const [
+    tab,
+    setTab,
+  ] =
+    useState(
+      "ALL",
+    );
 
-      try {
-        const [detResult, incResult] = await Promise.allSettled([
-          getLiveDetections(DETECTION_LIMIT),
-          fetchIncidentRecords(),
-        ]);
 
-        if (!active) return;
+  const [
+    threats,
+    setThreats,
+  ] =
+    useState(
+      [],
+    );
 
-        if (detResult.status === "fulfilled") {
-          const response = detResult.value || {};
 
-          setDetections(
-            Array.isArray(response.detections)
-              ? response.detections
-              : []
+  const [
+    loading,
+    setLoading,
+  ] =
+    useState(
+      true,
+    );
+
+
+  const [
+    error,
+    setError,
+  ] =
+    useState(
+      "",
+    );
+
+
+  const [
+    contractWarning,
+    setContractWarning,
+  ] =
+    useState(
+      "",
+    );
+
+
+  const [
+    updated,
+    setUpdated,
+  ] =
+    useState(
+      null,
+    );
+
+
+  // ==============================================================
+  // LOAD CANONICAL THREAT FEED
+  // ==============================================================
+
+  useEffect(
+    () => {
+
+      let active =
+        true;
+
+      let busy =
+        false;
+
+
+      async function load() {
+
+        if (
+          busy
+        ) {
+
+          return;
+        }
+
+        busy =
+          true;
+
+
+        try {
+
+          const response =
+            await api.get(
+              "/security/threats",
+              {
+                params: {
+                  limit:
+                    THREAT_LIMIT,
+                },
+              },
+            );
+
+
+          if (
+            !active
+          ) {
+
+            return;
+          }
+
+
+          const payload =
+            response.data ||
+            {};
+
+
+          // ------------------------------------------------------
+          // SCHEMA CHECK
+          // ------------------------------------------------------
+
+          if (
+            payload.schema_version
+            !==
+            CONTRACT_VERSION
+          ) {
+
+            setContractWarning(
+              (
+                "Unexpected security contract version: "
+                +
+                valueOrFallback(
+                  payload.schema_version,
+                  "missing",
+                )
+              ),
+            );
+
+          } else if (
+            payload.contract_valid
+            !==
+            true
+          ) {
+
+            setContractWarning(
+              (
+                "The security feed contains "
+                +
+                valueOrFallback(
+                  payload.invalid_contract_count,
+                  0,
+                )
+                +
+                " invalid canonical contract object(s)."
+              ),
+            );
+
+          } else {
+
+            setContractWarning(
+              "",
+            );
+          }
+
+
+          // ------------------------------------------------------
+          // USER-VISIBLE CANONICAL OBJECTS
+          // ------------------------------------------------------
+
+          const rows =
+            array(
+              payload.threats,
+            )
+              .filter(
+                (item) =>
+                  item &&
+                  item.visibility
+                    ?.user_visible
+                    !==
+                    false,
+              );
+
+
+          setThreats(
+            rows,
           );
-          setStoredCount(response.total_stored_detections ?? null);
-          setError("");
-        } else {
+
+
+          setUpdated(
+            new Date(),
+          );
+
+
           setError(
-            detResult.reason?.message ||
-            "Unable to retrieve recent detections."
+            "",
           );
-        }
 
-        if (incResult.status === "fulfilled") {
-          setIncidents(incResult.value.incidents);
-          setIncidentTruncated(incResult.value.potentiallyTruncated);
-          setIncidentError("");
-        } else {
-          setIncidentError(
-            incResult.reason?.message ||
-            "Incident links could not be refreshed."
-          );
-        }
+        } catch (
+          loadError
+        ) {
 
-        setUpdated(new Date());
-      } finally {
-        busy = false;
-        if (active) setLoading(false);
+          if (
+            active
+          ) {
+
+            setError(
+              loadError
+                ?.response
+                ?.data
+                ?.detail
+              ||
+              loadError
+                ?.message
+              ||
+              "Unable to retrieve the canonical security threat feed.",
+            );
+          }
+
+        } finally {
+
+          busy =
+            false;
+
+          if (
+            active
+          ) {
+
+            setLoading(
+              false,
+            );
+          }
+        }
       }
-    }
 
-    load();
-    const interval = setInterval(load, REFRESH_MS);
 
-    return () => {
-      active = false;
-      clearInterval(interval);
-    };
-  }, []);
+      load();
 
-  const incidentIndex = useMemo(
-    () => createIncidentIndex(incidents),
-    [incidents]
-  );
 
-  const threats = useMemo(
-    () =>
-      detections
-        .filter(
-          (record) =>
-            record &&
-            record.detection_id !== null &&
-            record.detection_id !== undefined
-        )
-        .map((record) => normalizeDetection(record, incidentIndex)),
-    [detections, incidentIndex]
-  );
+      const interval =
+        window.setInterval(
+          load,
+          REFRESH_MS,
+        );
 
-  const displayed = useMemo(() => {
-    if (tab === "HIGH") {
-      return threats.filter(
-        (t) => t.severity === "HIGH" || t.severity === "CRITICAL"
+
+      return (
+        () => {
+
+          active =
+            false;
+
+          window.clearInterval(
+            interval,
+          );
+        }
       );
-    }
-    if (tab === "LINKED") return threats.filter((t) => t.linked);
-    if (tab === "UNVERIFIED") return threats.filter((t) => !t.linked);
-    return threats;
-  }, [threats, tab]);
 
-  const highCount = threats.filter(
-    (t) => t.severity === "HIGH" || t.severity === "CRITICAL"
-  ).length;
+    },
+    [],
+  );
 
-  const linkedCount = threats.filter((t) => t.linked).length;
-  const linksComplete = !incidentError && !incidentTruncated;
+
+  // ==============================================================
+  // COUNTS
+  // ==============================================================
+
+  const highCount =
+    useMemo(
+      () =>
+        threats.filter(
+          (threat) => {
+
+            const severity =
+              String(
+                threat.severity ||
+                "",
+              ).toUpperCase();
+
+            return (
+              severity ===
+                "HIGH"
+              ||
+              severity ===
+                "CRITICAL"
+            );
+          },
+        ).length,
+
+      [
+        threats,
+      ],
+    );
+
+
+  const linkedCount =
+    useMemo(
+      () =>
+        threats.filter(
+          (
+            threat,
+          ) =>
+            hasIncident(
+              threat,
+            ),
+        ).length,
+
+      [
+        threats,
+      ],
+    );
+
+
+  const standaloneCount =
+    threats.length -
+    linkedCount;
+
+
+  // ==============================================================
+  // FILTERED DISPLAY
+  // ==============================================================
+
+  const displayed =
+    useMemo(
+      () => {
+
+        if (
+          tab ===
+          "HIGH"
+        ) {
+
+          return threats.filter(
+            (
+              threat,
+            ) => {
+
+              const severity =
+                String(
+                  threat.severity ||
+                  "",
+                ).toUpperCase();
+
+              return (
+                severity ===
+                  "HIGH"
+                ||
+                severity ===
+                  "CRITICAL"
+              );
+            },
+          );
+        }
+
+
+        if (
+          tab ===
+          "LINKED"
+        ) {
+
+          return threats.filter(
+            (
+              threat,
+            ) =>
+              hasIncident(
+                threat,
+              ),
+          );
+        }
+
+
+        if (
+          tab ===
+          "STANDALONE"
+        ) {
+
+          return threats.filter(
+            (
+              threat,
+            ) =>
+              !hasIncident(
+                threat,
+              ),
+          );
+        }
+
+
+        return threats;
+
+      },
+
+      [
+        threats,
+        tab,
+      ],
+    );
+
+
+  // ==============================================================
+  // OPEN THREAT
+  // ==============================================================
+
+  function openThreat(
+    threat,
+  ) {
+
+    navigate(
+      `/threats/${encodeURIComponent(
+        threat.id,
+      )}`,
+      {
+        state: {
+          canonicalThreat:
+            threat,
+        },
+      },
+    );
+  }
+  // ==============================================================
+  // RENDER
+  // ==============================================================
 
   return (
+
     <Box>
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h4" sx={{ fontWeight: 750 }}>
-          Threats
-        </Typography>
 
-        <Typography sx={{ color: "#94a3b8", mt: 0.5 }}>
-          Live endpoint detections and recorded security evidence
-        </Typography>
-
-        <Typography
-          sx={{ color: "#64748b", mt: 0.6, fontSize: 12 }}
-        >
-          An anomaly alert is not automatically a confirmed attack.
-        </Typography>
-      </Box>
+      {/* ========================================================= */}
+      {/* HEADER */}
+      {/* ========================================================= */}
 
       <Box
         sx={{
-          display: "grid",
-          gridTemplateColumns: {
-            xs: "1fr",
-            md: "repeat(3,1fr)",
-          },
-          gap: 2,
-          mb: 3,
+          mb:
+            3,
         }}
       >
-        <SummaryCard
-          title="Recent High-Priority Detections"
-          count={highCount}
-          color="#f97316"
-        />
-        <SummaryCard
-          title="Recent Incident-Linked Detections"
-          count={linkedCount}
-          color="#22c55e"
-        />
-        <SummaryCard
-          title="Total Stored Detections"
-          count={storedCount ?? "—"}
-          color="#60a5fa"
-        />
+
+        <Typography
+          variant="h4"
+          sx={{
+            fontWeight:
+              750,
+          }}
+        >
+
+          Threats
+
+        </Typography>
+
+
+        <Typography
+          sx={{
+            color:
+              "#94a3b8",
+
+            mt:
+              0.5,
+          }}
+        >
+
+          Security detections that may require attention
+
+        </Typography>
+
+
+        <Typography
+          sx={{
+            color:
+              "#64748b",
+
+            mt:
+              0.6,
+
+            fontSize:
+              12,
+          }}
+        >
+
+          An anomaly or suspicious signal is not automatically
+          a confirmed attack. Sentinel-X separates detector
+          evidence, verdict, severity and protection state.
+
+        </Typography>
+
       </Box>
 
-      <Card sx={{ mb: 2 }}>
+
+      {/* ========================================================= */}
+      {/* SUMMARY */}
+      {/* ========================================================= */}
+
+      <Box
+        sx={{
+          display:
+            "grid",
+
+          gridTemplateColumns:
+            {
+
+              xs:
+                "1fr",
+
+              md:
+                "repeat(3,1fr)",
+            },
+
+          gap:
+            2,
+
+          mb:
+            3,
+        }}
+      >
+
+        <SummaryCard
+
+          title="High-Priority Threats"
+
+          count={
+            highCount
+          }
+
+          color="#f97316"
+
+        />
+
+
+        <SummaryCard
+
+          title="Incident-Linked Threats"
+
+          count={
+            linkedCount
+          }
+
+          color="#22c55e"
+
+        />
+
+
+        <SummaryCard
+
+          title="Visible Threats"
+
+          count={
+            threats.length
+          }
+
+          color="#60a5fa"
+
+        />
+
+      </Box>
+
+
+      {/* ========================================================= */}
+      {/* FILTERS */}
+      {/* ========================================================= */}
+
+      <Card
+        sx={{
+          mb:
+            2,
+        }}
+      >
+
         <Tabs
-          value={tab}
-          onChange={(_, next) => setTab(next)}
+
+          value={
+            tab
+          }
+
+          onChange={
+            (
+              _,
+              next,
+            ) =>
+              setTab(
+                next,
+              )
+          }
+
           variant="scrollable"
+
           scrollButtons="auto"
+
         >
-          <Tab value="ALL" label="All" />
-          <Tab value="HIGH" label="High Priority" />
-          <Tab value="LINKED" label="Incident Linked" />
-          <Tab value="UNVERIFIED" label="Link Not Verified" />
+
+          <Tab
+
+            value="ALL"
+
+            label={
+              `All (${threats.length})`
+            }
+
+          />
+
+
+          <Tab
+
+            value="HIGH"
+
+            label={
+              `High Priority (${highCount})`
+            }
+
+          />
+
+
+          <Tab
+
+            value="LINKED"
+
+            label={
+              `Incident Linked (${linkedCount})`
+            }
+
+          />
+
+
+          <Tab
+
+            value="STANDALONE"
+
+            label={
+              `Standalone (${standaloneCount})`
+            }
+
+          />
+
         </Tabs>
+
       </Card>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
-        </Alert>
-      )}
 
-      {incidentError && (
-        <Alert severity="warning" sx={{ mb: 2 }}>
-          Incident lookup: {incidentError}
-        </Alert>
-      )}
+      {/* ========================================================= */}
+      {/* CONTRACT / API STATUS */}
+      {/* ========================================================= */}
 
-      {incidentTruncated && (
-        <Alert severity="info" sx={{ mb: 2 }}>
-          The incident lookup reached its 1,000-record limit.
-          Unmatched detections may still belong to older incidents.
-        </Alert>
-      )}
+      {
+        contractWarning
+        &&
+        (
 
-      {loading && (
-        <Box sx={{ py: 5, textAlign: "center" }}>
-          <CircularProgress />
-        </Box>
-      )}
+          <Alert
+            severity="warning"
+            sx={{
+              mb:
+                2,
+            }}
+          >
 
-      {!loading && !displayed.length && (
-        <Alert severity="info">
-          No recent detections match this filter.
-        </Alert>
-      )}
+            {contractWarning}
 
-      <Stack spacing={2}>
-        {displayed.map((threat) => (
-          <ThreatCard
-            key={threat.id}
-            threat={threat}
-            linksComplete={linksComplete}
-            onView={() =>
-              navigate(`/threats/${threat.id}`, {
-                state: {
-                  detection: threat,
-                  incident: threat.matchingIncidents[0] || null,
-                  incidentIds: threat.incidentIds,
-                },
-              })
-            }
-          />
-        ))}
+          </Alert>
+        )
+      }
+
+
+      {
+        error
+        &&
+        (
+
+          <Alert
+            severity="error"
+            sx={{
+              mb:
+                2,
+            }}
+          >
+
+            {error}
+
+          </Alert>
+        )
+      }
+
+
+      {/* ========================================================= */}
+      {/* LOADING */}
+      {/* ========================================================= */}
+
+      {
+        loading
+        &&
+        (
+
+          <Box
+            sx={{
+              py:
+                5,
+
+              textAlign:
+                "center",
+            }}
+          >
+
+            <CircularProgress />
+
+
+            <Typography
+              sx={{
+                mt:
+                  2,
+
+                color:
+                  "#94a3b8",
+
+                fontSize:
+                  12,
+              }}
+            >
+
+              Loading canonical security threats...
+
+            </Typography>
+
+          </Box>
+        )
+      }
+
+
+      {/* ========================================================= */}
+      {/* EMPTY */}
+      {/* ========================================================= */}
+
+      {
+        !loading
+        &&
+        !displayed.length
+        &&
+        (
+
+          <Alert
+            severity="info"
+          >
+
+            No security threats match this filter.
+
+          </Alert>
+        )
+      }
+
+
+      {/* ========================================================= */}
+      {/* THREATS */}
+      {/* ========================================================= */}
+
+      <Stack
+        spacing={2}
+      >
+
+        {
+          displayed.map(
+            (
+              threat,
+            ) => (
+
+              <ThreatCard
+
+                key={
+                  threat.id
+                }
+
+                threat={
+                  threat
+                }
+
+                onView={
+                  () =>
+                    openThreat(
+                      threat,
+                    )
+                }
+
+              />
+            ),
+          )
+        }
+
       </Stack>
 
+
+      {/* ========================================================= */}
+      {/* FOOTER */}
+      {/* ========================================================= */}
+
       <Typography
-        sx={{ color: "#64748b", fontSize: 12, mt: 3 }}
+        sx={{
+          color:
+            "#64748b",
+
+          fontSize:
+            12,
+
+          mt:
+            3,
+        }}
       >
-        Showing up to 100 recent detections; refreshes every
-        10 seconds.
-        {updated ? ` Last updated: ${updated.toLocaleTimeString()}.` : ""}
+
+        Showing
+        {" "}
+        {threats.length}
+        {" "}
+        user-visible canonical security objects.
+        Internal regression records are filtered by the backend.
+        Data refreshes every 10 seconds.
+
+        {
+          updated
+            ? (
+                ` Last updated: ${
+                  updated.toLocaleTimeString()
+                }.`
+              )
+            : ""
+        }
+
       </Typography>
+
     </Box>
   );
 }

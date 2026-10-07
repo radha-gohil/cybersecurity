@@ -74,38 +74,119 @@ class DigitalTwinRiskPredictor:
 
         return round(risk, 2)
 
-    def file_risk(self, twin):
+    # ============================================================
+    # ACTIVE FILE RISK
+    # ============================================================
+
+    def file_risk(
+        self,
+        twin,
+    ) -> float:
+        """
+        Calculate a bounded heuristic file-risk contribution.
+
+        IMPORTANT:
+
+        observed_detection_risk is a detector risk score,
+        NOT a malware probability.
+
+        Therefore it is used only as a weighted heuristic
+        contribution to the Digital Twin model.
+
+        Historical malware_probability values are deliberately
+        not required here.
+        """
+
         risk = 0.0
 
         for file_item in twin.files:
-            if file_item.get("quarantined_in_twin", False):
+
+            # --------------------------------------------------------
+            # QUARANTINED FILE NO LONGER CONTRIBUTES
+            # TO THE ACTIVE VIRTUAL FILE COMPONENT.
+            # --------------------------------------------------------
+
+            if file_item.get(
+                "quarantined_in_twin",
+                False,
+            ):
                 continue
 
-            # Only compute legacy-compatible scores from
-            # explicitly supplied features. The preview
-            # removes incompatible malware probabilities.
-            probability = self.clamp(
-                self.safe_float(
-                    file_item.get("malware_probability")
-                ),
-                0,
-                1,
-            )
+            # --------------------------------------------------------
+            # STORED DETECTOR RISK
+            # --------------------------------------------------------
 
-            static_score = self.clamp(
+            detection_risk = (
                 self.safe_float(
-                    file_item.get("static_risk_score")
+                    file_item.get(
+                        "observed_detection_risk"
+                    ),
+                    0.0,
                 )
             )
 
-            component = (
-                probability * 100 * 0.25
-                + static_score * 0.10
+            detection_risk = max(
+                0.0,
+                min(
+                    detection_risk,
+                    100.0,
+                ),
             )
-            risk = max(risk, component)
 
-        return round(risk, 2)
+            # --------------------------------------------------------
+            # OPTIONAL EXISTING STATIC-RISK EVIDENCE
+            # --------------------------------------------------------
 
+            static_risk = (
+                self.safe_float(
+                    file_item.get(
+                        "static_risk_score"
+                    ),
+                    0.0,
+                )
+            )
+
+            static_risk = max(
+                0.0,
+                min(
+                    static_risk,
+                    100.0,
+                ),
+            )
+
+            # --------------------------------------------------------
+            # HEURISTIC COMPONENTS
+            #
+            # A detector score of 94 therefore contributes:
+            #
+            # 94 × 0.25 = 23.5
+            #
+            # This is NOT interpreted as 94% malicious.
+            # --------------------------------------------------------
+
+            detection_component = (
+                detection_risk
+                * 0.25
+            )
+
+            static_component = (
+                static_risk
+                * 0.10
+            )
+
+            # Use the strongest file evidence rather than
+            # summing potentially overlapping signals.
+            file_component = max(
+                detection_component,
+                static_component,
+            )
+
+            risk = max(
+                risk,
+                file_component,
+            )
+
+        return risk
     def network_risk(self, twin):
         active = [
             item
