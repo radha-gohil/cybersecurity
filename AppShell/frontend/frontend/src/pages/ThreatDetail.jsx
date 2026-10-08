@@ -38,6 +38,7 @@ import {
 } from "@mui/icons-material";
 
 import api from "../api/sentinelApi";
+import UserSecurityAIAnalysis from "../components/UserSecurityAIAnalysis";
 
 
 const CONTRACT_VERSION =
@@ -5716,6 +5717,18 @@ export default function ThreatDetail() {
 
 
       {/* ========================================================= */}
+      {/* ON-DEMAND AI SECURITY ANALYSIS */}
+      {/* ========================================================= */}
+
+      <UserSecurityAIAnalysis
+        securityId={
+          requestedId
+        }
+        autoStart={true}
+      />
+
+
+      {/* ========================================================= */}
       {/* PROTECTION */}
       {/* ========================================================= */}
 
@@ -5854,6 +5867,41 @@ export default function ThreatDetail() {
 
             <Button
 
+              variant="outlined"
+
+              startIcon={
+                <PsychologyRounded />
+              }
+
+              disabled={
+                !incidentId
+              }
+
+              onClick={
+                () =>
+                  navigate(
+                    "/ai-security",
+                    {
+
+                      state: {
+
+                        incidentId,
+
+                        securityId:
+                          requestedId,
+                      },
+                    },
+                  )
+              }
+            >
+
+              Open AI Security
+
+            </Button>
+
+
+            <Button
+
               variant="contained"
 
               startIcon={
@@ -5873,6 +5921,9 @@ export default function ThreatDetail() {
                       state: {
 
                         incidentId,
+
+                        securityId:
+                          requestedId,
 
                         detectionId:
                           threat.detection_id,

@@ -1,6 +1,10 @@
 import threading
 import time
 
+from config import (
+    IS_VALIDATION_MODE,
+)
+
 
 # ================================================================
 # SENTINEL-X PROCESS SECURITY RUNTIME
@@ -113,7 +117,11 @@ class SentinelAgent:
         # ========================================================
 
         self.file_monitor = (
-            FileMonitor()
+            FileMonitor(
+                malware_detection_enabled=False,
+                ransomware_detection_mode="SHADOW",
+                file_detection_mode="SHADOW",
+            )
         )
 
 
@@ -134,7 +142,9 @@ class SentinelAgent:
         # ========================================================
 
         self.registry_monitor = (
-            RegistryMonitor()
+            RegistryMonitor(
+                registry_detection_mode="SHADOW",
+            )
         )
 
 
@@ -173,6 +183,17 @@ class SentinelAgent:
                 self.auth_monitor,
         }
 
+        logger.info(
+            "SentinelAgent runtime mode | Validation=%s | "
+            "CollectorPolicy=%s",
+            IS_VALIDATION_MODE,
+            (
+                "LIVE_MONITOR_ONLY"
+                if IS_VALIDATION_MODE
+                else "FULL_PIPELINE"
+            ),
+        )
+
 
         # ========================================================
         # THREAD STORAGE
@@ -210,7 +231,24 @@ class SentinelAgent:
         # is loaded.
         # ========================================================
 
-        self.verify_process_security_runtime()
+        if IS_VALIDATION_MODE:
+
+            logger.info(
+                "HYBRID VALIDATION: strict process security "
+                "runtime verification is skipped for the live-only "
+                "collector path."
+            )
+
+            logger.info(
+                "Real process activity will be collected for "
+                "Live Monitor only; ProcessMonitor validation guards "
+                "prevent the real endpoint from entering the "
+                "detection/AI/fusion pipeline."
+            )
+
+        else:
+
+            self.verify_process_security_runtime()
 
 
     # ============================================================

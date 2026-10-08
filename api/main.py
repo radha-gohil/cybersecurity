@@ -1,4 +1,11 @@
 from typing import Any
+from api.user_security_router import (
+    router as user_security_router,
+)
+from api.user_security_analysis_router import (
+    router as user_security_analysis_router,
+    configure_user_security_analysis,
+)
 
 from api.security_contract import (
     SECURITY_CONTRACT_VERSION,
@@ -14,7 +21,6 @@ from response.digital_twin_visual_preview import (
 from datetime import datetime, timezone
 
 import threading
-
 from config import (
     ACTIVE_SOC_DATABASE_PATH,
     IS_VALIDATION_MODE,
@@ -118,11 +124,9 @@ def run_sentinel_agent():
             "SENTINEL-X Endpoint Agent background thread exited."
 
         )
-
+        
 # ================================================================
-
 # FASTAPI LIFESPAN
-
 # ================================================================
 
 @asynccontextmanager
@@ -132,81 +136,175 @@ async def lifespan(app: FastAPI):
     global sentinel_agent_thread
 
     logger.info("=" * 78)
-    logger.info("Starting SENTINEL-X backend runtime...")
+    logger.info(
+        "Starting SENTINEL-X backend runtime..."
+    )
 
     # ============================================================
-    # VALIDATION MODE
+    # ENDPOINT COLLECTION RUNTIME
     #
-    # Phase 7 synthetic/product validation must be deterministic.
-    # Do NOT start real endpoint collectors while validating the
-    # seeded synthetic dataset.
+    # HYBRID VALIDATION MODE
+    # ----------------------
+    #
+    # VALIDATION keeps the synthetic product database active,
+    # while real endpoint collectors are allowed to run so that
+    # Live Monitor can continuously observe the current PC.
+    #
+    # TelemetryManager.emit() provides the isolation boundary:
+    #
+    # VALIDATION + REAL COLLECTOR EVENT
+    #
+    #       Collector
+    #           ↓
+    #       SecurityEvent
+    #           ↓
+    #       runtime memory
+    #           ↓
+    #       /telemetry/live
+    #           ↓
+    #       Live Monitor
+    #
+    # It must NOT continue to:
+    #
+    #       save_event()
+    #       provenance graph
+    #       correlation
+    #       incidents
+    #
+    # Synthetic validation data continues using:
+    #
+    #       sentinel_validation.db
+    #
+    # LIVE mode later enables the complete endpoint pipeline.
     # ============================================================
 
     if IS_VALIDATION_MODE:
 
-        with sentinel_agent_lock:
-
-            sentinel_agent = None
-            sentinel_agent_thread = None
-
         logger.info(
-            "SENTINEL-X VALIDATION mode active."
+            "SENTINEL-X HYBRID VALIDATION mode active."
         )
 
         logger.info(
-            "Live endpoint collectors are DISABLED "
-            "during synthetic validation."
+            (
+                "Synthetic validation persistence "
+                "remains active at: %s"
+            ),
+            ACTIVE_SOC_DATABASE_PATH,
         )
 
-    # ============================================================
-    # LIVE MODE
-    # ============================================================
+        logger.info(
+            (
+                "Real endpoint collectors are ENABLED "
+                "for Live Monitor runtime telemetry only."
+            )
+        )
+
+        logger.info(
+            (
+                "Real collector events will NOT be "
+                "persisted, correlated, or promoted "
+                "to incidents in VALIDATION."
+            )
+        )
 
     else:
 
-        with sentinel_agent_lock:
+        logger.info(
+            "SENTINEL-X LIVE mode active."
+        )
 
-            existing_thread_alive = (
+        logger.info(
+            (
+                "Full endpoint telemetry persistence "
+                "and correlation are enabled."
+            )
+        )
 
-                sentinel_agent_thread is not None
+    # ============================================================
+    # START SENTINEL AGENT
+    #
+    # IMPORTANT:
+    #
+    # The agent now starts in BOTH:
+    #
+    #       VALIDATION
+    #       LIVE
+    #
+    # The difference between the two modes is controlled by the
+    # telemetry/detection pipeline, NOT by disabling collectors.
+    # ============================================================
 
-                and sentinel_agent_thread.is_alive()
+    with sentinel_agent_lock:
 
+        existing_thread_alive = (
+
+            sentinel_agent_thread
+            is not None
+
+            and
+
+            sentinel_agent_thread.is_alive()
+
+        )
+
+        if not existing_thread_alive:
+
+            # ----------------------------------------------------
+            # CREATE ENDPOINT AGENT
+            # ----------------------------------------------------
+
+            sentinel_agent = (
+                SentinelAgent()
             )
 
-            if not existing_thread_alive:
+            # ----------------------------------------------------
+            # RUN AGENT OUTSIDE FASTAPI EVENT LOOP
+            #
+            # SentinelAgent owns several long-running collector
+            # loops, so it belongs in a daemon background thread.
+            # ----------------------------------------------------
 
-                sentinel_agent = SentinelAgent()
+            sentinel_agent_thread = (
+                threading.Thread(
 
-                sentinel_agent_thread = threading.Thread(
+                    target=
+                        run_sentinel_agent,
 
-                    target=run_sentinel_agent,
+                    name=
+                        "SentinelXEndpointAgent",
 
-                    name="SentinelXEndpointAgent",
-
-                    daemon=True,
-
+                    daemon=
+                        True,
                 )
+            )
 
-                sentinel_agent_thread.start()
+            sentinel_agent_thread.start()
 
-                logger.info(
+            logger.info(
+                (
                     "SENTINEL-X Endpoint Agent "
                     "background thread started."
                 )
+            )
 
-            else:
+        else:
 
-                logger.warning(
+            logger.warning(
+                (
                     "SENTINEL-X Endpoint Agent "
                     "is already running."
                 )
+            )
 
     # ============================================================
     # APPLICATION STATE
+    #
+    # Expose the running objects to FastAPI routes.
     # ============================================================
 
-    app.state.sentinel_agent = sentinel_agent
+    app.state.sentinel_agent = (
+        sentinel_agent
+    )
 
     app.state.telemetry_manager = (
         shared_telemetry_manager
@@ -216,22 +314,34 @@ async def lifespan(app: FastAPI):
         "SENTINEL-X FastAPI runtime started."
     )
 
-    logger.info("=" * 78)
+    logger.info(
+        "=" * 78
+    )
+
+    # ============================================================
+    # APPLICATION RUNNING
+    # ============================================================
 
     try:
 
         yield
 
+    # ============================================================
+    # SHUTDOWN
+    # ============================================================
+
     finally:
 
-        logger.info("=" * 78)
+        logger.info(
+            "=" * 78
+        )
 
         logger.info(
             "Stopping SENTINEL-X backend runtime..."
         )
 
         # ========================================================
-        # ONLY STOP AGENT IF ONE WAS ACTUALLY STARTED
+        # STOP SENTINEL AGENT
         # ========================================================
 
         with sentinel_agent_lock:
@@ -245,16 +355,25 @@ async def lifespan(app: FastAPI):
                 except Exception as error:
 
                     logger.exception(
-                        "Unable to stop SentinelAgent "
-                        "cleanly | %s",
+                        (
+                            "Unable to stop "
+                            "SentinelAgent cleanly | %s"
+                        ),
                         error,
                     )
 
+            # ----------------------------------------------------
+            # WAIT BRIEFLY FOR COLLECTOR THREAD
+            # ----------------------------------------------------
+
             if (
 
-                sentinel_agent_thread is not None
+                sentinel_agent_thread
+                is not None
 
-                and sentinel_agent_thread.is_alive()
+                and
+
+                sentinel_agent_thread.is_alive()
 
             ):
 
@@ -266,8 +385,9 @@ async def lifespan(app: FastAPI):
             "SENTINEL-X backend runtime stopped."
         )
 
-        logger.info("=" * 78)
-
+        logger.info(
+            "=" * 78
+        )
 # ================================================================
 
 # APPLICATION
@@ -296,6 +416,8 @@ app = FastAPI(
 
 app.include_router(security_runtime_router)
 
+app.include_router(user_security_router)
+app.include_router(user_security_analysis_router)
 app.add_middleware(
 
     CORSMiddleware,
@@ -2231,7 +2353,68 @@ def _canonical_security_threats(
         "real_response_execution":
             False,
     }
-    
+
+
+# ================================================================
+# ON-DEMAND USER SECURITY THREAT RESOLVER
+# ================================================================
+
+def _resolve_user_security_threat(
+    security_id: str,
+):
+    """
+    Resolve one user-visible canonical threat for the on-demand
+    7D.4 -> 7D.9 AI pipeline.
+
+    This function performs no AI inference and no endpoint action.
+    """
+
+    security_id = str(
+        security_id
+        or ""
+    ).strip()
+
+    if not security_id:
+        return None
+
+    payload = (
+        _canonical_security_threats(
+            limit=100,
+            include_internal=False,
+        )
+        or {}
+    )
+
+    threats = (
+        payload.get(
+            "threats"
+        )
+        or []
+    )
+
+    for threat in threats:
+        if not isinstance(
+            threat,
+            dict,
+        ):
+            continue
+
+        if str(
+            threat.get(
+                "id"
+            )
+            or ""
+        ).strip() == security_id:
+            return threat
+
+    return None
+
+
+configure_user_security_analysis(
+    _resolve_user_security_threat
+)
+
+
 # ================================================================
 # CANONICAL READ-ONLY PROTECTION PREVIEW
 # ================================================================

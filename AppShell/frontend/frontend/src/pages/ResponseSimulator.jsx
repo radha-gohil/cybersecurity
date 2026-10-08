@@ -41,6 +41,7 @@ import {
 } from "@mui/icons-material";
 
 import api from "../api/sentinelApi";
+import UserSecurityAIAnalysis from "../components/UserSecurityAIAnalysis";
 
 
 // ============================================================
@@ -2324,6 +2325,21 @@ export default function ResponseSimulator() {
             "",
         );
 
+    const initialSecurityId =
+        String(
+            new URLSearchParams(
+                location.search,
+            ).get(
+                "securityId",
+            )
+            ||
+            location.state?.securityId
+            ||
+            location.state?.security_id
+            ||
+            "",
+        );
+
     const [
         incidents,
         setIncidents,
@@ -3324,6 +3340,21 @@ export default function ResponseSimulator() {
                     }
                 </CardContent>
             </Card>
+
+
+            {
+                initialSecurityId
+                &&
+                (
+                    <UserSecurityAIAnalysis
+                        securityId={
+                            initialSecurityId
+                        }
+                        autoStart={false}
+                        compact={true}
+                    />
+                )
+            }
 
 
             {

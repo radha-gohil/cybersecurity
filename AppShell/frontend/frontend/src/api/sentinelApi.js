@@ -2,8 +2,8 @@ import axios from "axios";
 
 
 const API_BASE_URL =
-  import.meta.env.VITE_SENTINEL_API_BASE_URL ||
-  "http://127.0.0.1:8003/api/v1";
+    import.meta.env.VITE_SENTINEL_API_BASE_URL ||
+    "http://127.0.0.1:8003/api/v1";
 
 
 const api = axios.create({
@@ -78,7 +78,9 @@ export async function getIncidentCase(
 ) {
 
     const response = await api.get(
-        `/cases/${encodeURIComponent(incidentId)}`
+        `/cases/${encodeURIComponent(
+            incidentId
+        )}`
     );
 
     return response.data;
@@ -95,7 +97,9 @@ export async function getDigitalTwin(
 ) {
 
     const response = await api.get(
-        `/cases/${encodeURIComponent(incidentId)}/digital-twin`
+        `/cases/${encodeURIComponent(
+            incidentId
+        )}/digital-twin`
     );
 
     return response.data;
@@ -112,7 +116,9 @@ export async function getIncidentResponses(
 ) {
 
     const response = await api.get(
-        `/cases/${encodeURIComponent(incidentId)}/responses`
+        `/cases/${encodeURIComponent(
+            incidentId
+        )}/responses`
     );
 
     return response.data;
@@ -130,7 +136,9 @@ export async function approveIncident(
 ) {
 
     const response = await api.post(
-        `/cases/${encodeURIComponent(incidentId)}/approve`,
+        `/cases/${encodeURIComponent(
+            incidentId
+        )}/approve`,
         payload
     );
 
@@ -149,7 +157,9 @@ export async function rejectIncident(
 ) {
 
     const response = await api.post(
-        `/cases/${encodeURIComponent(incidentId)}/reject`,
+        `/cases/${encodeURIComponent(
+            incidentId
+        )}/reject`,
         payload
     );
 
@@ -241,6 +251,8 @@ export async function getLiveTelemetry() {
     return response.data;
 
 }
+
+
 /* ============================================================ */
 /* RECENT SECURITY DETECTIONS */
 /* ============================================================ */
@@ -248,6 +260,7 @@ export async function getLiveTelemetry() {
 export async function getLiveDetections(
     limit = 50
 ) {
+
     const response = await api.get(
         "/telemetry/detections",
         {
@@ -258,7 +271,157 @@ export async function getLiveDetections(
     );
 
     return response.data;
+
 }
+
+
+/* ============================================================ */
+/* 7D.9 — USER SECURITY STATUS */
+/* ============================================================ */
+
+export async function getUserSecurityStatus() {
+
+    const response = await api.get(
+        "/user-security/status"
+    );
+
+    return response.data;
+
+}
+
+
+/* ============================================================ */
+/* 7D.9 — USER PROTECTION MODES */
+/* ============================================================ */
+
+export async function getUserProtectionModes() {
+
+    const response = await api.get(
+        "/user-security/protection-modes"
+    );
+
+    return response.data;
+
+}
+
+
+/* ============================================================ */
+/* 7D.9 — USER SECURITY THREAT FEED */
+/* ============================================================ */
+
+export async function getUserSecurityThreats(
+    limit = 100
+) {
+
+    const response = await api.get(
+        "/user-security/threats",
+        {
+            params: {
+                limit,
+            },
+        }
+    );
+
+    return response.data;
+
+}
+
+
+/* ============================================================ */
+/* 7D.9 — USER SECURITY THREAT DETAIL */
+/* ============================================================ */
+
+export async function getUserSecurityThreat(
+    securityId
+) {
+
+    if (
+        !securityId
+    ) {
+
+        throw new Error(
+            "securityId is required"
+        );
+
+    }
+
+
+    const response = await api.get(
+        `/user-security/threats/${encodeURIComponent(
+            securityId
+        )}`
+    );
+
+    return response.data;
+
+}
+
+
+/* ============================================================ */
+/* 7D.12 — START ON-DEMAND AI ANALYSIS */
+/* ============================================================ */
+
+export async function startUserSecurityAnalysis(
+    securityId,
+    {
+        protectionMode = "RECOMMENDED",
+        force = false,
+    } = {}
+) {
+
+    if (
+        !securityId
+    ) {
+
+        throw new Error(
+            "securityId is required"
+        );
+    }
+
+
+    const response = await api.post(
+        `/user-security/threats/${encodeURIComponent(
+            securityId
+        )}/analyze`,
+        {
+            protection_mode: protectionMode,
+            force,
+        }
+    );
+
+
+    return response.data;
+}
+
+
+/* ============================================================ */
+/* 7D.12 — ON-DEMAND AI ANALYSIS STATUS */
+/* ============================================================ */
+
+export async function getUserSecurityAnalysisStatus(
+    securityId
+) {
+
+    if (
+        !securityId
+    ) {
+
+        throw new Error(
+            "securityId is required"
+        );
+    }
+
+
+    const response = await api.get(
+        `/user-security/threats/${encodeURIComponent(
+            securityId
+        )}/analysis-status`
+    );
+
+
+    return response.data;
+}
+
 
 /* ============================================================ */
 /* EXPORT AXIOS INSTANCE */

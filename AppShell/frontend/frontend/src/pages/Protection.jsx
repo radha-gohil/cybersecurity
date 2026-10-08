@@ -1,103 +1,790 @@
 import {
-    Box,
-    Typography,
-    Card,
-    CardContent,
-    Button,
-    Grid,
-    Switch,
-    Chip,
-    Stack,
-    Divider,
-} from "@mui/material";
+    useCallback,
+    useEffect,
+    useMemo,
+    useState,
+} from "react";
+
 
 import {
-    SecurityRounded,
-    SearchRounded,
-    ShieldRounded,
-    FolderRounded,
-    LanguageRounded,
-    SettingsApplicationsRounded,
-    PsychologyRounded,
+    Alert,
+    Box,
+    Button,
+    Card,
+    CardContent,
+    Chip,
+    CircularProgress,
+    Divider,
+    Grid,
+    Stack,
+    Typography,
+} from "@mui/material";
+
+
+import {
     CheckCircleRounded,
     ChevronRightRounded,
+    FolderRounded,
+    LanguageRounded,
+    PsychologyRounded,
+    RefreshRounded,
+    SearchRounded,
+    SecurityRounded,
+    SettingsApplicationsRounded,
+    ShieldRounded,
+    WarningAmberRounded,
 } from "@mui/icons-material";
 
-import { useNavigate } from "react-router-dom";
+
+import {
+    useNavigate,
+} from "react-router-dom";
 
 
-const protectionModules = [
-    {
-        title: "Process Protection",
-        description:
-            "Monitors running applications for suspicious behavior.",
-        icon: <SettingsApplicationsRounded />,
-        enabled: true,
-    },
-    {
-        title: "File Protection",
-        description:
-            "Checks files and file activity for potentially unsafe behavior.",
-        icon: <FolderRounded />,
-        enabled: true,
-    },
-    {
-        title: "Network Protection",
-        description:
-            "Monitors network connections for suspicious communication.",
-        icon: <LanguageRounded />,
-        enabled: true,
-    },
-    {
-        title: "System Protection",
-        description:
-            "Monitors important Windows configuration and persistence activity.",
-        icon: <ShieldRounded />,
-        enabled: true,
-    },
-];
+import {
+    getLiveTelemetry,
+    getUserProtectionModes,
+    getUserSecurityStatus,
+} from "../api/sentinelApi";
 
+
+// ============================================================================
+// CONFIG
+// ============================================================================
+
+const REFRESH_INTERVAL =
+    10000;
+
+
+// ============================================================================
+// HELPERS
+// ============================================================================
+
+function object(
+    value
+) {
+
+    return (
+        value &&
+        typeof value === "object" &&
+        !Array.isArray(value)
+    )
+        ? value
+        : {};
+
+}
+
+
+function collectorStatus(
+    value
+) {
+
+    if (
+        value === true
+    ) {
+
+        return "ACTIVE";
+
+    }
+
+
+    if (
+        value === false
+    ) {
+
+        return "OFFLINE";
+
+    }
+
+
+    if (
+        typeof value === "string"
+    ) {
+
+        return value
+            .toUpperCase();
+
+    }
+
+
+    if (
+        value &&
+        typeof value === "object"
+    ) {
+
+        return String(
+            value.status ||
+            value.state ||
+            "UNKNOWN"
+        )
+            .toUpperCase();
+
+    }
+
+
+    return "UNKNOWN";
+
+}
+
+
+function isActiveStatus(
+    status
+) {
+
+    return [
+        "ACTIVE",
+        "RUNNING",
+        "HEALTHY",
+        "READY",
+    ].includes(
+        String(
+            status || ""
+        ).toUpperCase()
+    );
+
+}
+
+
+function modeColor(
+    mode
+) {
+
+    switch (
+        String(
+            mode || ""
+        ).toUpperCase()
+    ) {
+
+        case "STRICT":
+            return "#f97316";
+
+        case "ASK_ME":
+            return "#3b82f6";
+
+        case "MONITOR_ONLY":
+            return "#94a3b8";
+
+        case "RECOMMENDED":
+        default:
+            return "#22c55e";
+
+    }
+
+}
+
+
+function displayMode(
+    key,
+    metadata
+) {
+
+    return (
+        metadata?.display_name ||
+        String(
+            key || ""
+        )
+            .replaceAll(
+                "_",
+                " "
+            )
+    );
+
+}
+
+
+// ============================================================================
+// PAGE
+// ============================================================================
 
 function Protection() {
 
-    const navigate = useNavigate();
+    const navigate =
+        useNavigate();
+
+
+    const [
+        securityStatus,
+        setSecurityStatus,
+    ] =
+        useState(null);
+
+
+    const [
+        protectionModes,
+        setProtectionModes,
+    ] =
+        useState(null);
+
+
+    const [
+        telemetry,
+        setTelemetry,
+    ] =
+        useState(null);
+
+
+    const [
+        loading,
+        setLoading,
+    ] =
+        useState(true);
+
+
+    const [
+        refreshing,
+        setRefreshing,
+    ] =
+        useState(false);
+
+
+    const [
+        error,
+        setError,
+    ] =
+        useState(null);
+
+
+    const [
+        lastUpdated,
+        setLastUpdated,
+    ] =
+        useState(null);
+
+
+    // ========================================================================
+    // LOAD
+    // ========================================================================
+
+    const loadProtection =
+        useCallback(
+            async (
+                initial = false
+            ) => {
+
+                try {
+
+                    if (
+                        initial
+                    ) {
+
+                        setLoading(
+                            true
+                        );
+
+                    }
+                    else {
+
+                        setRefreshing(
+                            true
+                        );
+
+                    }
+
+
+                    setError(
+                        null
+                    );
+
+
+                    const [
+                        statusResponse,
+                        modesResponse,
+                        telemetryResponse,
+                    ] =
+                        await Promise.all([
+
+                            getUserSecurityStatus(),
+
+                            getUserProtectionModes(),
+
+                            getLiveTelemetry(),
+
+                        ]);
+
+
+                    setSecurityStatus(
+                        statusResponse
+                    );
+
+
+                    setProtectionModes(
+                        modesResponse
+                    );
+
+
+                    setTelemetry(
+                        telemetryResponse
+                    );
+
+
+                    setLastUpdated(
+                        new Date()
+                    );
+
+                }
+                catch (
+                    err
+                ) {
+
+                    console.error(
+                        "Protection page error:",
+                        err
+                    );
+
+
+                    setError(
+                        err?.response?.data?.detail ||
+                        err?.message ||
+                        "Unable to load Sentinel-X protection status."
+                    );
+
+                }
+                finally {
+
+                    setLoading(
+                        false
+                    );
+
+
+                    setRefreshing(
+                        false
+                    );
+
+                }
+
+            },
+            []
+        );
+
+
+    // ========================================================================
+    // INITIAL LOAD
+    // ========================================================================
+
+    useEffect(
+        () => {
+
+            loadProtection(
+                true
+            );
+
+        },
+        [
+            loadProtection,
+        ]
+    );
+
+
+    // ========================================================================
+    // AUTO REFRESH
+    // ========================================================================
+
+    useEffect(
+        () => {
+
+            const interval =
+                setInterval(
+                    () => {
+
+                        loadProtection(
+                            false
+                        );
+
+                    },
+                    REFRESH_INTERVAL
+                );
+
+
+            return () => {
+
+                clearInterval(
+                    interval
+                );
+
+            };
+
+        },
+        [
+            loadProtection,
+        ]
+    );
+
+
+    // ========================================================================
+    // DERIVED STATE
+    // ========================================================================
+
+    const serviceReady =
+        String(
+            securityStatus?.status ||
+            ""
+        ).toUpperCase()
+        ===
+        "READY";
+
+
+    const collectors =
+        object(
+            telemetry?.collectors
+        );
+
+
+    const processStatus =
+        collectorStatus(
+            collectors.process
+        );
+
+
+    const fileStatus =
+        collectorStatus(
+            collectors.file
+        );
+
+
+    const networkStatus =
+        collectorStatus(
+            collectors.network
+        );
+
+
+    const registryStatus =
+        collectorStatus(
+            collectors.registry
+        );
+
+
+    const modules =
+        useMemo(
+            () => [
+
+                {
+                    title:
+                        "Process Protection",
+
+                    description:
+                        "Monitors running applications for suspicious behavior.",
+
+                    icon:
+                        <SettingsApplicationsRounded />,
+
+                    status:
+                        processStatus,
+                },
+
+                {
+                    title:
+                        "File Protection",
+
+                    description:
+                        "Checks files and file activity for potentially unsafe behavior.",
+
+                    icon:
+                        <FolderRounded />,
+
+                    status:
+                        fileStatus,
+                },
+
+                {
+                    title:
+                        "Network Protection",
+
+                    description:
+                        "Monitors network connections for suspicious communication.",
+
+                    icon:
+                        <LanguageRounded />,
+
+                    status:
+                        networkStatus,
+                },
+
+                {
+                    title:
+                        "System Protection",
+
+                    description:
+                        "Monitors Windows configuration, registry and persistence activity.",
+
+                    icon:
+                        <ShieldRounded />,
+
+                    status:
+                        registryStatus,
+                },
+
+            ],
+            [
+                processStatus,
+                fileStatus,
+                networkStatus,
+                registryStatus,
+            ]
+        );
+
+
+    const activeModuleCount =
+        modules.filter(
+            (
+                module
+            ) =>
+                isActiveStatus(
+                    module.status
+                )
+        ).length;
+
+
+    const allModulesActive =
+        (
+            activeModuleCount ===
+            modules.length
+        );
+
+
+    const defaultMode =
+        protectionModes
+            ?.default_mode
+        ||
+        "RECOMMENDED";
+
+
+    const modes =
+        Object.entries(
+            object(
+                protectionModes?.modes
+            )
+        );
+
+
+    // ========================================================================
+    // LOADING
+    // ========================================================================
+
+    if (
+        loading &&
+        !securityStatus
+    ) {
+
+        return (
+
+            <Box
+                sx={{
+                    minHeight:
+                        "60vh",
+
+                    display:
+                        "flex",
+
+                    flexDirection:
+                        "column",
+
+                    alignItems:
+                        "center",
+
+                    justifyContent:
+                        "center",
+
+                    gap: 2,
+                }}
+            >
+
+                <CircularProgress
+                    sx={{
+                        color:
+                            "#22c55e",
+                    }}
+                />
+
+
+                <Typography
+                    sx={{
+                        color:
+                            "#94a3b8",
+                    }}
+                >
+                    Loading protection status...
+                </Typography>
+
+            </Box>
+
+        );
+
+    }
 
 
     return (
 
         <Box>
 
-            {/* ================================================= */}
-            {/* PAGE HEADER */}
-            {/* ================================================= */}
+            {/* ============================================================= */}
+            {/* HEADER */}
+            {/* ============================================================= */}
 
-            <Box sx={{ mb: 3 }}>
+            <Box
+                sx={{
+                    display:
+                        "flex",
 
-                <Typography variant="h4">
-                    Protection
-                </Typography>
+                    alignItems:
+                        "flex-start",
 
-                <Typography
-                    sx={{
-                        color: "#94a3b8",
-                        mt: 0.5,
-                    }}
+                    justifyContent:
+                        "space-between",
+
+                    gap: 2,
+
+                    flexWrap:
+                        "wrap",
+
+                    mb: 3,
+                }}
+            >
+
+                <Box>
+
+                    <Typography
+                        variant="h4"
+                    >
+                        Protection
+                    </Typography>
+
+
+                    <Typography
+                        sx={{
+                            color:
+                                "#94a3b8",
+
+                            mt:
+                                0.5,
+                        }}
+                    >
+                        Manage how Sentinel-X monitors and
+                        protects this device.
+                    </Typography>
+
+
+                    {
+                        lastUpdated && (
+
+                            <Typography
+                                sx={{
+                                    color:
+                                        "#475569",
+
+                                    fontSize:
+                                        12,
+
+                                    mt:
+                                        0.7,
+                                }}
+                            >
+                                Last updated{" "}
+                                {
+                                    lastUpdated
+                                        .toLocaleTimeString()
+                                }
+                            </Typography>
+
+                        )
+                    }
+
+                </Box>
+
+
+                <Button
+                    variant="outlined"
+
+                    startIcon={
+                        refreshing
+                            ?
+                            <CircularProgress
+                                size={16}
+                            />
+                            :
+                            <RefreshRounded />
+                    }
+
+                    disabled={
+                        refreshing
+                    }
+
+                    onClick={
+                        () =>
+                            loadProtection(
+                                false
+                            )
+                    }
                 >
-                    Manage how Sentinel-X protects your device.
-                </Typography>
+                    Refresh
+                </Button>
 
             </Box>
 
 
-            {/* ================================================= */}
-            {/* MAIN PROTECTION STATUS */}
-            {/* ================================================= */}
+            {/* ============================================================= */}
+            {/* ERROR */}
+            {/* ============================================================= */}
+
+            {
+                error && (
+
+                    <Alert
+                        severity="error"
+
+                        sx={{
+                            mb: 3,
+                        }}
+                    >
+                        {error}
+                    </Alert>
+
+                )
+            }
+
+
+            {/* ============================================================= */}
+            {/* PROTOTYPE SAFETY */}
+            {/* ============================================================= */}
+
+            {
+                securityStatus
+                    ?.simulation_only
+                &&
+                (
+
+                    <Alert
+                        severity="info"
+
+                        sx={{
+                            mb: 3,
+                        }}
+                    >
+                        Sentinel-X is currently operating in
+                        simulation-only protection mode.
+                        Security decisions and protection plans
+                        can be prepared, but no real containment
+                        action is executed by this prototype.
+                    </Alert>
+
+                )
+            }
+
+
+            {/* ============================================================= */}
+            {/* MAIN STATUS */}
+            {/* ============================================================= */}
 
             <Card
                 sx={{
-                    mb: 3,
+                    mb:
+                        3,
+
                     background:
-                        "linear-gradient(135deg, #10251b, #111827)",
+                        allModulesActive
+                            ?
+                            "linear-gradient(135deg, #10251b, #111827)"
+                            :
+                            "linear-gradient(135deg, #2a1c0f, #111827)",
                 }}
             >
 
@@ -109,43 +796,88 @@ function Protection() {
 
                     <Box
                         sx={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            gap: 3,
-                            flexWrap: "wrap",
+                            display:
+                                "flex",
+
+                            alignItems:
+                                "center",
+
+                            justifyContent:
+                                "space-between",
+
+                            gap:
+                                3,
+
+                            flexWrap:
+                                "wrap",
                         }}
                     >
 
                         <Box
                             sx={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 2,
+                                display:
+                                    "flex",
+
+                                alignItems:
+                                    "center",
+
+                                gap:
+                                    2,
                             }}
                         >
 
                             <Box
                                 sx={{
-                                    width: 68,
-                                    height: 68,
-                                    borderRadius: "18px",
+                                    width:
+                                        68,
 
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
+                                    height:
+                                        68,
+
+                                    borderRadius:
+                                        "18px",
+
+                                    display:
+                                        "flex",
+
+                                    alignItems:
+                                        "center",
+
+                                    justifyContent:
+                                        "center",
 
                                     background:
-                                        "rgba(34,197,94,0.12)",
+                                        allModulesActive
+                                            ?
+                                            "rgba(34,197,94,0.12)"
+                                            :
+                                            "rgba(245,158,11,0.12)",
                                 }}
                             >
 
-                                <SecurityRounded
-                                    sx={{
-                                        fontSize: 40,
-                                        color: "#22c55e",
-                                    }}
-                                />
+                                {
+                                    allModulesActive
+                                        ?
+                                        <SecurityRounded
+                                            sx={{
+                                                fontSize:
+                                                    40,
+
+                                                color:
+                                                    "#22c55e",
+                                            }}
+                                        />
+                                        :
+                                        <WarningAmberRounded
+                                            sx={{
+                                                fontSize:
+                                                    40,
+
+                                                color:
+                                                    "#f59e0b",
+                                            }}
+                                        />
+                                }
 
                             </Box>
 
@@ -154,52 +886,130 @@ function Protection() {
 
                                 <Typography
                                     variant="h5"
+
                                     sx={{
-                                        mb: 0.5,
+                                        mb:
+                                            0.5,
                                     }}
                                 >
-                                    Your protection is active
+                                    {
+                                        allModulesActive
+                                            ?
+                                            "Your protection is active"
+                                            :
+                                            "Protection needs attention"
+                                    }
                                 </Typography>
+
 
                                 <Typography
                                     sx={{
-                                        color: "#94a3b8",
-                                        maxWidth: 600,
+                                        color:
+                                            "#94a3b8",
+
+                                        maxWidth:
+                                            650,
                                     }}
                                 >
-                                    Sentinel-X is monitoring your
-                                    device for suspicious process,
-                                    file, network, and system activity.
+                                    Sentinel-X is monitoring
+                                    process, file, network and
+                                    system activity on this device.
                                 </Typography>
 
 
-                                <Box
+                                <Stack
+                                    direction="row"
+
+                                    spacing={1}
+
+                                    flexWrap="wrap"
+
+                                    useFlexGap
+
                                     sx={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: 1,
-                                        mt: 1.5,
+                                        mt:
+                                            1.5,
                                     }}
                                 >
 
-                                    <CheckCircleRounded
+                                    <Chip
+                                        size="small"
+
+                                        label={
+                                            serviceReady
+                                                ?
+                                                "SECURITY API READY"
+                                                :
+                                                "SECURITY API UNAVAILABLE"
+                                        }
+
                                         sx={{
-                                            color: "#22c55e",
-                                            fontSize: 18,
+                                            color:
+                                                serviceReady
+                                                    ?
+                                                    "#22c55e"
+                                                    :
+                                                    "#ef4444",
+
+                                            background:
+                                                serviceReady
+                                                    ?
+                                                    "rgba(34,197,94,0.10)"
+                                                    :
+                                                    "rgba(239,68,68,0.10)",
                                         }}
                                     />
 
-                                    <Typography
-                                        sx={{
-                                            color: "#22c55e",
-                                            fontSize: 13,
-                                            fontWeight: 600,
-                                        }}
-                                    >
-                                        All protection modules running
-                                    </Typography>
 
-                                </Box>
+                                    <Chip
+                                        size="small"
+
+                                        label={
+                                            `${activeModuleCount}/${modules.length} MONITORS ACTIVE`
+                                        }
+
+                                        sx={{
+                                            color:
+                                                allModulesActive
+                                                    ?
+                                                    "#22c55e"
+                                                    :
+                                                    "#f59e0b",
+
+                                            background:
+                                                allModulesActive
+                                                    ?
+                                                    "rgba(34,197,94,0.10)"
+                                                    :
+                                                    "rgba(245,158,11,0.10)",
+                                        }}
+                                    />
+
+
+                                    <Chip
+                                        size="small"
+
+                                        label={
+                                            `${defaultMode.replaceAll(
+                                                "_",
+                                                " "
+                                            )} MODE`
+                                        }
+
+                                        sx={{
+                                            color:
+                                                modeColor(
+                                                    defaultMode
+                                                ),
+
+                                            background:
+                                                `${modeColor(
+                                                    defaultMode
+                                                )}18`,
+                                        }}
+                                    />
+
+                                </Stack>
 
                             </Box>
 
@@ -208,18 +1018,28 @@ function Protection() {
 
                         <Button
                             variant="contained"
+
                             startIcon={
                                 <SearchRounded />
                             }
-                            onClick={() =>
-                                navigate("/scan")
+
+                            onClick={
+                                () =>
+                                    navigate(
+                                        "/scan"
+                                    )
                             }
+
                             sx={{
-                                background: "#22c55e",
-                                color: "#04120a",
+                                background:
+                                    "#22c55e",
+
+                                color:
+                                    "#04120a",
 
                                 "&:hover": {
-                                    background: "#16a34a",
+                                    background:
+                                        "#16a34a",
                                 },
                             }}
                         >
@@ -233,130 +1053,316 @@ function Protection() {
             </Card>
 
 
-            {/* ================================================= */}
-            {/* QUICK ACTIONS */}
-            {/* ================================================= */}
+            {/* ============================================================= */}
+            {/* PROTECTION MODE */}
+            {/* ============================================================= */}
 
-            <Typography
-                variant="h6"
+            <Box
                 sx={{
-                    mb: 2,
+                    mb:
+                        2,
                 }}
             >
-                Quick Actions
-            </Typography>
+
+                <Typography
+                    variant="h6"
+                >
+                    Protection Mode
+                </Typography>
+
+
+                <Typography
+                    sx={{
+                        color:
+                            "#64748b",
+
+                        fontSize:
+                            13,
+
+                        mt:
+                            0.4,
+                    }}
+                >
+                    Sentinel-X uses protection modes to decide
+                    how AI recommendations should be handled.
+                </Typography>
+
+            </Box>
 
 
             <Grid
                 container
+
                 spacing={2}
+
                 sx={{
-                    mb: 4,
+                    mb:
+                        4,
                 }}
             >
 
-                <Grid
-                    item
-                    xs={12}
-                    md={4}
-                >
+                {
+                    modes.map(
+                        ([
+                            modeKey,
+                            metadata,
+                        ]) => {
 
-                    <QuickActionCard
-                        title="Quick Scan"
-                        description="Check common threat locations."
-                        icon={<SearchRounded />}
-                        button="Start Scan"
-                        onClick={() =>
-                            navigate("/scan")
+                            const selected =
+                                modeKey ===
+                                defaultMode;
+
+
+                            const color =
+                                modeColor(
+                                    modeKey
+                                );
+
+
+                            return (
+
+                                <Grid
+                                    item
+                                    xs={12}
+                                    md={6}
+
+                                    key={
+                                        modeKey
+                                    }
+                                >
+
+                                    <Card
+                                        sx={{
+                                            height:
+                                                "100%",
+
+                                            border:
+                                                selected
+                                                    ?
+                                                    `1px solid ${color}`
+                                                    :
+                                                    undefined,
+
+                                            background:
+                                                selected
+                                                    ?
+                                                    `${color}0d`
+                                                    :
+                                                    undefined,
+                                        }}
+                                    >
+
+                                        <CardContent
+                                            sx={{
+                                                p:
+                                                    2.5,
+                                            }}
+                                        >
+
+                                            <Box
+                                                sx={{
+                                                    display:
+                                                        "flex",
+
+                                                    justifyContent:
+                                                        "space-between",
+
+                                                    alignItems:
+                                                        "flex-start",
+
+                                                    gap:
+                                                        2,
+                                                }}
+                                            >
+
+                                                <Box>
+
+                                                    <Typography
+                                                        sx={{
+                                                            fontWeight:
+                                                                700,
+
+                                                            fontSize:
+                                                                16,
+                                                        }}
+                                                    >
+                                                        {
+                                                            displayMode(
+                                                                modeKey,
+                                                                metadata
+                                                            )
+                                                        }
+                                                    </Typography>
+
+
+                                                    <Typography
+                                                        sx={{
+                                                            color:
+                                                                "#64748b",
+
+                                                            fontSize:
+                                                                13,
+
+                                                            mt:
+                                                                0.8,
+
+                                                            lineHeight:
+                                                                1.6,
+                                                        }}
+                                                    >
+                                                        {
+                                                            metadata
+                                                                ?.description
+                                                            ||
+                                                            "Protection mode available."
+                                                        }
+                                                    </Typography>
+
+                                                </Box>
+
+
+                                                {
+                                                    selected && (
+
+                                                        <Chip
+                                                            label="DEFAULT"
+
+                                                            size="small"
+
+                                                            sx={{
+                                                                color,
+
+                                                                background:
+                                                                    `${color}18`,
+                                                            }}
+                                                        />
+
+                                                    )
+                                                }
+
+                                            </Box>
+
+                                        </CardContent>
+
+                                    </Card>
+
+                                </Grid>
+
+                            );
+
                         }
-                    />
-
-                </Grid>
-
-
-                <Grid
-                    item
-                    xs={12}
-                    md={4}
-                >
-
-                    <QuickActionCard
-                        title="Full Scan"
-                        description="Scan your complete device."
-                        icon={<SecurityRounded />}
-                        button="Start Full Scan"
-                        onClick={() =>
-                            navigate("/scan")
-                        }
-                    />
-
-                </Grid>
-
-
-                <Grid
-                    item
-                    xs={12}
-                    md={4}
-                >
-
-                    <QuickActionCard
-                        title="Custom Scan"
-                        description="Choose specific files or folders."
-                        icon={<FolderRounded />}
-                        button="Choose Location"
-                        onClick={() =>
-                            navigate("/scan")
-                        }
-                    />
-
-                </Grid>
+                    )
+                }
 
             </Grid>
 
 
-            {/* ================================================= */}
+            {/* ============================================================= */}
+            {/* IMPORTANT READ-ONLY NOTE */}
+            {/* ============================================================= */}
+
+            <Alert
+                severity="warning"
+
+                sx={{
+                    mb:
+                        4,
+                }}
+            >
+                Protection-mode configuration is currently
+                read-only in 7D.9. The frontend is showing the
+                backend policy correctly, but it will not pretend
+                that a mode change has been saved until we add the
+                dedicated user preference endpoint.
+            </Alert>
+
+
+            {/* ============================================================= */}
             {/* REAL-TIME PROTECTION */}
-            {/* ================================================= */}
+            {/* ============================================================= */}
 
             <Box
                 sx={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    mb: 2,
+                    display:
+                        "flex",
+
+                    justifyContent:
+                        "space-between",
+
+                    alignItems:
+                        "center",
+
+                    gap:
+                        2,
+
+                    mb:
+                        2,
                 }}
             >
 
                 <Box>
 
-                    <Typography variant="h6">
+                    <Typography
+                        variant="h6"
+                    >
                         Real-Time Protection
                     </Typography>
 
+
                     <Typography
                         sx={{
-                            color: "#64748b",
-                            fontSize: 13,
-                            mt: 0.4,
+                            color:
+                                "#64748b",
+
+                            fontSize:
+                                13,
+
+                            mt:
+                                0.4,
                         }}
                     >
-                        Protection modules currently monitoring
-                        your device.
+                        Live monitoring state reported by
+                        the Sentinel-X endpoint agent.
                     </Typography>
 
                 </Box>
 
 
                 <Chip
-                    label="ALL ACTIVE"
+                    label={
+                        allModulesActive
+                            ?
+                            "ALL ACTIVE"
+                            :
+                            `${activeModuleCount} ACTIVE`
+                    }
+
                     size="small"
+
                     sx={{
-                        color: "#22c55e",
+                        color:
+                            allModulesActive
+                                ?
+                                "#22c55e"
+                                :
+                                "#f59e0b",
+
                         background:
-                            "rgba(34,197,94,0.10)",
+                            allModulesActive
+                                ?
+                                "rgba(34,197,94,0.10)"
+                                :
+                                "rgba(245,158,11,0.10)",
+
                         border:
-                            "1px solid rgba(34,197,94,0.25)",
-                        fontWeight: 700,
+                            allModulesActive
+                                ?
+                                "1px solid rgba(34,197,94,0.25)"
+                                :
+                                "1px solid rgba(245,158,11,0.25)",
+
+                        fontWeight:
+                            700,
                     }}
                 />
 
@@ -365,42 +1371,54 @@ function Protection() {
 
             <Grid
                 container
+
                 spacing={2}
+
                 sx={{
-                    mb: 4,
+                    mb:
+                        4,
                 }}
             >
 
-                {protectionModules.map(
-                    (module) => (
+                {
+                    modules.map(
+                        (
+                            module
+                        ) => (
 
-                        <Grid
-                            item
-                            xs={12}
-                            md={6}
-                            key={module.title}
-                        >
+                            <Grid
+                                item
+                                xs={12}
+                                md={6}
 
-                            <ProtectionModule
-                                {...module}
-                            />
+                                key={
+                                    module.title
+                                }
+                            >
 
-                        </Grid>
+                                <ProtectionModule
+                                    {...module}
+                                />
 
+                            </Grid>
+
+                        )
                     )
-                )}
+                }
 
             </Grid>
 
 
-            {/* ================================================= */}
+            {/* ============================================================= */}
             {/* AI PROTECTION */}
-            {/* ================================================= */}
+            {/* ============================================================= */}
 
             <Typography
                 variant="h6"
+
                 sx={{
-                    mb: 2,
+                    mb:
+                        2,
                 }}
             >
                 AI Protection
@@ -411,49 +1429,67 @@ function Protection() {
 
                 <CardContent
                     sx={{
-                        p: 0,
+                        p:
+                            0,
                     }}
                 >
 
                     <AIProtectionRow
                         title="Smart Threat Detection"
-                        description="Combines multiple detection engines to identify suspicious behavior."
+
+                        description="Combines endpoint detections and correlated security evidence."
+
                         status="Active"
                     />
 
-                    <Divider
-                        sx={{
-                            borderColor: "#1e293b",
-                        }}
-                    />
-
-                    <AIProtectionRow
-                        title="Behavior Analysis"
-                        description="Looks for unusual behavior over time."
-                        status="Active"
-                    />
 
                     <Divider
                         sx={{
-                            borderColor: "#1e293b",
+                            borderColor:
+                                "#1e293b",
                         }}
                     />
 
+
                     <AIProtectionRow
-                        title="Anomaly Detection"
-                        description="Identifies activity that differs from normal system behavior."
-                        status="Active"
+                        title="AI Risk Reasoning"
+
+                        description="Evaluates grounded evidence before assigning user-facing risk."
+
+                        status="Ready"
                     />
+
 
                     <Divider
                         sx={{
-                            borderColor: "#1e293b",
+                            borderColor:
+                                "#1e293b",
                         }}
                     />
 
+
                     <AIProtectionRow
-                        title="AI Investigation"
-                        description="Automatically investigates threats using Sentinel-X security agents."
+                        title="Digital Twin Validation"
+
+                        description="Simulates response plans before recommending protection."
+
+                        status="Simulation"
+                    />
+
+
+                    <Divider
+                        sx={{
+                            borderColor:
+                                "#1e293b",
+                        }}
+                    />
+
+
+                    <AIProtectionRow
+                        title="AI User Explanation"
+
+                        description="Converts security evidence into understandable user-facing guidance."
+
                         status="Ready"
                     />
 
@@ -462,22 +1498,33 @@ function Protection() {
             </Card>
 
 
-            {/* ================================================= */}
+            {/* ============================================================= */}
             {/* ADVANCED */}
-            {/* ================================================= */}
+            {/* ============================================================= */}
 
             <Card
                 sx={{
-                    mt: 3,
+                    mt:
+                        3,
                 }}
             >
 
                 <CardContent
                     sx={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        gap: 2,
+                        display:
+                            "flex",
+
+                        justifyContent:
+                            "space-between",
+
+                        alignItems:
+                            "center",
+
+                        gap:
+                            2,
+
+                        flexWrap:
+                            "wrap",
                     }}
                 >
 
@@ -485,21 +1532,29 @@ function Protection() {
 
                         <Typography
                             sx={{
-                                fontWeight: 600,
+                                fontWeight:
+                                    600,
                             }}
                         >
                             Advanced Protection Details
                         </Typography>
 
+
                         <Typography
                             sx={{
-                                color: "#64748b",
-                                fontSize: 13,
-                                mt: 0.4,
+                                color:
+                                    "#64748b",
+
+                                fontSize:
+                                    13,
+
+                                mt:
+                                    0.4,
                             }}
                         >
-                            View detection engines, monitoring
-                            status and technical information.
+                            View live monitoring, endpoint
+                            telemetry and technical security
+                            information.
                         </Typography>
 
                     </Box>
@@ -509,8 +1564,17 @@ function Protection() {
                         endIcon={
                             <ChevronRightRounded />
                         }
+
+                        onClick={
+                            () =>
+                                navigate(
+                                    "/live-monitor"
+                                )
+                        }
+
                         sx={{
-                            color: "#94a3b8",
+                            color:
+                                "#94a3b8",
                         }}
                     >
                         View Details
@@ -527,106 +1591,42 @@ function Protection() {
 }
 
 
-/* ================================================================ */
-/* QUICK ACTION CARD */
-/* ================================================================ */
-
-function QuickActionCard({
-    title,
-    description,
-    icon,
-    button,
-    onClick,
-}) {
-
-    return (
-
-        <Card
-            sx={{
-                height: "100%",
-            }}
-        >
-
-            <CardContent
-                sx={{
-                    p: 3,
-                }}
-            >
-
-                <Box
-                    sx={{
-                        width: 46,
-                        height: 46,
-
-                        borderRadius: "12px",
-
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-
-                        color: "#3b82f6",
-
-                        background:
-                            "rgba(59,130,246,0.10)",
-
-                        mb: 2,
-                    }}
-                >
-                    {icon}
-                </Box>
-
-
-                <Typography
-                    sx={{
-                        fontSize: 17,
-                        fontWeight: 700,
-                    }}
-                >
-                    {title}
-                </Typography>
-
-
-                <Typography
-                    sx={{
-                        color: "#64748b",
-                        fontSize: 13,
-                        mt: 0.7,
-                        minHeight: 40,
-                    }}
-                >
-                    {description}
-                </Typography>
-
-
-                <Button
-                    onClick={onClick}
-                    sx={{
-                        mt: 2,
-                        px: 0,
-                    }}
-                >
-                    {button}
-                </Button>
-
-            </CardContent>
-
-        </Card>
-
-    );
-
-}
-
-
-/* ================================================================ */
-/* PROTECTION MODULE */
-/* ================================================================ */
+// ============================================================================
+// PROTECTION MODULE
+// ============================================================================
 
 function ProtectionModule({
     title,
     description,
     icon,
-    enabled,
+    status,
 }) {
+
+    const active =
+        isActiveStatus(
+            status
+        );
+
+
+    const unknown =
+        String(
+            status || ""
+        ).toUpperCase()
+        ===
+        "UNKNOWN";
+
+
+    const color =
+        active
+            ?
+            "#22c55e"
+            :
+            unknown
+                ?
+                "#94a3b8"
+                :
+                "#ef4444";
+
 
     return (
 
@@ -634,38 +1634,63 @@ function ProtectionModule({
 
             <CardContent
                 sx={{
-                    p: 2.5,
+                    p:
+                        2.5,
 
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 2,
+                    display:
+                        "flex",
+
+                    alignItems:
+                        "center",
+
+                    justifyContent:
+                        "space-between",
+
+                    gap:
+                        2,
                 }}
             >
 
                 <Box
                     sx={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 2,
+                        display:
+                            "flex",
+
+                        alignItems:
+                            "center",
+
+                        gap:
+                            2,
                     }}
                 >
 
                     <Box
                         sx={{
-                            width: 44,
-                            height: 44,
+                            width:
+                                44,
 
-                            borderRadius: "12px",
+                            height:
+                                44,
 
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
+                            minWidth:
+                                44,
 
-                            color: "#22c55e",
+                            borderRadius:
+                                "12px",
+
+                            display:
+                                "flex",
+
+                            alignItems:
+                                "center",
+
+                            justifyContent:
+                                "center",
+
+                            color,
 
                             background:
-                                "rgba(34,197,94,0.10)",
+                                `${color}18`,
                         }}
                     >
                         {icon}
@@ -676,7 +1701,8 @@ function ProtectionModule({
 
                         <Typography
                             sx={{
-                                fontWeight: 600,
+                                fontWeight:
+                                    600,
                             }}
                         >
                             {title}
@@ -685,9 +1711,14 @@ function ProtectionModule({
 
                         <Typography
                             sx={{
-                                color: "#64748b",
-                                fontSize: 12,
-                                mt: 0.4,
+                                color:
+                                    "#64748b",
+
+                                fontSize:
+                                    12,
+
+                                mt:
+                                    0.4,
                             }}
                         >
                             {description}
@@ -698,9 +1729,22 @@ function ProtectionModule({
                 </Box>
 
 
-                <Switch
-                    checked={enabled}
-                    color="success"
+                <Chip
+                    label={
+                        status
+                    }
+
+                    size="small"
+
+                    sx={{
+                        color,
+
+                        background:
+                            `${color}18`,
+
+                        fontWeight:
+                            700,
+                    }}
                 />
 
             </CardContent>
@@ -712,9 +1756,9 @@ function ProtectionModule({
 }
 
 
-/* ================================================================ */
-/* AI PROTECTION ROW */
-/* ================================================================ */
+// ============================================================================
+// AI PROTECTION ROW
+// ============================================================================
 
 function AIProtectionRow({
     title,
@@ -726,25 +1770,38 @@ function AIProtectionRow({
 
         <Box
             sx={{
-                px: 3,
-                py: 2.5,
+                px:
+                    3,
 
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: 2,
+                py:
+                    2.5,
+
+                display:
+                    "flex",
+
+                justifyContent:
+                    "space-between",
+
+                alignItems:
+                    "center",
+
+                gap:
+                    2,
             }}
         >
 
             <Stack
                 direction="row"
+
                 spacing={2}
+
                 alignItems="center"
             >
 
                 <PsychologyRounded
                     sx={{
-                        color: "#8b5cf6",
+                        color:
+                            "#8b5cf6",
                     }}
                 />
 
@@ -753,7 +1810,8 @@ function AIProtectionRow({
 
                     <Typography
                         sx={{
-                            fontWeight: 600,
+                            fontWeight:
+                                600,
                         }}
                     >
                         {title}
@@ -762,9 +1820,14 @@ function AIProtectionRow({
 
                     <Typography
                         sx={{
-                            color: "#64748b",
-                            fontSize: 12,
-                            mt: 0.3,
+                            color:
+                                "#64748b",
+
+                            fontSize:
+                                12,
+
+                            mt:
+                                0.3,
                         }}
                     >
                         {description}
@@ -776,10 +1839,16 @@ function AIProtectionRow({
 
 
             <Chip
-                label={status}
+                label={
+                    status
+                }
+
                 size="small"
+
                 sx={{
-                    color: "#22c55e",
+                    color:
+                        "#22c55e",
+
                     background:
                         "rgba(34,197,94,0.10)",
                 }}

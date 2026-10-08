@@ -33,6 +33,14 @@ import {
 import {
     getDashboardSummary,
     getHealth,
+
+    // ============================================================
+    // 7D.9 AI USER SECURITY
+    // ============================================================
+
+    getUserSecurityStatus,
+    getUserProtectionModes,
+
 } from "../api/sentinelApi";
 
 
@@ -51,6 +59,29 @@ function Dashboard() {
 
     const [health, setHealth] =
         useState(null);
+
+
+    /* ============================================================ */
+    /* 7D.9 AI USER SECURITY STATE */
+    /* ============================================================ */
+
+    const [
+        aiSecurityStatus,
+        setAiSecurityStatus,
+    ] =
+        useState(null);
+
+
+    const [
+        protectionModes,
+        setProtectionModes,
+    ] =
+        useState(null);
+
+
+    /* ============================================================ */
+    /* EXISTING DASHBOARD STATE */
+    /* ============================================================ */
 
     const [loading, setLoading] =
         useState(true);
@@ -100,6 +131,10 @@ function Dashboard() {
                     );
 
 
+                    /* ==================================================== */
+                    /* EXISTING DASHBOARD DATA */
+                    /* ==================================================== */
+
                     const [
                         healthResponse,
                         dashboardResponse,
@@ -130,6 +165,104 @@ function Dashboard() {
                     setSummary(
                         dashboardResponse
                     );
+
+
+                    /* ==================================================== */
+                    /* OPTIONAL 7D.9 AI USER SECURITY DATA */
+                    /* ==================================================== */
+                    /*
+                        IMPORTANT:
+
+                        The AI API is isolated from the existing dashboard.
+
+                        If the new 7D.9 API fails, the normal Sentinel-X
+                        dashboard continues to work exactly as before.
+                    */
+
+                    try {
+
+                        const [
+                            aiStatusResult,
+                            protectionModesResult,
+                        ] =
+                            await Promise.allSettled([
+
+                                getUserSecurityStatus(),
+
+                                getUserProtectionModes(),
+
+                            ]);
+
+
+                        if (
+                            aiStatusResult.status
+                            ===
+                            "fulfilled"
+                        ) {
+
+                            setAiSecurityStatus(
+                                aiStatusResult.value
+                            );
+
+
+                            console.log(
+                                "SENTINEL-X USER SECURITY:",
+                                aiStatusResult.value
+                            );
+
+                        }
+                        else {
+
+                            console.warn(
+                                "User security status unavailable:",
+                                aiStatusResult.reason
+                            );
+
+                        }
+
+
+                        if (
+                            protectionModesResult.status
+                            ===
+                            "fulfilled"
+                        ) {
+
+                            setProtectionModes(
+                                protectionModesResult.value
+                            );
+
+
+                            console.log(
+                                "SENTINEL-X PROTECTION MODES:",
+                                protectionModesResult.value
+                            );
+
+                        }
+                        else {
+
+                            console.warn(
+                                "Protection modes unavailable:",
+                                protectionModesResult.reason
+                            );
+
+                        }
+
+                    }
+                    catch (
+                        aiError
+                    ) {
+
+                        /*
+                            Never fail the existing dashboard because
+                            optional AI integration is unavailable.
+                        */
+
+                        console.warn(
+                            "Optional AI security data unavailable:",
+                            aiError
+                        );
+
+                    }
 
 
                     setLastUpdated(
@@ -466,6 +599,31 @@ function Dashboard() {
             health
         );
 
+
+    /* ============================================================ */
+    /* 7D.9 AI USER SECURITY VALUES */
+    /* ============================================================ */
+
+    const aiSecurityReady =
+        String(
+            aiSecurityStatus?.status
+            ||
+            ""
+        )
+            .toUpperCase()
+        ===
+        "READY";
+
+
+    const protectionMode =
+        protectionModes?.default_mode
+        ||
+        "RECOMMENDED";
+
+
+    /* ============================================================ */
+    /* EXISTING RISK VALUES */
+    /* ============================================================ */
 
     const riskColor =
         getRiskColor(
@@ -1163,6 +1321,38 @@ function Dashboard() {
                         />
 
 
+                        {/* ========================================= */}
+                        {/* 7D.9 AI USER SECURITY — ADDED ONLY */}
+                        {/* ========================================= */}
+
+                        <StatusRow
+                            label="AI Security Service"
+                            value={
+                                aiSecurityReady
+                                    ? "Ready"
+                                    : "Unavailable"
+                            }
+                            color={
+                                aiSecurityReady
+                                    ? "#22c55e"
+                                    : "#f59e0b"
+                            }
+                            raw
+                        />
+
+
+                        <StatusRow
+                            label="Protection Mode"
+                            value={
+                                formatStatus(
+                                    protectionMode
+                                )
+                            }
+                            color="#8b5cf6"
+                            raw
+                        />
+
+
                         <Button
                             variant="outlined"
 
@@ -1801,7 +1991,7 @@ function isHealthy(
             ??
             ""
         )
-        .toUpperCase();
+            .toUpperCase();
 
 
     if (
@@ -2003,7 +2193,7 @@ function getMitigationColor(
             status
             ?? ""
         )
-        .toUpperCase();
+            .toUpperCase();
 
 
     if (

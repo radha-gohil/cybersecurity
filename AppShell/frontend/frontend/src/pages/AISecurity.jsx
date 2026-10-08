@@ -43,6 +43,7 @@ import {
 } from "@mui/icons-material";
 
 import api from "../api/sentinelApi";
+import UserSecurityAIAnalysis from "../components/UserSecurityAIAnalysis";
 
 
 // ================================================================
@@ -1377,6 +1378,16 @@ export default function AISecurity() {
     );
 
 
+  const requestedSecurityId =
+    String(
+      location.state
+        ?.securityId ||
+      location.state
+        ?.security_id ||
+      "",
+    );
+
+
   const [
     incidents,
     setIncidents,
@@ -2222,6 +2233,21 @@ export default function AISecurity() {
             {error}
 
           </Alert>
+        )
+      }
+
+
+      {
+        requestedSecurityId
+        &&
+        (
+          <UserSecurityAIAnalysis
+            securityId={
+              requestedSecurityId
+            }
+            autoStart={true}
+            compact={true}
+          />
         )
       }
 
